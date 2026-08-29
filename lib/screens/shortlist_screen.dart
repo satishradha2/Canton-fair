@@ -13,6 +13,8 @@ class _ShortlistScreenState extends State<ShortlistScreen> {
   final db = TradeDatabase.instance;
   Future<List<Exhibitor>> _shortlistExhibitors = Future.value([]);
   late Future<List<Product>> _shortlistProducts;
+  final _minScoreController = TextEditingController(text: '0');
+  double _minScore = 0.0;
 
   @override
   void initState() {
@@ -20,10 +22,17 @@ class _ShortlistScreenState extends State<ShortlistScreen> {
     _load();
   }
 
+  @override
+  void dispose() {
+    _minScoreController.dispose();
+    super.dispose();
+  }
+
   void _load() {
     _shortlistProducts = db.getShortlistedProducts().then((rows) {
       rows.sort((a, b) => _shortlistScore(b).compareTo(_shortlistScore(a)));
-      return rows;
+      if (_minScore <= 0) return rows;
+      return rows.where((p) => _shortlistScore(p) >= _minScore).toList();
     });
     _shortlistExhibitors = _loadExhibitors();
   }
@@ -51,6 +60,13 @@ class _ShortlistScreenState extends State<ShortlistScreen> {
 
   Future<void> _toggleProductShortlist(Product p) async {
     await db.update('products', p.id!, {'shortlisted': p.shortlisted ? 0 : 1});
+    _load();
+    setState(() {});
+  }
+
+  void _applyMinScoreFilter(String value) {
+    final parsed = double.tryParse(value.trim());
+    _minScore = parsed == null || parsed < 0 ? 0.0 : parsed;
     _load();
     setState(() {});
   }
@@ -103,6 +119,32 @@ class _ShortlistScreenState extends State<ShortlistScreen> {
           ),
           const SizedBox(height: 12),
           const Text('Shortlisted Products', style: TextStyle(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              const Text('Min score:'),
+              const SizedBox(width: 12),
+              SizedBox(
+                width: 120,
+                child: TextField(
+                  controller: _minScoreController,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                    contentPadding: EdgeInsets.all(8),
+                  ),
+                  onChanged: _applyMinScoreFilter,
+                ),
+              ),
+              const SizedBox(width: 8),
+              TextButton(
+                onPressed: () => _applyMinScoreFilter(_minScoreController.text),
+                child: const Text('Apply'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
           FutureBuilder<List<Product>>(
             future: _shortlistProducts,
             builder: (context, snap) {
