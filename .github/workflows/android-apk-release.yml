@@ -47,7 +47,7 @@ jobs:
           printf '%s' "$ANDROID_KEYSTORE_BASE64" | tr -d '[:space:]' | base64 --decode > android/app/canton-fair-release.jks
           cat > android/key.properties <<EOF
           storePassword=$ANDROID_KEYSTORE_PASSWORD
-          keyPassword=$ANDROID_KEY_PASSWORD
+          keyPassword=$ANDROID_KEYSTORE_PASSWORD
           keyAlias=$ANDROID_KEY_ALIAS
           storeFile=app/canton-fair-release.jks
           EOF
@@ -55,6 +55,16 @@ jobs:
             -keystore android/app/canton-fair-release.jks \
             -storepass "$ANDROID_KEYSTORE_PASSWORD" \
             -alias "$ANDROID_KEY_ALIAS" \
+            >/dev/null
+          keytool -importkeystore \
+            -srckeystore android/app/canton-fair-release.jks \
+            -srcstorepass "$ANDROID_KEYSTORE_PASSWORD" \
+            -srcalias "$ANDROID_KEY_ALIAS" \
+            -srckeypass "$ANDROID_KEYSTORE_PASSWORD" \
+            -destkeystore "$RUNNER_TEMP/signing-check.p12" \
+            -deststorepass "SigningCheck123456" \
+            -destkeypass "SigningCheck123456" \
+            -noprompt \
             >/dev/null
 
       - name: Install dependencies

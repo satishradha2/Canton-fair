@@ -14,13 +14,13 @@ if (-not (Test-Path $keytool)) {
 if ((Test-Path $keystorePath) -and (Test-Path $keyPropertiesPath)) {
     $keyProperties = ConvertFrom-StringData (Get-Content -Raw $keyPropertiesPath)
     $storePassword = $keyProperties.storePassword
-    $keyPassword = $keyProperties.keyPassword
+    $keyPassword = $storePassword
     $alias = $keyProperties.keyAlias
 } elseif (Test-Path $keystorePath) {
     throw "Keystore already exists at $keystorePath, but $keyPropertiesPath was not found."
 } else {
     $storePassword = -join ((48..57) + (65..90) + (97..122) | Get-Random -Count 32 | ForEach-Object {[char]$_})
-    $keyPassword = -join ((48..57) + (65..90) + (97..122) | Get-Random -Count 32 | ForEach-Object {[char]$_})
+    $keyPassword = $storePassword
     $alias = "canton-fair"
 
     & $keytool -genkeypair `
