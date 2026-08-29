@@ -740,7 +740,8 @@ class _CapturesScreenState extends State<CapturesScreen> {
           ),
         ],
       ),
-    );
+    ),
+  );
   }
 
   Future<void> _openAddContactSheet(int exhibitorId) async {
@@ -909,7 +910,8 @@ class _CapturesScreenState extends State<CapturesScreen> {
           ),
         ],
       ),
-    );
+    ),
+  );
   }
 
   Future<void> _openMeetingSheet(int exhibitorId) async {

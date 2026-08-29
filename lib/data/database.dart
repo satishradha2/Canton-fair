@@ -156,7 +156,7 @@ class TradeDatabase {
     return db.delete(table, where: where, whereArgs: whereArgs);
   }
 
-  Future<void> _ensureTripCloseoutTable(Database db) async {
+  Future<void> _ensureTripCloseoutTable(DatabaseExecutor db) async {
     await db.execute(
       'CREATE TABLE IF NOT EXISTS trip_closeouts(trip_id INTEGER PRIMARY KEY, closed_at TEXT NOT NULL, note TEXT NOT NULL)',
     );

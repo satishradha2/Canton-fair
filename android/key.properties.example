@@ -1,0 +1,4 @@
+storePassword=change-this-password
+keyPassword=change-this-password
+keyAlias=canton-fair
+storeFile=app/canton-fair-release.jks

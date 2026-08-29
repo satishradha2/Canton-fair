@@ -54,7 +54,7 @@ class _ExportScreenState extends State<ExportScreen> {
       ]);
     }
     final path = await _writeCsv(rows, 'canton_fair_exhibitors.csv');
-    await SharePlus.instance.share(ShareParams(files: [XFile(path)]));
+    await Share.shareXFiles([XFile(path)]);
   }
 
   Future<void> _exportShortlist() async {
@@ -92,7 +92,7 @@ class _ExportScreenState extends State<ExportScreen> {
       ]);
     }
     final path = await _writeCsv(rows, 'canton_fair_shortlist.csv');
-    await SharePlus.instance.share(ShareParams(files: [XFile(path)]));
+    await Share.shareXFiles([XFile(path)]);
   }
 
   Future<void> _exportTripRankedShortlist() async {
@@ -166,7 +166,7 @@ class _ExportScreenState extends State<ExportScreen> {
       }
     }
     final path = await _writeCsv(rows, 'canton_fair_trip_ranked_shortlist.csv');
-    await SharePlus.instance.share(ShareParams(files: [XFile(path)]));
+    await Share.shareXFiles([XFile(path)]);
   }
 
   Future<void> _exportTripRankedShortlistPdf() async {
@@ -303,7 +303,7 @@ class _ExportScreenState extends State<ExportScreen> {
     final docDir = await getTemporaryDirectory();
     final file = File('${docDir.path}/canton_fair_trip_ranked_shortlist_report.pdf');
     await file.writeAsBytes(await doc.save());
-    await SharePlus.instance.share(ShareParams(files: [XFile(file.path)]));
+    await Share.shareXFiles([XFile(file.path)]);
   }
 
   double _shortlistScore(Product p) {
@@ -332,7 +332,7 @@ class _ExportScreenState extends State<ExportScreen> {
       ]);
     }
     final path = await _writeCsv(rows, 'canton_fair_followups.csv');
-    await SharePlus.instance.share(ShareParams(files: [XFile(path)]));
+    await Share.shareXFiles([XFile(path)]);
   }
 
   Future<void> _exportShortlistReportPdf() async {
@@ -375,7 +375,7 @@ class _ExportScreenState extends State<ExportScreen> {
     final docDir = await getTemporaryDirectory();
     final file = File('${docDir.path}/canton_fair_shortlist_report.pdf');
     await file.writeAsBytes(await doc.save());
-    await SharePlus.instance.share(ShareParams(files: [XFile(file.path)]));
+    await Share.shareXFiles([XFile(file.path)]);
   }
 
   Future<void> _exportTripCloseoutSummary() async {
@@ -413,7 +413,7 @@ class _ExportScreenState extends State<ExportScreen> {
       ]);
     }
     final path = await _writeCsv(rows, 'canton_fair_trip_closeout_summary.csv');
-    await SharePlus.instance.share(ShareParams(files: [XFile(path)]));
+    await Share.shareXFiles([XFile(path)]);
   }
 
   Widget _card(String title, String subtitle, VoidCallback onTap) {
