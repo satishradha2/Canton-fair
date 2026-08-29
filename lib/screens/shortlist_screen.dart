@@ -1,0 +1,147 @@
+import 'package:flutter/material.dart';
+import '../data/database.dart';
+import '../models/models.dart';
+
+class ShortlistScreen extends StatefulWidget {
+  const ShortlistScreen({super.key});
+
+  @override
+  State<ShortlistScreen> createState() => _ShortlistScreenState();
+}
+
+class _ShortlistScreenState extends State<ShortlistScreen> {
+  final db = TradeDatabase.instance;
+  Future<List<Exhibitor>> _shortlistExhibitors = Future.value([]);
+  late Future<List<Product>> _shortlistProducts;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  void _load() {
+    _shortlistProducts = db.getShortlistedProducts().then((rows) {
+      rows.sort((a, b) => _shortlistScore(b).compareTo(_shortlistScore(a)));
+      return rows;
+    });
+    _shortlistExhibitors = _loadExhibitors();
+  }
+
+  double _shortlistScore(Product p) {
+    final ratingScore = (p.rating / 5.0) * 40.0;
+    final priceScore = p.quotedPrice == null ? 0.0 : 1000.0 / (1.0 + p.quotedPrice!.abs());
+    final moqScore = p.moq == null ? 0.0 : 30.0 / (1.0 + p.moq!);
+    final leadMatch = RegExp(r'\d+').firstMatch(p.leadTime);
+    final lead = leadMatch == null ? null : double.tryParse(leadMatch.group(0)!);
+    final leadScore = lead == null ? 0.0 : 15.0 / (1.0 + lead);
+    return ratingScore + priceScore + moqScore + leadScore;
+  }
+
+  Future<List<Exhibitor>> _loadExhibitors() async {
+    final rows = await db.queryAll('exhibitors', where: 'shortlisted = 1', orderBy: 'rating DESC');
+    return rows.map((e) => Exhibitor.fromMap(e)).toList();
+  }
+
+  Future<void> _toggleExhibitorShortlist(Exhibitor e) async {
+    await db.update('exhibitors', e.id!, {'shortlisted': e.shortlisted ? 0 : 1});
+    _load();
+    setState(() {});
+  }
+
+  Future<void> _toggleProductShortlist(Product p) async {
+    await db.update('products', p.id!, {'shortlisted': p.shortlisted ? 0 : 1});
+    _load();
+    setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return RefreshIndicator(
+      onRefresh: () async => setState(_load),
+      child: ListView(
+        padding: const EdgeInsets.all(12),
+        children: [
+          const Text('Shortlist workspace', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 12),
+          const Card(
+            child: ListTile(
+              title: Text('How comparison works'),
+              subtitle: Text(
+                'Products are ranked by shortlist score (rating, price, MOQ, lead time). '
+                'Suppliers are ranked by manual rating.',
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          const Text('Shortlisted Suppliers', style: TextStyle(fontWeight: FontWeight.bold)),
+          FutureBuilder<List<Exhibitor>>(
+            future: _shortlistExhibitors,
+            builder: (context, snap) {
+              if (!snap.hasData || snap.data!.isEmpty) {
+                return const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 10),
+                  child: Text('No suppliers shortlisted yet.'),
+                );
+              }
+              return Column(
+                children: snap.data!.map((e) {
+                  return Card(
+                    child: ListTile(
+                      title: Text(e.name),
+                      subtitle: Text('Booth ${e.booth} | Rating ${e.rating}'),
+                      trailing: IconButton(
+                        icon: const Icon(Icons.star_border),
+                        tooltip: 'Remove from shortlist',
+                        onPressed: () => _toggleExhibitorShortlist(e),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              );
+            },
+          ),
+          const SizedBox(height: 12),
+          const Text('Shortlisted Products', style: TextStyle(fontWeight: FontWeight.bold)),
+          FutureBuilder<List<Product>>(
+            future: _shortlistProducts,
+            builder: (context, snap) {
+              if (!snap.hasData || snap.data!.isEmpty) {
+                return const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 10),
+                  child: Text('No products shortlisted yet.'),
+                );
+              }
+              return DataTable(
+                columns: const [
+                  DataColumn(label: Text('Product')),
+                  DataColumn(label: Text('Price')),
+                  DataColumn(label: Text('MOQ')),
+                  DataColumn(label: Text('Lead time')),
+                  DataColumn(label: Text('Score')),
+                  DataColumn(label: Text('Action')),
+                ],
+                rows: snap.data!.map((p) {
+                  return DataRow(cells: [
+                    DataCell(Text(p.name)),
+                    DataCell(Text(p.quotedPrice == null ? 'N/A' : '${p.quotedPrice} ${p.priceCurrency}')),
+                    DataCell(Text(p.moq == null ? 'N/A' : p.moq.toString())),
+                    DataCell(Text(p.leadTime.isEmpty ? 'N/A' : p.leadTime)),
+                    DataCell(Text(_shortlistScore(p).toStringAsFixed(2))),
+                    DataCell(
+                      IconButton(
+                        icon: const Icon(Icons.close),
+                        tooltip: 'Remove shortlist',
+                        onPressed: () => _toggleProductShortlist(p),
+                      ),
+                    ),
+                  ]);
+                }).toList(),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
