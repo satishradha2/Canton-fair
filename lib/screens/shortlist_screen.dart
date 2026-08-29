@@ -76,6 +76,11 @@ class _ShortlistScreenState extends State<ShortlistScreen> {
     return Colors.grey;
   }
 
+  bool _isPresetActive(double preset) {
+    if (preset == 0) return _minScore <= 0;
+    return _minScore == preset;
+  }
+
   int _compareProducts(Product a, Product b) {
     late int cmp;
     switch (_sortField) {
@@ -161,6 +166,24 @@ class _ShortlistScreenState extends State<ShortlistScreen> {
     return _sortAscending ? 'Low → High' : 'High → Low';
   }
 
+  Widget _legendChip(String label, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: color,
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return RefreshIndicator(
@@ -234,26 +257,42 @@ class _ShortlistScreenState extends State<ShortlistScreen> {
             spacing: 8,
             runSpacing: 8,
             children: [
-              ActionChip(
+              ChoiceChip(
                 label: const Text('>= 10'),
-                onPressed: () => _setMinScorePreset(10),
+                selected: _isPresetActive(10),
+                onSelected: (selected) => _setMinScorePreset(10),
               ),
-              ActionChip(
+              ChoiceChip(
                 label: const Text('>= 20'),
-                onPressed: () => _setMinScorePreset(20),
+                selected: _isPresetActive(20),
+                onSelected: (selected) => _setMinScorePreset(20),
               ),
-              ActionChip(
+              ChoiceChip(
                 label: const Text('>= 30'),
-                onPressed: () => _setMinScorePreset(30),
+                selected: _isPresetActive(30),
+                onSelected: (selected) => _setMinScorePreset(30),
               ),
-              ActionChip(
+              ChoiceChip(
                 label: const Text('>= 40'),
-                onPressed: () => _setMinScorePreset(40),
+                selected: _isPresetActive(40),
+                onSelected: (selected) => _setMinScorePreset(40),
               ),
-              ActionChip(
+              ChoiceChip(
                 label: const Text('Clear'),
-                onPressed: () => _setMinScorePreset(0),
+                selected: _isPresetActive(0),
+                onSelected: (selected) => _setMinScorePreset(0),
               ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _legendChip('Tier A: 60+', Colors.green),
+              _legendChip('Tier B: 45-59', Colors.orange),
+              _legendChip('Tier C: 30-44', Colors.blue),
+              _legendChip('Tier D: <30', Colors.grey),
             ],
           ),
           const SizedBox(height: 8),
