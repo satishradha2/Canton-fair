@@ -71,6 +71,13 @@ class _ShortlistScreenState extends State<ShortlistScreen> {
     setState(() {});
   }
 
+  void _setMinScorePreset(double value) {
+    _minScore = value;
+    _minScoreController.text = value.toStringAsFixed(0);
+    _load();
+    setState(() {});
+  }
+
   @override
   Widget build(BuildContext context) {
     return RefreshIndicator(
@@ -137,10 +144,32 @@ class _ShortlistScreenState extends State<ShortlistScreen> {
                   onChanged: _applyMinScoreFilter,
                 ),
               ),
-              const SizedBox(width: 8),
-              TextButton(
-                onPressed: () => _applyMinScoreFilter(_minScoreController.text),
-                child: const Text('Apply'),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              ActionChip(
+                label: const Text('>= 10'),
+                onPressed: () => _setMinScorePreset(10),
+              ),
+              ActionChip(
+                label: const Text('>= 20'),
+                onPressed: () => _setMinScorePreset(20),
+              ),
+              ActionChip(
+                label: const Text('>= 30'),
+                onPressed: () => _setMinScorePreset(30),
+              ),
+              ActionChip(
+                label: const Text('>= 40'),
+                onPressed: () => _setMinScorePreset(40),
+              ),
+              ActionChip(
+                label: const Text('Clear'),
+                onPressed: () => _setMinScorePreset(0),
               ),
             ],
           ),
