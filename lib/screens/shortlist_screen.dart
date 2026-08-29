@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import '../data/database.dart';
 import '../models/models.dart';
 
+enum _ProductSortField { score, price, moq, leadTime }
+
 class ShortlistScreen extends StatefulWidget {
   const ShortlistScreen({super.key});
 
@@ -17,6 +19,8 @@ class _ShortlistScreenState extends State<ShortlistScreen> {
   double _minScore = 0.0;
   int _shortlistProductTotal = 0;
   int _shortlistProductVisible = 0;
+  _ProductSortField _sortField = _ProductSortField.score;
+  bool _sortAscending = false;
 
   @override
   void initState() {
@@ -32,9 +36,10 @@ class _ShortlistScreenState extends State<ShortlistScreen> {
 
   void _load() {
     _shortlistProducts = db.getShortlistedProducts().then((rows) {
-      rows.sort((a, b) => _shortlistScore(b).compareTo(_shortlistScore(a)));
       _shortlistProductTotal = rows.length;
-      final filtered = _minScore <= 0 ? rows : rows.where((p) => _shortlistScore(p) >= _minScore).toList();
+      final filtered =
+          _minScore <= 0 ? List<Product>.from(rows) : rows.where((p) => _shortlistScore(p) >= _minScore).toList();
+      filtered.sort(_compareProducts);
       _shortlistProductVisible = filtered.length;
       return filtered;
     });
@@ -51,6 +56,12 @@ class _ShortlistScreenState extends State<ShortlistScreen> {
     return ratingScore + priceScore + moqScore + leadScore;
   }
 
+  double _leadTimeValue(Product p) {
+    final leadMatch = RegExp(r'\d+').firstMatch(p.leadTime);
+    if (leadMatch == null) return double.infinity;
+    return double.tryParse(leadMatch.group(0)!) ?? double.infinity;
+  }
+
   String _shortlistScoreBand(double score) {
     if (score >= 60) return 'A';
     if (score >= 45) return 'B';
@@ -63,6 +74,37 @@ class _ShortlistScreenState extends State<ShortlistScreen> {
     if (score >= 45) return Colors.orange;
     if (score >= 30) return Colors.blue;
     return Colors.grey;
+  }
+
+  int _compareProducts(Product a, Product b) {
+    late int cmp;
+    switch (_sortField) {
+      case _ProductSortField.price:
+        final aPrice = a.quotedPrice ?? double.infinity;
+        final bPrice = b.quotedPrice ?? double.infinity;
+        cmp = aPrice.compareTo(bPrice);
+        break;
+      case _ProductSortField.moq:
+        final aMoq = a.moq == null ? double.infinity : a.moq!.toDouble();
+        final bMoq = b.moq == null ? double.infinity : b.moq!.toDouble();
+        cmp = aMoq.compareTo(bMoq);
+        break;
+      case _ProductSortField.leadTime:
+        cmp = _leadTimeValue(a).compareTo(_leadTimeValue(b));
+        break;
+      case _ProductSortField.score:
+      default:
+        cmp = _shortlistScore(b).compareTo(_shortlistScore(a));
+        break;
+    }
+
+    if (_sortField == _ProductSortField.score) {
+      if (cmp == 0) cmp = _shortlistScore(a).compareTo(_shortlistScore(b));
+      cmp = _sortAscending ? -cmp : cmp;
+      return cmp;
+    }
+
+    return _sortAscending ? cmp : -cmp;
   }
 
   Future<List<Exhibitor>> _loadExhibitors() async {
@@ -96,11 +138,27 @@ class _ShortlistScreenState extends State<ShortlistScreen> {
     setState(() {});
   }
 
+  void _setSortField(_ProductSortField field) {
+    _sortField = field;
+    _load();
+    setState(() {});
+  }
+
+  void _toggleSortDirection() {
+    _sortAscending = !_sortAscending;
+    _load();
+    setState(() {});
+  }
+
   String get _filterSummaryText {
     if (_minScore <= 0) {
       return 'No score filter active • Showing $_shortlistProductVisible of $_shortlistProductTotal shortlisted products';
     }
     return 'Filtering score >= ${_minScore.toStringAsFixed(0)} • Showing $_shortlistProductVisible of $_shortlistProductTotal shortlisted products';
+  }
+
+  String get _sortDirectionLabel {
+    return _sortAscending ? 'Low → High' : 'High → Low';
   }
 
   @override
@@ -199,6 +257,40 @@ class _ShortlistScreenState extends State<ShortlistScreen> {
             ],
           ),
           const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            alignment: WrapAlignment.start,
+            children: [
+              const Text('Sort by:'),
+              ChoiceChip(
+                label: const Text('Score'),
+                selected: _sortField == _ProductSortField.score,
+                onSelected: (selected) => _setSortField(_ProductSortField.score),
+              ),
+              ChoiceChip(
+                label: const Text('Price'),
+                selected: _sortField == _ProductSortField.price,
+                onSelected: (selected) => _setSortField(_ProductSortField.price),
+              ),
+              ChoiceChip(
+                label: const Text('MOQ'),
+                selected: _sortField == _ProductSortField.moq,
+                onSelected: (selected) => _setSortField(_ProductSortField.moq),
+              ),
+              ChoiceChip(
+                label: const Text('Lead Time'),
+                selected: _sortField == _ProductSortField.leadTime,
+                onSelected: (selected) => _setSortField(_ProductSortField.leadTime),
+              ),
+              InputChip(
+                label: Text(_sortDirectionLabel),
+                avatar: Icon(_sortAscending ? Icons.arrow_upward : Icons.arrow_downward),
+                onPressed: _toggleSortDirection,
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
           Text(
             _filterSummaryText,
             style: const TextStyle(fontWeight: FontWeight.w500),
@@ -219,7 +311,7 @@ class _ShortlistScreenState extends State<ShortlistScreen> {
                   DataColumn(label: Text('Price')),
                   DataColumn(label: Text('MOQ')),
                   DataColumn(label: Text('Lead time')),
-                  DataColumn(label: Text('Score')), 
+                  DataColumn(label: Text('Score')),
                   DataColumn(label: Text('Action')),
                 ],
                 rows: snap.data!.map((p) {
