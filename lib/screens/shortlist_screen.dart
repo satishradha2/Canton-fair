@@ -28,6 +28,7 @@ class _ShortlistScreenState extends State<ShortlistScreen> {
   int _shortlistProductVisible = 0;
   _ProductSortField _sortField = _ProductSortField.score;
   bool _sortAscending = false;
+  bool _tripDayOnly = false;
 
   @override
   void initState() {
@@ -42,15 +43,64 @@ class _ShortlistScreenState extends State<ShortlistScreen> {
   }
 
   void _load() {
-    _shortlistProducts = db.getShortlistedProducts().then((rows) {
-      _shortlistProductTotal = rows.length;
-      final filtered =
-          _minScore <= 0 ? List<Product>.from(rows) : rows.where((p) => _shortlistScore(p) >= _minScore).toList();
-      filtered.sort(_compareProducts);
-      _shortlistProductVisible = filtered.length;
-      return filtered;
-    });
+    _shortlistProducts = _loadShortlistedProducts();
     _shortlistExhibitors = _loadExhibitors();
+  }
+
+  Future<List<Product>> _loadShortlistedProducts() async {
+    final rows = await db.getShortlistedProductsWithTrip();
+    final tripIds = _tripDayOnly ? await _loadTripDayIds() : null;
+
+    if (tripIds != null && tripIds.isEmpty) {
+      _shortlistProductTotal = 0;
+      _shortlistProductVisible = 0;
+      return [];
+    }
+
+    final effectiveRows = tripIds == null
+        ? rows
+        : rows.where((r) => tripIds.contains(r['trip_id'] as int?)).toList();
+    final products = effectiveRows.map((row) {
+      return Product(
+        id: row['id'] as int?,
+        exhibitorId: row['exhibitor_id'] as int,
+        name: row['name'] as String,
+        modelCode: row['model_code'] as String? ?? '',
+        specs: row['specs'] as String? ?? '',
+        moq: row['moq'] != null ? (row['moq'] as num).toDouble() : null,
+        quotedPrice: row['quoted_price'] != null ? (row['quoted_price'] as num).toDouble() : null,
+        priceCurrency: row['price_currency'] as String? ?? 'USD',
+        leadTime: row['lead_time'] as String? ?? '',
+        paymentTerms: row['payment_terms'] as String? ?? '',
+        shortlisted: true,
+        rating: row['rating'] as int? ?? 0,
+      );
+    }).toList();
+
+    _shortlistProductTotal = products.length;
+    final filtered =
+        _minScore <= 0 ? List<Product>.from(products) : products.where((p) => _shortlistScore(p) >= _minScore).toList();
+    filtered.sort(_compareProducts);
+    _shortlistProductVisible = filtered.length;
+    return filtered;
+  }
+
+  Future<Set<int>> _loadTripDayIds() async {
+    final trips = await db.getTrips();
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final activeTripIds = <int>{};
+
+    for (final trip in trips) {
+      if (trip.id == null || trip.startDate == null || trip.endDate == null) continue;
+      final start = DateTime(trip.startDate!.year, trip.startDate!.month, trip.startDate!.day);
+      final end = DateTime(trip.endDate!.year, trip.endDate!.month, trip.endDate!.day);
+      if (!today.isBefore(start) && !today.isAfter(end)) {
+        activeTripIds.add(trip.id!);
+      }
+    }
+
+    return activeTripIds;
   }
 
   double _shortlistScore(Product p) {
@@ -134,7 +184,13 @@ class _ShortlistScreenState extends State<ShortlistScreen> {
 
   Future<List<Exhibitor>> _loadExhibitors() async {
     final rows = await db.queryAll('exhibitors', where: 'shortlisted = 1', orderBy: 'rating DESC');
-    return rows.map((e) => Exhibitor.fromMap(e)).toList();
+    final tripIds = _tripDayOnly ? await _loadTripDayIds() : null;
+    if (tripIds != null && tripIds.isEmpty) return [];
+
+    final effectiveRows = tripIds == null
+        ? rows
+        : rows.where((row) => tripIds.contains(row['trip_id'] as int?)).toList();
+    return effectiveRows.map((e) => Exhibitor.fromMap(e)).toList();
   }
 
   Future<void> _toggleExhibitorShortlist(Exhibitor e) async {
@@ -360,6 +416,12 @@ class _ShortlistScreenState extends State<ShortlistScreen> {
     setState(() {});
   }
 
+  void _setTripDayOnly(bool value) {
+    _tripDayOnly = value;
+    _load();
+    setState(() {});
+  }
+
   void _setSortField(_ProductSortField field) {
     _sortField = field;
     _load();
@@ -373,10 +435,11 @@ class _ShortlistScreenState extends State<ShortlistScreen> {
   }
 
   String get _filterSummaryText {
+    final tripScope = _tripDayOnly ? 'Active trip today' : 'All trips';
     if (_minScore <= 0) {
-      return 'No score filter active • Showing $_shortlistProductVisible of $_shortlistProductTotal shortlisted products';
+      return '$tripScope • No score filter • Showing $_shortlistProductVisible of $_shortlistProductTotal shortlisted products';
     }
-    return 'Filtering score >= ${_minScore.toStringAsFixed(0)} • Showing $_shortlistProductVisible of $_shortlistProductTotal shortlisted products';
+    return '$tripScope • Score >= ${_minScore.toStringAsFixed(0)} • Showing $_shortlistProductVisible of $_shortlistProductTotal shortlisted products';
   }
 
   String get _sortDirectionLabel {
@@ -425,9 +488,13 @@ class _ShortlistScreenState extends State<ShortlistScreen> {
             future: _shortlistExhibitors,
             builder: (context, snap) {
               if (!snap.hasData || snap.data!.isEmpty) {
-                return const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 10),
-                  child: Text('No suppliers shortlisted yet.'),
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  child: Text(
+                    _tripDayOnly
+                        ? 'No shortlisted suppliers for an active trip today.'
+                        : 'No suppliers shortlisted yet.',
+                  ),
                 );
               }
               return Column(
@@ -449,6 +516,16 @@ class _ShortlistScreenState extends State<ShortlistScreen> {
           ),
           const SizedBox(height: 12),
           const Text('Shortlisted Products', style: TextStyle(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: FilterChip(
+              avatar: const Icon(Icons.today, size: 18),
+              label: const Text('Trip day only'),
+              selected: _tripDayOnly,
+              onSelected: _setTripDayOnly,
+            ),
+          ),
           const SizedBox(height: 8),
           Row(
             children: [
@@ -573,9 +650,13 @@ class _ShortlistScreenState extends State<ShortlistScreen> {
             future: _shortlistProducts,
             builder: (context, snap) {
               if (!snap.hasData || snap.data!.isEmpty) {
-                return const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 10),
-                  child: Text('No products shortlisted yet.'),
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  child: Text(
+                    _tripDayOnly
+                        ? 'No shortlisted products for an active trip today.'
+                        : 'No products shortlisted yet.',
+                  ),
                 );
               }
               return DataTable(
@@ -637,4 +718,3 @@ class _ShortlistScreenState extends State<ShortlistScreen> {
     );
   }
 }
-
