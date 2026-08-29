@@ -15,6 +15,8 @@ class _ShortlistScreenState extends State<ShortlistScreen> {
   late Future<List<Product>> _shortlistProducts;
   final _minScoreController = TextEditingController(text: '0');
   double _minScore = 0.0;
+  int _shortlistProductTotal = 0;
+  int _shortlistProductVisible = 0;
 
   @override
   void initState() {
@@ -31,8 +33,10 @@ class _ShortlistScreenState extends State<ShortlistScreen> {
   void _load() {
     _shortlistProducts = db.getShortlistedProducts().then((rows) {
       rows.sort((a, b) => _shortlistScore(b).compareTo(_shortlistScore(a)));
-      if (_minScore <= 0) return rows;
-      return rows.where((p) => _shortlistScore(p) >= _minScore).toList();
+      _shortlistProductTotal = rows.length;
+      final filtered = _minScore <= 0 ? rows : rows.where((p) => _shortlistScore(p) >= _minScore).toList();
+      _shortlistProductVisible = filtered.length;
+      return filtered;
     });
     _shortlistExhibitors = _loadExhibitors();
   }
@@ -76,6 +80,13 @@ class _ShortlistScreenState extends State<ShortlistScreen> {
     _minScoreController.text = value.toStringAsFixed(0);
     _load();
     setState(() {});
+  }
+
+  String get _filterSummaryText {
+    if (_minScore <= 0) {
+      return 'No score filter active • Showing $_shortlistProductVisible of $_shortlistProductTotal shortlisted products';
+    }
+    return 'Filtering score >= ${_minScore.toStringAsFixed(0)} • Showing $_shortlistProductVisible of $_shortlistProductTotal shortlisted products';
   }
 
   @override
@@ -172,6 +183,11 @@ class _ShortlistScreenState extends State<ShortlistScreen> {
                 onPressed: () => _setMinScorePreset(0),
               ),
             ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            _filterSummaryText,
+            style: const TextStyle(fontWeight: FontWeight.w500),
           ),
           const SizedBox(height: 8),
           FutureBuilder<List<Product>>(
