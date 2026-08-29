@@ -51,6 +51,20 @@ class _ShortlistScreenState extends State<ShortlistScreen> {
     return ratingScore + priceScore + moqScore + leadScore;
   }
 
+  String _shortlistScoreBand(double score) {
+    if (score >= 60) return 'A';
+    if (score >= 45) return 'B';
+    if (score >= 30) return 'C';
+    return 'D';
+  }
+
+  Color _shortlistScoreBandColor(double score) {
+    if (score >= 60) return Colors.green;
+    if (score >= 45) return Colors.orange;
+    if (score >= 30) return Colors.blue;
+    return Colors.grey;
+  }
+
   Future<List<Exhibitor>> _loadExhibitors() async {
     final rows = await db.queryAll('exhibitors', where: 'shortlisted = 1', orderBy: 'rating DESC');
     return rows.map((e) => Exhibitor.fromMap(e)).toList();
@@ -205,16 +219,42 @@ class _ShortlistScreenState extends State<ShortlistScreen> {
                   DataColumn(label: Text('Price')),
                   DataColumn(label: Text('MOQ')),
                   DataColumn(label: Text('Lead time')),
-                  DataColumn(label: Text('Score')),
+                  DataColumn(label: Text('Score')), 
                   DataColumn(label: Text('Action')),
                 ],
                 rows: snap.data!.map((p) {
+                  final score = _shortlistScore(p);
+                  final bandColor = _shortlistScoreBandColor(score);
+                  final band = _shortlistScoreBand(score);
+
                   return DataRow(cells: [
                     DataCell(Text(p.name)),
                     DataCell(Text(p.quotedPrice == null ? 'N/A' : '${p.quotedPrice} ${p.priceCurrency}')),
                     DataCell(Text(p.moq == null ? 'N/A' : p.moq.toString())),
                     DataCell(Text(p.leadTime.isEmpty ? 'N/A' : p.leadTime)),
-                    DataCell(Text(_shortlistScore(p).toStringAsFixed(2))),
+                    DataCell(
+                      Row(
+                        children: [
+                          Text(score.toStringAsFixed(2)),
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: bandColor.withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Text(
+                              'Tier $band',
+                              style: TextStyle(
+                                color: bandColor,
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                     DataCell(
                       IconButton(
                         icon: const Icon(Icons.close),
