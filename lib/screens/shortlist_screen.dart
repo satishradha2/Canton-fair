@@ -1,4 +1,11 @@
+import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:csv/csv.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:share_plus/share_plus.dart';
 import '../data/database.dart';
 import '../models/models.dart';
 
@@ -112,6 +119,19 @@ class _ShortlistScreenState extends State<ShortlistScreen> {
     return _sortAscending ? cmp : -cmp;
   }
 
+  String _sortFieldLabel() {
+    switch (_sortField) {
+      case _ProductSortField.score:
+        return 'Score';
+      case _ProductSortField.price:
+        return 'Price';
+      case _ProductSortField.moq:
+        return 'MOQ';
+      case _ProductSortField.leadTime:
+        return 'Lead time';
+    }
+  }
+
   Future<List<Exhibitor>> _loadExhibitors() async {
     final rows = await db.queryAll('exhibitors', where: 'shortlisted = 1', orderBy: 'rating DESC');
     return rows.map((e) => Exhibitor.fromMap(e)).toList();
@@ -127,6 +147,203 @@ class _ShortlistScreenState extends State<ShortlistScreen> {
     await db.update('products', p.id!, {'shortlisted': p.shortlisted ? 0 : 1});
     _load();
     setState(() {});
+  }
+
+  Future<Map<int, Map<String, dynamic>>> _loadShortlistSupplierMap() async {
+    final rows = await db.queryAll('exhibitors', where: 'shortlisted = 1');
+    final map = <int, Map<String, dynamic>>{};
+    for (final row in rows) {
+      final id = row['id'];
+      if (id is int) {
+        map[id] = row;
+      }
+    }
+    return map;
+  }
+
+  Future<List<List<dynamic>>> _buildCsvRows() async {
+    final products = await _shortlistProducts;
+    final suppliers = await _loadShortlistSupplierMap();
+    final rows = <List<dynamic>>[
+      ['Type', 'ID', 'Supplier', 'Booth', 'Product', 'Model', 'Price', 'Currency', 'MOQ', 'Lead time', 'Score', 'Tier'],
+    ];
+    final seenSuppliers = <int>{};
+
+    for (final p in products) {
+      final supplier = suppliers[p.exhibitorId];
+      final supplierId = supplier?['id'] as int?;
+      final supplierName = supplier?['name']?.toString() ?? 'Unknown supplier';
+      final supplierBooth = supplier?['booth']?.toString() ?? '';
+      final score = _shortlistScore(p);
+      final band = _shortlistScoreBand(score);
+
+      if (supplierId != null && seenSuppliers.add(supplierId)) {
+        rows.add([
+          'Supplier',
+          supplierId,
+          supplierName,
+          supplierBooth,
+          '',
+          '',
+          '',
+          '',
+          '',
+          '',
+          '',
+          '',
+        ]);
+      }
+
+      rows.add([
+        'Product',
+        p.id,
+        supplierName,
+        supplierBooth,
+        p.name,
+        p.modelCode,
+        p.quotedPrice ?? '',
+        p.priceCurrency,
+        p.moq ?? '',
+        p.leadTime,
+        score.toStringAsFixed(2),
+        'Tier $band',
+      ]);
+    }
+
+    if (rows.length == 1) {
+      rows.add(['No shortlisted products meet current filters.', '', '', '', '', '', '', '', '', '', '']);
+    }
+
+    return rows;
+  }
+
+  Future<String> _writeCsv(List<List<dynamic>> rows, String filename) async {
+    final docs = await getTemporaryDirectory();
+    final path = '${docs.path}/$filename';
+    final file = File(path);
+    final csvData = const ListToCsvConverter().convert(rows);
+    await file.writeAsString(csvData, encoding: utf8);
+    return file.path;
+  }
+
+  Future<void> _exportShortlistCsv() async {
+    try {
+      final rows = await _buildCsvRows();
+      final filter = _minScore <= 0 ? 'none' : _minScore.toStringAsFixed(0);
+      final direction = _sortAscending ? 'low_to_high' : 'high_to_low';
+      final path = await _writeCsv(
+        rows,
+        'canton_fair_shortlist_${DateTime.now().millisecondsSinceEpoch}.csv',
+      );
+      await SharePlus.instance.share(
+        ShareParams(
+          text: 'Canton Fair shortlist export (filter: $filter, sort: ${_sortFieldLabel()} $direction)',
+          files: [XFile(path)],
+        ),
+      );
+      _showExportSnack('Shortlist CSV exported.');
+    } catch (error) {
+      _showExportSnack('Export failed: $error');
+    }
+  }
+
+  Future<void> _exportShortlistPdf() async {
+    try {
+      final products = await _shortlistProducts;
+      final suppliers = await _loadShortlistSupplierMap();
+      final filter = _minScore <= 0 ? 'No minimum score filter' : 'Minimum score >= ${_minScore.toStringAsFixed(0)}';
+      final sortDescription = '${_sortFieldLabel()} (${_sortAscending ? 'Low → High' : 'High → Low'})';
+      final now = DateTime.now().toLocal().toIso8601String();
+      final doc = pw.Document();
+
+      final data = products
+          .map((p) {
+            final supplier = suppliers[p.exhibitorId];
+            final score = _shortlistScore(p);
+            return [
+              p.name,
+              supplier?['name']?.toString() ?? 'Unknown supplier',
+              supplier?['booth']?.toString() ?? '',
+              p.quotedPrice == null ? '-' : p.quotedPrice.toString(),
+              p.priceCurrency,
+              p.moq == null ? '-' : p.moq.toString(),
+              p.leadTime.isEmpty ? '-' : p.leadTime,
+              score.toStringAsFixed(2),
+              _shortlistScoreBand(score),
+              p.id?.toString() ?? '',
+            ];
+          })
+          .toList();
+
+      doc.addPage(
+        pw.MultiPage(
+          pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.all(18),
+          build: (context) {
+            final widgets = <pw.Widget>[
+              pw.Text(
+                'Canton Fair Shortlist Export',
+                style: pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold),
+              ),
+              pw.SizedBox(height: 6),
+              pw.Text('Generated: $now'),
+              pw.SizedBox(height: 12),
+              pw.Text('Filter: $filter'),
+              pw.Text('Sort: $sortDescription'),
+              pw.Text('Items: ${products.length}'),
+              pw.SizedBox(height: 12),
+            ];
+
+            if (data.isEmpty) {
+              widgets.add(pw.Text('No shortlisted products match current filters.'));
+              return widgets;
+            }
+
+            widgets.add(
+              pw.Table.fromTextArray(
+                headers: const [
+                  'Product',
+                  'Supplier',
+                  'Booth',
+                  'Price',
+                  'Currency',
+                  'MOQ',
+                  'Lead time',
+                  'Score',
+                  'Tier',
+                  'Product ID',
+                ],
+                data: data.cast<List<String>>(),
+                border: pw.TableBorder.all(),
+                headerStyle: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
+                cellStyle: const pw.TextStyle(fontSize: 9),
+                headerDecoration: const pw.BoxDecoration(color: PdfColors.grey300),
+                cellAlignments: const {0: pw.Alignment.centerLeft},
+              ),
+            );
+
+            return widgets;
+          },
+        ),
+      );
+
+      final out = File('${(await getTemporaryDirectory()).path}/canton_fair_shortlist_${DateTime.now().millisecondsSinceEpoch}.pdf');
+      await out.writeAsBytes(await doc.save());
+      await SharePlus.instance.share(
+        ShareParams(
+          text: 'Canton Fair shortlist PDF (${products.length} products)',
+          files: [XFile(out.path)],
+        ),
+      );
+      _showExportSnack('Shortlist PDF exported.');
+    } catch (error) {
+      _showExportSnack('Export failed: $error');
+    }
+  }
+
+  void _showExportSnack(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 
   void _applyMinScoreFilter(String value) {
@@ -299,6 +516,23 @@ class _ShortlistScreenState extends State<ShortlistScreen> {
           Wrap(
             spacing: 8,
             runSpacing: 8,
+            children: [
+              ElevatedButton.icon(
+                onPressed: _exportShortlistCsv,
+                icon: const Icon(Icons.table_view),
+                label: const Text('Export CSV'),
+              ),
+              ElevatedButton.icon(
+                onPressed: _exportShortlistPdf,
+                icon: const Icon(Icons.picture_as_pdf),
+                label: const Text('Export PDF'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
             alignment: WrapAlignment.start,
             children: [
               const Text('Sort by:'),
@@ -403,3 +637,4 @@ class _ShortlistScreenState extends State<ShortlistScreen> {
     );
   }
 }
+
