@@ -40,11 +40,15 @@ class UpdateService {
     }
 
     final payload = jsonDecode(response.body) as Map<String, dynamic>;
-    final tagName = (payload['tag_name'] as String? ?? '').replaceFirst(RegExp(r'^v'), '');
-    final releaseUrl = payload['html_url'] as String? ?? 'https://github.com/satishradha2/Canton-fair/releases/latest';
-    final assets = (payload['assets'] as List? ?? []).whereType<Map<String, dynamic>>();
+    final tagName =
+        (payload['tag_name'] as String? ?? '').replaceFirst(RegExp(r'^v'), '');
+    final releaseUrl = payload['html_url'] as String? ??
+        'https://github.com/satishradha2/Canton-fair/releases/latest';
+    final assets =
+        (payload['assets'] as List? ?? []).whereType<Map<String, dynamic>>();
     final apkAsset = assets.cast<Map<String, dynamic>?>().firstWhere(
-          (asset) => (asset?['name'] as String? ?? '').toLowerCase().endsWith('.apk'),
+          (asset) =>
+              (asset?['name'] as String? ?? '').toLowerCase().endsWith('.apk'),
           orElse: () => null,
         );
     final apkUrl = apkAsset?['browser_download_url'] as String?;

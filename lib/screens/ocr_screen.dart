@@ -35,7 +35,9 @@ class OcrScreen extends StatelessWidget {
             if (!context.mounted) return;
             if (text == null || text.trim().isEmpty) {
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('No text detected, try again with clearer card image.')),
+                const SnackBar(
+                    content: Text(
+                        'No text detected, try again with clearer card image.')),
               );
               return;
             }
@@ -47,4 +49,3 @@ class OcrScreen extends StatelessWidget {
     );
   }
 }
-

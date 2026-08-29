@@ -29,9 +29,11 @@ class Trip {
   factory Trip.fromMap(Map<String, dynamic> map) => Trip(
         id: map['id'] as int?,
         name: map['name'] as String,
-        startDate:
-            map['start_date'] != null ? DateTime.parse(map['start_date']) : null,
-        endDate: map['end_date'] != null ? DateTime.parse(map['end_date']) : null,
+        startDate: map['start_date'] != null
+            ? DateTime.parse(map['start_date'])
+            : null,
+        endDate:
+            map['end_date'] != null ? DateTime.parse(map['end_date']) : null,
         city: map['city'] as String,
         notes: map['notes'] as String? ?? '',
       );
@@ -197,8 +199,9 @@ class Product {
         modelCode: map['model_code'] as String? ?? '',
         specs: map['specs'] as String? ?? '',
         moq: map['moq'] != null ? (map['moq'] as num).toDouble() : null,
-        quotedPrice:
-            map['quoted_price'] != null ? (map['quoted_price'] as num).toDouble() : null,
+        quotedPrice: map['quoted_price'] != null
+            ? (map['quoted_price'] as num).toDouble()
+            : null,
         priceCurrency: map['price_currency'] as String? ?? 'USD',
         leadTime: map['lead_time'] as String? ?? '',
         paymentTerms: map['payment_terms'] as String? ?? '',
@@ -247,8 +250,9 @@ class Meeting {
         exhibitorId: map['exhibitor_id'] as int,
         productId: map['product_id'] as int?,
         meetingDate: DateTime.parse(map['meeting_date']),
-        followUpDate:
-            map['follow_up_date'] != null ? DateTime.parse(map['follow_up_date']) : null,
+        followUpDate: map['follow_up_date'] != null
+            ? DateTime.parse(map['follow_up_date'])
+            : null,
         outcome: map['outcome'] as String? ?? 'Interested',
         priority: map['priority'] as String? ?? 'Medium',
         notes: map['notes'] as String? ?? '',
@@ -295,12 +299,15 @@ class Quote {
         id: map['id'] as int?,
         productId: map['product_id'] as int,
         label: map['label'] as String,
-        unitPrice: map['unit_price'] != null ? (map['unit_price'] as num).toDouble() : null,
+        unitPrice: map['unit_price'] != null
+            ? (map['unit_price'] as num).toDouble()
+            : null,
         currency: map['currency'] as String? ?? 'USD',
         moq: map['moq'] != null ? (map['moq'] as num).toDouble() : null,
         note: map['note'] as String? ?? '',
-        validUntil:
-            map['valid_until'] != null ? DateTime.parse(map['valid_until']) : null,
+        validUntil: map['valid_until'] != null
+            ? DateTime.parse(map['valid_until'])
+            : null,
         isSampleQuote: (map['is_sample_quote'] as int) == 1,
       );
 }

@@ -8,6 +8,8 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import '../data/database.dart';
 import '../models/models.dart';
+import '../theme/app_theme.dart';
+import '../widgets/enterprise_widgets.dart';
 
 class ExportScreen extends StatefulWidget {
   const ExportScreen({super.key});
@@ -59,7 +61,17 @@ class _ExportScreenState extends State<ExportScreen> {
 
   Future<void> _exportShortlist() async {
     final rows = <List<dynamic>>[
-      ['Supplier / Product', 'Type', 'RefID', 'Price', 'Currency', 'MoQ', 'LeadTime', 'Shortlisted', 'Score'],
+      [
+        'Supplier / Product',
+        'Type',
+        'RefID',
+        'Price',
+        'Currency',
+        'MoQ',
+        'LeadTime',
+        'Shortlisted',
+        'Score'
+      ],
     ];
     final ex = await db.queryAll('exhibitors', where: 'shortlisted = 1');
     for (final e in ex) {
@@ -75,9 +87,10 @@ class _ExportScreenState extends State<ExportScreen> {
         '-',
       ]);
     }
-    final products = await db.getShortlistedProducts()..sort(
-      (a, b) => _shortlistScore(b).compareTo(_shortlistScore(a)),
-    );
+    final products = await db.getShortlistedProducts()
+      ..sort(
+        (a, b) => _shortlistScore(b).compareTo(_shortlistScore(a)),
+      );
     for (final p in products) {
       rows.add([
         p.name,
@@ -130,7 +143,9 @@ class _ExportScreenState extends State<ExportScreen> {
           modelCode: r['model_code'] as String? ?? '',
           specs: r['specs'] as String? ?? '',
           moq: r['moq'] != null ? (r['moq'] as num).toDouble() : null,
-          quotedPrice: r['quoted_price'] != null ? (r['quoted_price'] as num).toDouble() : null,
+          quotedPrice: r['quoted_price'] != null
+              ? (r['quoted_price'] as num).toDouble()
+              : null,
           priceCurrency: r['price_currency'] as String? ?? 'USD',
           leadTime: r['lead_time'] as String? ?? '',
           paymentTerms: r['payment_terms'] as String? ?? '',
@@ -140,7 +155,8 @@ class _ExportScreenState extends State<ExportScreen> {
         final score = _shortlistScore(p);
         return {'score': score, 'product': r, 'model': p};
       }).toList()
-        ..sort((a, b) => (b['score'] as double).compareTo(a['score'] as double));
+        ..sort(
+            (a, b) => (b['score'] as double).compareTo(a['score'] as double));
 
       for (int i = 0; i < products.length; i++) {
         final row = products[i];
@@ -208,31 +224,33 @@ class _ExportScreenState extends State<ExportScreen> {
           }
 
           for (final entry in tripEntries) {
-            final tripProducts = entry.value
-                .map((r) {
-                  final p = Product(
-                    id: r['id'] as int?,
-                    exhibitorId: r['exhibitor_id'] as int,
-                    name: r['name'] as String,
-                    modelCode: r['model_code'] as String? ?? '',
-                    specs: r['specs'] as String? ?? '',
-                    moq: r['moq'] != null ? (r['moq'] as num).toDouble() : null,
-                    quotedPrice: r['quoted_price'] != null ? (r['quoted_price'] as num).toDouble() : null,
-                    priceCurrency: r['price_currency'] as String? ?? 'USD',
-                    leadTime: r['lead_time'] as String? ?? '',
-                    paymentTerms: r['payment_terms'] as String? ?? '',
-                    shortlisted: true,
-                    rating: r['rating'] as int? ?? 0,
-                  );
-                  return {
-                    'product': r,
-                    'score': _shortlistScore(p),
-                  };
-                })
-                .toList()
-              ..sort((a, b) => (b['score'] as double).compareTo(a['score'] as double));
+            final tripProducts = entry.value.map((r) {
+              final p = Product(
+                id: r['id'] as int?,
+                exhibitorId: r['exhibitor_id'] as int,
+                name: r['name'] as String,
+                modelCode: r['model_code'] as String? ?? '',
+                specs: r['specs'] as String? ?? '',
+                moq: r['moq'] != null ? (r['moq'] as num).toDouble() : null,
+                quotedPrice: r['quoted_price'] != null
+                    ? (r['quoted_price'] as num).toDouble()
+                    : null,
+                priceCurrency: r['price_currency'] as String? ?? 'USD',
+                leadTime: r['lead_time'] as String? ?? '',
+                paymentTerms: r['payment_terms'] as String? ?? '',
+                shortlisted: true,
+                rating: r['rating'] as int? ?? 0,
+              );
+              return {
+                'product': r,
+                'score': _shortlistScore(p),
+              };
+            }).toList()
+              ..sort((a, b) =>
+                  (b['score'] as double).compareTo(a['score'] as double));
 
-            final tripName = entry.value.first['trip_name']?.toString() ?? 'Unknown trip';
+            final tripName =
+                entry.value.first['trip_name']?.toString() ?? 'Unknown trip';
             final tripId = entry.key;
             final tripStart = entry.value.first['trip_start_date']?.toString();
             final tripEnd = entry.value.first['trip_end_date']?.toString();
@@ -240,11 +258,13 @@ class _ExportScreenState extends State<ExportScreen> {
             children.add(
               pw.Text(
                 'Trip: $tripName  (Trip ID: ${tripId ?? "—"})',
-                style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
+                style:
+                    pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
               ),
             );
             if (tripStart != null || tripEnd != null) {
-              children.add(pw.Text('Dates: ${tripStart ?? "—"} to ${tripEnd ?? "—"}'));
+              children.add(
+                  pw.Text('Dates: ${tripStart ?? "—"} to ${tripEnd ?? "—"}'));
             }
             children.add(pw.SizedBox(height: 8));
 
@@ -252,7 +272,8 @@ class _ExportScreenState extends State<ExportScreen> {
                 .asMap()
                 .entries
                 .map((entryRow) {
-                  final data = entryRow.value['product'] as Map<String, dynamic>;
+                  final data =
+                      entryRow.value['product'] as Map<String, dynamic>;
                   final score = entryRow.value['score'] as double;
                   return [
                     '${entryRow.key + 1}',
@@ -283,9 +304,11 @@ class _ExportScreenState extends State<ExportScreen> {
                   'Score',
                 ],
                 data: rows,
-                headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10),
+                headerStyle:
+                    pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10),
                 cellStyle: const pw.TextStyle(fontSize: 9),
-                headerDecoration: const pw.BoxDecoration(color: PdfColors.grey200),
+                headerDecoration:
+                    const pw.BoxDecoration(color: PdfColors.grey200),
                 cellAlignments: const {
                   0: pw.Alignment.centerRight,
                   8: pw.Alignment.centerRight,
@@ -301,24 +324,34 @@ class _ExportScreenState extends State<ExportScreen> {
     );
 
     final docDir = await getTemporaryDirectory();
-    final file = File('${docDir.path}/canton_fair_trip_ranked_shortlist_report.pdf');
+    final file =
+        File('${docDir.path}/canton_fair_trip_ranked_shortlist_report.pdf');
     await file.writeAsBytes(await doc.save());
     await Share.shareXFiles([XFile(file.path)]);
   }
 
   double _shortlistScore(Product p) {
     final ratingScore = (p.rating / 5.0) * 40.0;
-    final priceScore = p.quotedPrice == null ? 0.0 : 1000.0 / (1.0 + p.quotedPrice!.abs());
+    final priceScore =
+        p.quotedPrice == null ? 0.0 : 1000.0 / (1.0 + p.quotedPrice!.abs());
     final moqScore = p.moq == null ? 0.0 : 30.0 / (1.0 + p.moq!);
     final leadMatch = RegExp(r'\d+').firstMatch(p.leadTime);
-    final lead = leadMatch == null ? null : double.tryParse(leadMatch.group(0)!);
+    final lead =
+        leadMatch == null ? null : double.tryParse(leadMatch.group(0)!);
     final leadScore = lead == null ? 0.0 : 15.0 / (1.0 + lead);
     return ratingScore + priceScore + moqScore + leadScore;
   }
 
   Future<void> _exportFollowUps() async {
     final rows = <List<dynamic>>[
-      ['Exhibitor ID', 'Meeting Date', 'Follow Up Date', 'Outcome', 'Priority', 'Notes']
+      [
+        'Exhibitor ID',
+        'Meeting Date',
+        'Follow Up Date',
+        'Outcome',
+        'Priority',
+        'Notes'
+      ]
     ];
     final meetings = await db.getDueFollowUps();
     for (final m in meetings) {
@@ -337,7 +370,8 @@ class _ExportScreenState extends State<ExportScreen> {
 
   Future<void> _exportShortlistReportPdf() async {
     final doc = pw.Document();
-    final ex = await db.queryAll('exhibitors', where: 'shortlisted = 1', orderBy: 'name ASC');
+    final ex = await db.queryAll('exhibitors',
+        where: 'shortlisted = 1', orderBy: 'name ASC');
     final products = await db.getShortlistedProducts();
     final followUps = await db.getDueFollowUps();
     final now = DateTime.now().toLocal().toIso8601String();
@@ -349,7 +383,9 @@ class _ExportScreenState extends State<ExportScreen> {
           return pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
-              pw.Text('Canton Fair Shortlist Report', style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold)),
+              pw.Text('Canton Fair Shortlist Report',
+                  style: pw.TextStyle(
+                      fontSize: 24, fontWeight: pw.FontWeight.bold)),
               pw.SizedBox(height: 8),
               pw.Text('Generated: $now'),
               pw.SizedBox(height: 12),
@@ -357,7 +393,8 @@ class _ExportScreenState extends State<ExportScreen> {
               pw.Text('Shortlisted products: ${products.length}'),
               pw.SizedBox(height: 12),
               pw.Text('Suppliers'),
-              ...ex.map((e) => pw.Text('${e['name']} | Booth ${e['booth']} | Rating ${e['rating']}')),
+              ...ex.map((e) => pw.Text(
+                  '${e['name']} | Booth ${e['booth']} | Rating ${e['rating']}')),
               pw.SizedBox(height: 12),
               pw.Text('Products'),
               ...products.map(
@@ -366,7 +403,8 @@ class _ExportScreenState extends State<ExportScreen> {
                 ),
               ),
               pw.SizedBox(height: 12),
-              pw.Text('Active follow-ups: ${followUps.where((f) => f.followUpDate != null).length}'),
+              pw.Text(
+                  'Active follow-ups: ${followUps.where((f) => f.followUpDate != null).length}'),
             ],
           );
         },
@@ -416,10 +454,27 @@ class _ExportScreenState extends State<ExportScreen> {
     await Share.shareXFiles([XFile(path)]);
   }
 
-  Widget _card(String title, String subtitle, VoidCallback onTap) {
-    return Card(
+  Widget _card(
+      String title, String subtitle, IconData icon, VoidCallback onTap) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFAFBFD),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.line),
+      ),
       child: ListTile(
-        title: Text(title),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        leading: Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: AppColors.primary.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(icon, color: AppColors.primary),
+        ),
+        title: Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
         subtitle: Text(subtitle),
         trailing: const Icon(Icons.download),
         onTap: onTap,
@@ -429,23 +484,40 @@ class _ExportScreenState extends State<ExportScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.all(12),
+    return EnterprisePage(
+      title: 'Export & Sharing Hub',
+      subtitle:
+          'Generate supplier, shortlist, follow-up, and trip closeout documents for review.',
       children: [
-        const Text('Export & Sharing Hub', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 10),
-        _card('Export all exhibitors', 'Download all captured supplier details in CSV', _exportAllExhibitors),
-        _card('Export shortlist', 'Download shortlisted suppliers and products', _exportShortlist),
-        _card('Export trip ranked shortlist', 'Rank shortlisted products per trip by score', _exportTripRankedShortlist),
-        _card('Export trip ranked shortlist PDF', 'Generate ranked shortlist report grouped by trip', _exportTripRankedShortlistPdf),
-        _card('Export follow-ups', 'Export meeting follow-up pipeline', _exportFollowUps),
-        _card('Export shortlist PDF', 'Generate and share shortlisted supplier report', _exportShortlistReportPdf),
-        _card('Export trip closeout summary', 'Download supplier/contact/product counts and close status per trip', _exportTripCloseoutSummary),
-        const SizedBox(height: 12),
-        const Card(
-          child: ListTile(
-            title: Text('PDF and cloud backup'),
-            subtitle: Text('Planned in next release with signed trip report generation and optional upload sync.'),
+        SectionPanel(
+          title: 'Reports',
+          subtitle: 'CSV exports for analysis and PDF reports for sharing.',
+          child: Column(
+            children: [
+              _card('All suppliers', 'Captured supplier details in CSV',
+                  Icons.business, _exportAllExhibitors),
+              _card('Shortlist CSV', 'Shortlisted suppliers and products',
+                  Icons.star, _exportShortlist),
+              _card(
+                  'Trip-ranked shortlist CSV',
+                  'Products ranked per trip by score',
+                  Icons.format_list_numbered,
+                  _exportTripRankedShortlist),
+              _card(
+                  'Trip-ranked shortlist PDF',
+                  'Ranked shortlist report grouped by trip',
+                  Icons.picture_as_pdf,
+                  _exportTripRankedShortlistPdf),
+              _card('Follow-ups CSV', 'Meeting and follow-up pipeline',
+                  Icons.event_available, _exportFollowUps),
+              _card('Shortlist PDF', 'Shareable shortlisted supplier report',
+                  Icons.description, _exportShortlistReportPdf),
+              _card(
+                  'Trip closeout CSV',
+                  'Trip counts, shortlist status, and close notes',
+                  Icons.task_alt,
+                  _exportTripCloseoutSummary),
+            ],
           ),
         ),
       ],

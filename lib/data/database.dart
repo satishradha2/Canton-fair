@@ -105,7 +105,8 @@ class TradeDatabase {
           created_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
         ''');
-        await db.execute('CREATE INDEX idx_exhibitor_trip ON exhibitors(trip_id);');
+        await db
+            .execute('CREATE INDEX idx_exhibitor_trip ON exhibitors(trip_id);');
         await db.execute('''
         CREATE TABLE attachments(
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -117,7 +118,8 @@ class TradeDatabase {
           created_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
         ''');
-        await db.execute('CREATE INDEX idx_attachment_owner ON attachments(owner_type, owner_id);');
+        await db.execute(
+            'CREATE INDEX idx_attachment_owner ON attachments(owner_type, owner_id);');
       },
     );
   }
@@ -169,7 +171,8 @@ class TradeDatabase {
     String? orderBy,
   }) async {
     final db = await database;
-    return db.query(table, where: where, whereArgs: whereArgs, orderBy: orderBy);
+    return db.query(table,
+        where: where, whereArgs: whereArgs, orderBy: orderBy);
   }
 
   Future<List<Trip>> getTrips() async {
@@ -178,7 +181,8 @@ class TradeDatabase {
   }
 
   Future<Trip?> getTripById(int id) async {
-    final rows = await queryAll('trips', where: 'id = ?', whereArgs: [id], orderBy: 'id DESC');
+    final rows = await queryAll('trips',
+        where: 'id = ?', whereArgs: [id], orderBy: 'id DESC');
     if (rows.isEmpty) return null;
     return Trip.fromMap(rows.first);
   }
@@ -233,7 +237,8 @@ class TradeDatabase {
   }
 
   Future<List<Product>> getShortlistedProducts() async {
-    final rows = await queryAll('products', where: 'shortlisted = 1', orderBy: 'rating DESC');
+    final rows = await queryAll('products',
+        where: 'shortlisted = 1', orderBy: 'rating DESC');
     return rows.map((e) => Product.fromMap(e)).toList();
   }
 
@@ -337,7 +342,11 @@ class TradeDatabase {
     await _ensureTripCloseoutTable(db);
     await db.insert(
       'trip_closeouts',
-      {'trip_id': tripId, 'closed_at': DateTime.now().toIso8601String(), 'note': note},
+      {
+        'trip_id': tripId,
+        'closed_at': DateTime.now().toIso8601String(),
+        'note': note
+      },
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
   }
@@ -345,14 +354,16 @@ class TradeDatabase {
   Future<void> deleteExhibitorCascade(int exhibitorId) async {
     final db = await database;
     await db.transaction((txn) async {
-      final productRows = await txn.query('products', where: 'exhibitor_id = ?', whereArgs: [exhibitorId]);
+      final productRows = await txn.query('products',
+          where: 'exhibitor_id = ?', whereArgs: [exhibitorId]);
       final productIds = productRows.map((p) => p['id'] as int).toList();
 
       final productAttachmentRows = productIds.isEmpty
           ? <Map<String, Object?>>[]
           : await txn.query(
               'attachments',
-              where: 'owner_type = ? AND owner_id IN (${List.filled(productIds.length, '?').join(',')})',
+              where:
+                  'owner_type = ? AND owner_id IN (${List.filled(productIds.length, '?').join(',')})',
               whereArgs: ['product', ...productIds],
             );
 
@@ -363,7 +374,8 @@ class TradeDatabase {
       );
 
       if (productIds.isNotEmpty) {
-        final productPlaceholder = List.filled(productIds.length, '?').join(',');
+        final productPlaceholder =
+            List.filled(productIds.length, '?').join(',');
         await txn.delete(
           'quotes',
           where: 'product_id IN ($productPlaceholder)',
@@ -374,15 +386,23 @@ class TradeDatabase {
           where: 'owner_type = ? AND owner_id IN ($productPlaceholder)',
           whereArgs: ['product', ...productIds],
         );
-        await txn.delete('products', where: 'exhibitor_id = ?', whereArgs: [exhibitorId]);
+        await txn.delete('products',
+            where: 'exhibitor_id = ?', whereArgs: [exhibitorId]);
       }
 
-      await txn.delete('contacts', where: 'exhibitor_id = ?', whereArgs: [exhibitorId]);
-      await txn.delete('meetings', where: 'exhibitor_id = ?', whereArgs: [exhibitorId]);
-      await txn.delete('attachments', where: 'owner_type = ? AND owner_id = ?', whereArgs: ['exhibitor', exhibitorId]);
+      await txn.delete('contacts',
+          where: 'exhibitor_id = ?', whereArgs: [exhibitorId]);
+      await txn.delete('meetings',
+          where: 'exhibitor_id = ?', whereArgs: [exhibitorId]);
+      await txn.delete('attachments',
+          where: 'owner_type = ? AND owner_id = ?',
+          whereArgs: ['exhibitor', exhibitorId]);
       await txn.delete('exhibitors', where: 'id = ?', whereArgs: [exhibitorId]);
 
-      for (final attachment in [...productAttachmentRows, ...exhibitorAttachmentRows]) {
+      for (final attachment in [
+        ...productAttachmentRows,
+        ...exhibitorAttachmentRows
+      ]) {
         final path = attachment['path'] as String?;
         if (path == null) continue;
         try {
@@ -395,12 +415,15 @@ class TradeDatabase {
     });
   }
 
-  Future<void> mergeExhibitorRecords(int targetExhibitorId, int sourceExhibitorId) async {
+  Future<void> mergeExhibitorRecords(
+      int targetExhibitorId, int sourceExhibitorId) async {
     if (targetExhibitorId == sourceExhibitorId) return;
     final db = await database;
     await db.transaction((txn) async {
-      final target = await txn.query('exhibitors', where: 'id = ?', whereArgs: [targetExhibitorId], limit: 1);
-      final source = await txn.query('exhibitors', where: 'id = ?', whereArgs: [sourceExhibitorId], limit: 1);
+      final target = await txn.query('exhibitors',
+          where: 'id = ?', whereArgs: [targetExhibitorId], limit: 1);
+      final source = await txn.query('exhibitors',
+          where: 'id = ?', whereArgs: [sourceExhibitorId], limit: 1);
       if (target.isEmpty || source.isEmpty) return;
 
       await txn.update(
@@ -424,7 +447,8 @@ class TradeDatabase {
         whereArgs: ['exhibitor', sourceExhibitorId],
       );
 
-      final sourceProducts = await txn.query('products', where: 'exhibitor_id = ?', whereArgs: [sourceExhibitorId]);
+      final sourceProducts = await txn.query('products',
+          where: 'exhibitor_id = ?', whereArgs: [sourceExhibitorId]);
       for (final sourceProductMap in sourceProducts) {
         final sourceProductId = sourceProductMap['id'] as int;
         final sourceProduct = Product.fromMap(sourceProductMap);
@@ -432,7 +456,11 @@ class TradeDatabase {
         final existing = await txn.query(
           'products',
           where: 'exhibitor_id = ? AND name = ? AND model_code = ?',
-          whereArgs: [targetExhibitorId, sourceProduct.name, sourceProduct.modelCode],
+          whereArgs: [
+            targetExhibitorId,
+            sourceProduct.name,
+            sourceProduct.modelCode
+          ],
           limit: 1,
         );
 
@@ -460,10 +488,12 @@ class TradeDatabase {
           whereArgs: ['product', sourceProductId],
         );
 
-        await txn.delete('products', where: 'id = ?', whereArgs: [sourceProductId]);
+        await txn
+            .delete('products', where: 'id = ?', whereArgs: [sourceProductId]);
       }
 
-      await txn.delete('exhibitors', where: 'id = ?', whereArgs: [sourceExhibitorId]);
+      await txn.delete('exhibitors',
+          where: 'id = ?', whereArgs: [sourceExhibitorId]);
     });
   }
 
@@ -471,11 +501,13 @@ class TradeDatabase {
     final db = await database;
     await db.transaction((txn) async {
       await _ensureTripCloseoutTable(txn);
-      final exhibitors = await txn.query('exhibitors', where: 'trip_id = ?', whereArgs: [tripId]);
+      final exhibitors = await txn
+          .query('exhibitors', where: 'trip_id = ?', whereArgs: [tripId]);
       final exhibitorIds = exhibitors.map((e) => e['id'] as int).toList();
       if (exhibitorIds.isEmpty) {
         await txn.delete('trips', where: 'id = ?', whereArgs: [tripId]);
-        await txn.delete('trip_closeouts', where: 'trip_id = ?', whereArgs: [tripId]);
+        await txn.delete('trip_closeouts',
+            where: 'trip_id = ?', whereArgs: [tripId]);
         return;
       }
 
@@ -509,7 +541,8 @@ class TradeDatabase {
       );
 
       if (productIds.isNotEmpty) {
-        final productPlaceholder = List.filled(productIds.length, '?').join(',');
+        final productPlaceholder =
+            List.filled(productIds.length, '?').join(',');
         await txn.delete(
           'quotes',
           where: 'product_id IN ($productPlaceholder)',
@@ -542,7 +575,8 @@ class TradeDatabase {
       );
 
       await txn.delete('exhibitors', where: 'trip_id = ?', whereArgs: [tripId]);
-      await txn.delete('trip_closeouts', where: 'trip_id = ?', whereArgs: [tripId]);
+      await txn
+          .delete('trip_closeouts', where: 'trip_id = ?', whereArgs: [tripId]);
       await txn.delete('trips', where: 'id = ?', whereArgs: [tripId]);
 
       final attachmentsToDelete = [...attachmentRows, ...productAttachmentRows];
@@ -581,16 +615,23 @@ class TradeDatabase {
 
   Future<List<Map<String, dynamic>>> getStats() async {
     final db = await database;
-    final trips = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM trips')) ?? 0;
-    final exhibitors =
-        Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM exhibitors')) ?? 0;
-    final products = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM products')) ?? 0;
+    final trips = Sqflite.firstIntValue(
+            await db.rawQuery('SELECT COUNT(*) FROM trips')) ??
+        0;
+    final exhibitors = Sqflite.firstIntValue(
+            await db.rawQuery('SELECT COUNT(*) FROM exhibitors')) ??
+        0;
+    final products = Sqflite.firstIntValue(
+            await db.rawQuery('SELECT COUNT(*) FROM products')) ??
+        0;
     final shortlistedProducts = Sqflite.firstIntValue(
-          await db.rawQuery('SELECT COUNT(*) FROM products WHERE shortlisted = 1'),
+          await db
+              .rawQuery('SELECT COUNT(*) FROM products WHERE shortlisted = 1'),
         ) ??
         0;
     final followUps = Sqflite.firstIntValue(
-          await db.rawQuery('SELECT COUNT(*) FROM meetings WHERE follow_up_date IS NOT NULL'),
+          await db.rawQuery(
+              'SELECT COUNT(*) FROM meetings WHERE follow_up_date IS NOT NULL'),
         ) ??
         0;
     return [

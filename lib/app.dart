@@ -6,6 +6,7 @@ import 'screens/followup_screen.dart';
 import 'screens/analytics_screen.dart';
 import 'screens/export_screen.dart';
 import 'screens/settings_screen.dart';
+import 'theme/app_theme.dart';
 
 class CantonFairApp extends StatefulWidget {
   const CantonFairApp({super.key});
@@ -41,15 +42,32 @@ class _CantonFairAppState extends State<CantonFairApp> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(_titles[_index]),
+        title: Row(
+          children: [
+            Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                color: AppColors.primary.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(Icons.apartment,
+                  color: AppColors.primary, size: 19),
+            ),
+            const SizedBox(width: 10),
+            Expanded(child: Text(_titles[_index])),
+          ],
+        ),
       ),
       body: _screens[_index],
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
         onDestinationSelected: (i) => setState(() => _index = i),
         destinations: const [
-          NavigationDestination(icon: Icon(Icons.dashboard), label: 'Dashboard'),
-          NavigationDestination(icon: Icon(Icons.record_voice_over), label: 'Capture'),
+          NavigationDestination(
+              icon: Icon(Icons.dashboard), label: 'Dashboard'),
+          NavigationDestination(
+              icon: Icon(Icons.record_voice_over), label: 'Capture'),
           NavigationDestination(icon: Icon(Icons.star), label: 'Shortlist'),
           NavigationDestination(icon: Icon(Icons.event), label: 'Follow-ups'),
           NavigationDestination(icon: Icon(Icons.insights), label: 'Analytics'),

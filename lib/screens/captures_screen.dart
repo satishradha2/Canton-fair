@@ -8,6 +8,8 @@ import 'package:url_launcher/url_launcher.dart';
 import '../data/database.dart';
 import '../data/reminder_service.dart';
 import '../models/models.dart';
+import '../theme/app_theme.dart';
+import '../widgets/enterprise_widgets.dart';
 import 'scanner_screen.dart';
 import 'ocr_screen.dart';
 
@@ -53,10 +55,12 @@ class _CapturesScreenState extends State<CapturesScreen> {
   Future<List<Exhibitor>> _getDuplicateCandidates(Exhibitor candidate) async {
     final rows = await db.getExhibitors(null);
     return rows.where((e) {
-      final sameName = e.name.toLowerCase().trim() == candidate.name.toLowerCase().trim();
+      final sameName =
+          e.name.toLowerCase().trim() == candidate.name.toLowerCase().trim();
       final sameBooth = e.booth.isNotEmpty &&
           e.booth.toLowerCase().trim() == candidate.booth.toLowerCase().trim();
-      final boothMatch = e.booth.isNotEmpty && candidate.booth.isNotEmpty && sameBooth;
+      final boothMatch =
+          e.booth.isNotEmpty && candidate.booth.isNotEmpty && sameBooth;
       return sameName || boothMatch;
     }).toList();
   }
@@ -99,7 +103,11 @@ class _CapturesScreenState extends State<CapturesScreen> {
 
   Future<Map<String, String>> _parseScannerPayload(String input) async {
     final map = <String, String>{};
-    final lines = input.split('\n').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+    final lines = input
+        .split('\n')
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
     for (final line in lines) {
       if (line.contains(':')) {
         final parts = line.split(':');
@@ -129,7 +137,11 @@ class _CapturesScreenState extends State<CapturesScreen> {
       }
     }
     if (map.isNotEmpty) return map;
-    final simple = input.split(RegExp(r'[;,\r\n]')).map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+    final simple = input
+        .split(RegExp(r'[;,\r\n]'))
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
     if (simple.isNotEmpty) {
       map['name'] = simple[0];
       if (simple.length > 1) map['booth'] = simple[1];
@@ -139,7 +151,8 @@ class _CapturesScreenState extends State<CapturesScreen> {
   }
 
   Future<void> _openScanner() async {
-    final value = await Navigator.of(context).push<String>(MaterialPageRoute(builder: (_) => const ScannerScreen()));
+    final value = await Navigator.of(context)
+        .push<String>(MaterialPageRoute(builder: (_) => const ScannerScreen()));
     if (value == null || value.trim().isEmpty) return;
     final parsed = await _parseScannerPayload(value);
     await _openAddExhibitorSheet(prefill: parsed);
@@ -147,7 +160,8 @@ class _CapturesScreenState extends State<CapturesScreen> {
   }
 
   Future<void> _openOcrCapture() async {
-    final value = await Navigator.of(context).push<String>(MaterialPageRoute(builder: (_) => const OcrScreen()));
+    final value = await Navigator.of(context)
+        .push<String>(MaterialPageRoute(builder: (_) => const OcrScreen()));
     if (value == null || value.trim().isEmpty) return;
     final parsed = await _parseScannerPayload(value);
     await _openAddExhibitorSheet(prefill: parsed);
@@ -171,7 +185,8 @@ class _CapturesScreenState extends State<CapturesScreen> {
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           ElevatedButton(
             child: const Text('Mark closed'),
             onPressed: () async {
@@ -179,7 +194,9 @@ class _CapturesScreenState extends State<CapturesScreen> {
               if (!mounted) return;
               Navigator.pop(ctx);
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Trip "${trip.name}" has been marked closed')),
+                SnackBar(
+                    content:
+                        Text('Trip "${trip.name}" has been marked closed')),
               );
             },
           ),
@@ -213,11 +230,13 @@ class _CapturesScreenState extends State<CapturesScreen> {
                   onSaved: (v) => city = v?.trim() ?? city,
                 ),
                 TextFormField(
-                  decoration: const InputDecoration(labelText: 'Start date YYYY-MM-DD'),
+                  decoration:
+                      const InputDecoration(labelText: 'Start date YYYY-MM-DD'),
                   onSaved: (v) => start = v?.trim() ?? '',
                 ),
                 TextFormField(
-                  decoration: const InputDecoration(labelText: 'End date YYYY-MM-DD'),
+                  decoration:
+                      const InputDecoration(labelText: 'End date YYYY-MM-DD'),
                   onSaved: (v) => end = v?.trim() ?? '',
                 ),
                 TextFormField(
@@ -229,7 +248,8 @@ class _CapturesScreenState extends State<CapturesScreen> {
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           ElevatedButton(
             child: const Text('Save'),
             onPressed: () async {
@@ -268,8 +288,10 @@ class _CapturesScreenState extends State<CapturesScreen> {
     String name = seed['name']?.isNotEmpty == true ? seed['name']! : 'Supplier';
     String booth = seed['booth']?.isNotEmpty == true ? seed['booth']! : '';
     String hall = seed['hall']?.isNotEmpty == true ? seed['hall']! : '';
-    String category = seed['category']?.isNotEmpty == true ? seed['category']! : '';
-    String country = seed['country']?.isNotEmpty == true ? seed['country']! : '';
+    String category =
+        seed['category']?.isNotEmpty == true ? seed['category']! : '';
+    String country =
+        seed['country']?.isNotEmpty == true ? seed['country']! : '';
     String notes = '';
     int rating = 0;
     bool shortlisted = false;
@@ -301,12 +323,26 @@ class _CapturesScreenState extends State<CapturesScreen> {
                         .toList(),
                     onChanged: (v) => selectedTrip = v ?? selectedTrip,
                   ),
-                TextFormField(decoration: const InputDecoration(labelText: 'Supplier Name'), onSaved: (v) => name = v?.trim() ?? name),
-                TextFormField(decoration: const InputDecoration(labelText: 'Booth'), onSaved: (v) => booth = v?.trim() ?? ''),
-                TextFormField(decoration: const InputDecoration(labelText: 'Hall'), onSaved: (v) => hall = v?.trim() ?? ''),
-                TextFormField(decoration: const InputDecoration(labelText: 'Category'), onSaved: (v) => category = v?.trim() ?? ''),
-                TextFormField(decoration: const InputDecoration(labelText: 'Country'), onSaved: (v) => country = v?.trim() ?? ''),
-                TextFormField(decoration: const InputDecoration(labelText: 'Company notes'), onSaved: (v) => notes = v?.trim() ?? ''),
+                TextFormField(
+                    decoration:
+                        const InputDecoration(labelText: 'Supplier Name'),
+                    onSaved: (v) => name = v?.trim() ?? name),
+                TextFormField(
+                    decoration: const InputDecoration(labelText: 'Booth'),
+                    onSaved: (v) => booth = v?.trim() ?? ''),
+                TextFormField(
+                    decoration: const InputDecoration(labelText: 'Hall'),
+                    onSaved: (v) => hall = v?.trim() ?? ''),
+                TextFormField(
+                    decoration: const InputDecoration(labelText: 'Category'),
+                    onSaved: (v) => category = v?.trim() ?? ''),
+                TextFormField(
+                    decoration: const InputDecoration(labelText: 'Country'),
+                    onSaved: (v) => country = v?.trim() ?? ''),
+                TextFormField(
+                    decoration:
+                        const InputDecoration(labelText: 'Company notes'),
+                    onSaved: (v) => notes = v?.trim() ?? ''),
                 DropdownButtonFormField<int>(
                   value: rating,
                   items: List.generate(
@@ -314,7 +350,8 @@ class _CapturesScreenState extends State<CapturesScreen> {
                     (i) => DropdownMenuItem(value: i, child: Text('Rating $i')),
                   ),
                   onChanged: (v) => rating = v ?? 0,
-                  decoration: const InputDecoration(labelText: 'Initial rating'),
+                  decoration:
+                      const InputDecoration(labelText: 'Initial rating'),
                 ),
                 CheckboxListTile(
                   value: shortlisted,
@@ -327,7 +364,8 @@ class _CapturesScreenState extends State<CapturesScreen> {
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           ElevatedButton(
             child: const Text('Save'),
             onPressed: () async {
@@ -365,9 +403,12 @@ class _CapturesScreenState extends State<CapturesScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Delete trip'),
-        content: Text('Delete "${trip.name}" and all linked exhibitors, products, contacts, meetings, and attachments?'),
+        content: Text(
+            'Delete "${trip.name}" and all linked exhibitors, products, contacts, meetings, and attachments?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
@@ -382,7 +423,8 @@ class _CapturesScreenState extends State<CapturesScreen> {
     _trips = db.getTrips();
     if (!mounted) return;
     _load();
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Trip "${trip.name}" deleted')));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text('Trip "${trip.name}" deleted')));
   }
 
   Future<void> _openEditExhibitorSheet(Exhibitor e) async {
@@ -470,7 +512,8 @@ class _CapturesScreenState extends State<CapturesScreen> {
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           ElevatedButton(
             child: const Text('Save changes'),
             onPressed: () async {
@@ -526,7 +569,8 @@ class _CapturesScreenState extends State<CapturesScreen> {
                 .map(
                   (it) => ListTile(
                     title: Text(it.name),
-                    subtitle: Text('Booth: ${it.booth} | Country: ${it.country}'),
+                    subtitle:
+                        Text('Booth: ${it.booth} | Country: ${it.country}'),
                     onTap: () => Navigator.pop(ctx, it.id),
                   ),
                 )
@@ -541,10 +585,15 @@ class _CapturesScreenState extends State<CapturesScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Merge duplicate'),
-        content: const Text('Move all contacts, products, and history to selected supplier and delete duplicate.'),
+        content: const Text(
+            'Move all contacts, products, and history to selected supplier and delete duplicate.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Merge')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Merge')),
         ],
       ),
     );
@@ -552,8 +601,9 @@ class _CapturesScreenState extends State<CapturesScreen> {
 
     await db.mergeExhibitorRecords(targetId, source.id!);
     if (!mounted) return;
-      _load();
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Duplicate merged successfully.')));
+    _load();
+    ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Duplicate merged successfully.')));
   }
 
   Future<void> _openDeleteExhibitorDialog(Exhibitor e) async {
@@ -561,9 +611,12 @@ class _CapturesScreenState extends State<CapturesScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Delete supplier'),
-        content: const Text('Delete supplier and all linked products, contacts, meetings, and attachments?'),
+        content: const Text(
+            'Delete supplier and all linked products, contacts, meetings, and attachments?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
@@ -575,7 +628,8 @@ class _CapturesScreenState extends State<CapturesScreen> {
     if (confirm != true) return;
     await db.deleteExhibitorCascade(e.id!);
     _load();
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Supplier "${e.name}" deleted')));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text('Supplier "${e.name}" deleted')));
   }
 
   Future<void> _openEditContactSheet(Contact c) async {
@@ -595,18 +649,38 @@ class _CapturesScreenState extends State<CapturesScreen> {
           child: SingleChildScrollView(
             child: Column(
               children: [
-                TextFormField(initialValue: name, decoration: const InputDecoration(labelText: 'Contact Name'), onSaved: (v) => name = v?.trim() ?? name),
-                TextFormField(initialValue: designation, decoration: const InputDecoration(labelText: 'Designation'), onSaved: (v) => designation = v?.trim() ?? ''),
-                TextFormField(initialValue: phone, decoration: const InputDecoration(labelText: 'Phone'), onSaved: (v) => phone = v?.trim() ?? ''),
-                TextFormField(initialValue: email, decoration: const InputDecoration(labelText: 'Email'), onSaved: (v) => email = v?.trim() ?? ''),
-                TextFormField(initialValue: whatsapp, decoration: const InputDecoration(labelText: 'WhatsApp'), onSaved: (v) => whatsapp = v?.trim() ?? ''),
-                TextFormField(initialValue: wechat, decoration: const InputDecoration(labelText: 'WeChat'), onSaved: (v) => wechat = v?.trim() ?? ''),
+                TextFormField(
+                    initialValue: name,
+                    decoration:
+                        const InputDecoration(labelText: 'Contact Name'),
+                    onSaved: (v) => name = v?.trim() ?? name),
+                TextFormField(
+                    initialValue: designation,
+                    decoration: const InputDecoration(labelText: 'Designation'),
+                    onSaved: (v) => designation = v?.trim() ?? ''),
+                TextFormField(
+                    initialValue: phone,
+                    decoration: const InputDecoration(labelText: 'Phone'),
+                    onSaved: (v) => phone = v?.trim() ?? ''),
+                TextFormField(
+                    initialValue: email,
+                    decoration: const InputDecoration(labelText: 'Email'),
+                    onSaved: (v) => email = v?.trim() ?? ''),
+                TextFormField(
+                    initialValue: whatsapp,
+                    decoration: const InputDecoration(labelText: 'WhatsApp'),
+                    onSaved: (v) => whatsapp = v?.trim() ?? ''),
+                TextFormField(
+                    initialValue: wechat,
+                    decoration: const InputDecoration(labelText: 'WeChat'),
+                    onSaved: (v) => wechat = v?.trim() ?? ''),
               ],
             ),
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           ElevatedButton(
             child: const Text('Save changes'),
             onPressed: () async {
@@ -658,34 +732,58 @@ class _CapturesScreenState extends State<CapturesScreen> {
             child: SingleChildScrollView(
               child: Column(
                 children: [
-                  TextFormField(initialValue: name, decoration: const InputDecoration(labelText: 'Product Name'), onSaved: (v) => name = v?.trim() ?? name),
-                  TextFormField(initialValue: model, decoration: const InputDecoration(labelText: 'Model / SKU'), onSaved: (v) => model = v?.trim() ?? ''),
-                  TextFormField(initialValue: specs, decoration: const InputDecoration(labelText: 'Specs'), onSaved: (v) => specs = v?.trim() ?? ''),
+                  TextFormField(
+                      initialValue: name,
+                      decoration:
+                          const InputDecoration(labelText: 'Product Name'),
+                      onSaved: (v) => name = v?.trim() ?? name),
+                  TextFormField(
+                      initialValue: model,
+                      decoration:
+                          const InputDecoration(labelText: 'Model / SKU'),
+                      onSaved: (v) => model = v?.trim() ?? ''),
+                  TextFormField(
+                      initialValue: specs,
+                      decoration: const InputDecoration(labelText: 'Specs'),
+                      onSaved: (v) => specs = v?.trim() ?? ''),
                   TextFormField(
                     initialValue: p.moq?.toString() ?? '',
                     decoration: const InputDecoration(labelText: 'MOQ'),
                     keyboardType: TextInputType.number,
-                    onChanged: (v) => setStateDialog(() => moq = double.tryParse(v)),
+                    onChanged: (v) =>
+                        setStateDialog(() => moq = double.tryParse(v)),
                     onSaved: (v) => moq = double.tryParse(v ?? ''),
                   ),
                   TextFormField(
                     initialValue: p.quotedPrice?.toString() ?? '',
-                    decoration: const InputDecoration(labelText: 'Quoted price'),
+                    decoration:
+                        const InputDecoration(labelText: 'Quoted price'),
                     keyboardType: TextInputType.number,
-                    onChanged: (v) => setStateDialog(() => price = double.tryParse(v)),
+                    onChanged: (v) =>
+                        setStateDialog(() => price = double.tryParse(v)),
                     onSaved: (v) => price = double.tryParse(v ?? ''),
                   ),
-                  TextFormField(initialValue: currency, decoration: const InputDecoration(labelText: 'Currency'), onSaved: (v) => currency = v?.trim() ?? 'USD'),
+                  TextFormField(
+                      initialValue: currency,
+                      decoration: const InputDecoration(labelText: 'Currency'),
+                      onSaved: (v) => currency = v?.trim() ?? 'USD'),
                   TextFormField(
                     initialValue: lead,
                     decoration: const InputDecoration(labelText: 'Lead time'),
-                    onChanged: (v) => setStateDialog(() => lead = v?.trim() ?? ''),
+                    onChanged: (v) => setStateDialog(() => lead = v.trim()),
                     onSaved: (v) => lead = v?.trim() ?? '',
                   ),
-                  TextFormField(initialValue: terms, decoration: const InputDecoration(labelText: 'Payment terms'), onSaved: (v) => terms = v?.trim() ?? ''),
+                  TextFormField(
+                      initialValue: terms,
+                      decoration:
+                          const InputDecoration(labelText: 'Payment terms'),
+                      onSaved: (v) => terms = v?.trim() ?? ''),
                   DropdownButtonFormField<int>(
                     value: rating,
-                    items: List.generate(6, (i) => DropdownMenuItem(value: i, child: Text('Rating $i'))),
+                    items: List.generate(
+                        6,
+                        (i) => DropdownMenuItem(
+                            value: i, child: Text('Rating $i'))),
                     onChanged: (v) => setStateDialog(() => rating = v ?? 0),
                   ),
                   Padding(
@@ -694,54 +792,58 @@ class _CapturesScreenState extends State<CapturesScreen> {
                       alignment: Alignment.centerLeft,
                       child: Text(
                         'Live shortlist score: ${_productShortlistScoreForValues(rating: rating, quotedPrice: price, moq: moq, leadTime: lead).toStringAsFixed(2)}',
-                        style: const TextStyle(fontSize: 12, color: Colors.black54),
+                        style: const TextStyle(
+                            fontSize: 12, color: Colors.black54),
                       ),
                     ),
                   ),
                   CheckboxListTile(
                     value: shortlisted,
                     title: const Text('Shortlist this product'),
-                    onChanged: (v) => setStateDialog(() => shortlisted = v ?? false),
+                    onChanged: (v) =>
+                        setStateDialog(() => shortlisted = v ?? false),
                     controlAffinity: ListTileControlAffinity.leading,
                   ),
                 ],
               ),
             ),
           ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          ElevatedButton(
-            child: const Text('Save changes'),
-            onPressed: () async {
-              formKey.currentState?.save();
-              await db.update(
-                'products',
-                p.id!,
-                Product(
-                  id: p.id,
-                  exhibitorId: p.exhibitorId,
-                  name: name,
-                  modelCode: model,
-                  specs: specs,
-                  moq: moq,
-                  quotedPrice: price,
-                  priceCurrency: currency,
-                  leadTime: lead,
-                  paymentTerms: terms,
-                  shortlisted: shortlisted,
-                  rating: rating,
-                ).toMap()
-                  ..remove('id'),
-              );
-              _load();
-              if (!mounted) return;
-              Navigator.pop(ctx);
-            },
-          ),
-        ],
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel')),
+            ElevatedButton(
+              child: const Text('Save changes'),
+              onPressed: () async {
+                formKey.currentState?.save();
+                await db.update(
+                  'products',
+                  p.id!,
+                  Product(
+                    id: p.id,
+                    exhibitorId: p.exhibitorId,
+                    name: name,
+                    modelCode: model,
+                    specs: specs,
+                    moq: moq,
+                    quotedPrice: price,
+                    priceCurrency: currency,
+                    leadTime: lead,
+                    paymentTerms: terms,
+                    shortlisted: shortlisted,
+                    rating: rating,
+                  ).toMap()
+                    ..remove('id'),
+                );
+                _load();
+                if (!mounted) return;
+                Navigator.pop(ctx);
+              },
+            ),
+          ],
+        ),
       ),
-    ),
-  );
+    );
   }
 
   Future<void> _openAddContactSheet(int exhibitorId) async {
@@ -761,18 +863,32 @@ class _CapturesScreenState extends State<CapturesScreen> {
           child: SingleChildScrollView(
             child: Column(
               children: [
-                TextFormField(decoration: const InputDecoration(labelText: 'Contact Name'), onSaved: (v) => name = v?.trim() ?? name),
-                TextFormField(decoration: const InputDecoration(labelText: 'Designation'), onSaved: (v) => designation = v?.trim() ?? ''),
-                TextFormField(decoration: const InputDecoration(labelText: 'Phone'), onSaved: (v) => phone = v?.trim() ?? ''),
-                TextFormField(decoration: const InputDecoration(labelText: 'Email'), onSaved: (v) => email = v?.trim() ?? ''),
-                TextFormField(decoration: const InputDecoration(labelText: 'WhatsApp'), onSaved: (v) => whatsapp = v?.trim() ?? ''),
-                TextFormField(decoration: const InputDecoration(labelText: 'WeChat'), onSaved: (v) => wechat = v?.trim() ?? ''),
+                TextFormField(
+                    decoration:
+                        const InputDecoration(labelText: 'Contact Name'),
+                    onSaved: (v) => name = v?.trim() ?? name),
+                TextFormField(
+                    decoration: const InputDecoration(labelText: 'Designation'),
+                    onSaved: (v) => designation = v?.trim() ?? ''),
+                TextFormField(
+                    decoration: const InputDecoration(labelText: 'Phone'),
+                    onSaved: (v) => phone = v?.trim() ?? ''),
+                TextFormField(
+                    decoration: const InputDecoration(labelText: 'Email'),
+                    onSaved: (v) => email = v?.trim() ?? ''),
+                TextFormField(
+                    decoration: const InputDecoration(labelText: 'WhatsApp'),
+                    onSaved: (v) => whatsapp = v?.trim() ?? ''),
+                TextFormField(
+                    decoration: const InputDecoration(labelText: 'WeChat'),
+                    onSaved: (v) => wechat = v?.trim() ?? ''),
               ],
             ),
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           ElevatedButton(
             onPressed: () async {
               formKey.currentState?.save();
@@ -784,18 +900,22 @@ class _CapturesScreenState extends State<CapturesScreen> {
                   whereArgs: [exhibitorId, phone.trim()],
                 );
                 if (existing.isNotEmpty && mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Same phone already exists for this supplier')));
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                      content:
+                          Text('Same phone already exists for this supplier')));
                 }
               }
-              await dbx.insert('contacts', Contact(
-                exhibitorId: exhibitorId,
-                name: name,
-                designation: designation,
-                phone: phone,
-                email: email,
-                whatsapp: whatsapp,
-                wechat: wechat,
-              ).toMap());
+              await dbx.insert(
+                  'contacts',
+                  Contact(
+                    exhibitorId: exhibitorId,
+                    name: name,
+                    designation: designation,
+                    phone: phone,
+                    email: email,
+                    whatsapp: whatsapp,
+                    wechat: wechat,
+                  ).toMap());
               _load();
               if (!mounted) return;
               Navigator.pop(ctx);
@@ -830,33 +950,50 @@ class _CapturesScreenState extends State<CapturesScreen> {
             child: SingleChildScrollView(
               child: Column(
                 children: [
-                  TextFormField(decoration: const InputDecoration(labelText: 'Product Name'), onSaved: (v) => name = v?.trim() ?? name),
-                  TextFormField(decoration: const InputDecoration(labelText: 'Model / SKU'), onSaved: (v) => model = v?.trim() ?? ''),
-                  TextFormField(decoration: const InputDecoration(labelText: 'Specs'), onSaved: (v) => specs = v?.trim() ?? ''),
+                  TextFormField(
+                      decoration:
+                          const InputDecoration(labelText: 'Product Name'),
+                      onSaved: (v) => name = v?.trim() ?? name),
+                  TextFormField(
+                      decoration:
+                          const InputDecoration(labelText: 'Model / SKU'),
+                      onSaved: (v) => model = v?.trim() ?? ''),
+                  TextFormField(
+                      decoration: const InputDecoration(labelText: 'Specs'),
+                      onSaved: (v) => specs = v?.trim() ?? ''),
                   TextFormField(
                     decoration: const InputDecoration(labelText: 'MOQ'),
                     keyboardType: TextInputType.number,
-                    onChanged: (v) => setStateDialog(() => moq = double.tryParse(v)),
+                    onChanged: (v) =>
+                        setStateDialog(() => moq = double.tryParse(v)),
                     onSaved: (v) => moq = double.tryParse(v ?? ''),
                   ),
                   TextFormField(
-                    decoration: const InputDecoration(labelText: 'Quoted price'),
+                    decoration:
+                        const InputDecoration(labelText: 'Quoted price'),
                     keyboardType: TextInputType.number,
-                    onChanged: (v) => setStateDialog(() => price = double.tryParse(v)),
+                    onChanged: (v) =>
+                        setStateDialog(() => price = double.tryParse(v)),
                     onSaved: (v) => price = double.tryParse(v ?? ''),
                   ),
-                  TextFormField(decoration: const InputDecoration(labelText: 'Currency'), onSaved: (v) => currency = v?.trim() ?? 'USD'),
+                  TextFormField(
+                      decoration: const InputDecoration(labelText: 'Currency'),
+                      onSaved: (v) => currency = v?.trim() ?? 'USD'),
                   TextFormField(
                     decoration: const InputDecoration(labelText: 'Lead time'),
-                    onChanged: (v) => setStateDialog(() => lead = v?.trim() ?? ''),
+                    onChanged: (v) => setStateDialog(() => lead = v.trim()),
                     onSaved: (v) => lead = v?.trim() ?? '',
                   ),
-                  TextFormField(decoration: const InputDecoration(labelText: 'Payment terms'), onSaved: (v) => terms = v?.trim() ?? ''),
+                  TextFormField(
+                      decoration:
+                          const InputDecoration(labelText: 'Payment terms'),
+                      onSaved: (v) => terms = v?.trim() ?? ''),
                   DropdownButtonFormField<int>(
                     value: rating,
                     items: List.generate(
                       6,
-                      (i) => DropdownMenuItem(value: i, child: Text('Rating $i')),
+                      (i) =>
+                          DropdownMenuItem(value: i, child: Text('Rating $i')),
                     ),
                     onChanged: (v) => setStateDialog(() => rating = v ?? 0),
                   ),
@@ -866,52 +1003,56 @@ class _CapturesScreenState extends State<CapturesScreen> {
                       alignment: Alignment.centerLeft,
                       child: Text(
                         'Live shortlist score: ${_productShortlistScoreForValues(rating: rating, quotedPrice: price, moq: moq, leadTime: lead).toStringAsFixed(2)}',
-                        style: const TextStyle(fontSize: 12, color: Colors.black54),
+                        style: const TextStyle(
+                            fontSize: 12, color: Colors.black54),
                       ),
                     ),
                   ),
                   CheckboxListTile(
                     value: shortlisted,
                     title: const Text('Shortlist this product'),
-                    onChanged: (v) => setStateDialog(() => shortlisted = v ?? false),
+                    onChanged: (v) =>
+                        setStateDialog(() => shortlisted = v ?? false),
                     controlAffinity: ListTileControlAffinity.leading,
                   ),
                 ],
               ),
             ),
           ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () async {
-              formKey.currentState?.save();
-              final dbi = await TradeDatabase.instance.database;
-              await dbi.insert(
-                'products',
-                Product(
-                  exhibitorId: exhibitorId,
-                  name: name,
-                  modelCode: model,
-                  specs: specs,
-                  moq: moq,
-                  quotedPrice: price,
-                  priceCurrency: currency,
-                  leadTime: lead,
-                  paymentTerms: terms,
-                  shortlisted: shortlisted,
-                  rating: rating,
-                ).toMap(),
-              );
-              _load();
-              if (!mounted) return;
-              Navigator.pop(ctx);
-            },
-            child: const Text('Save'),
-          ),
-        ],
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel')),
+            ElevatedButton(
+              onPressed: () async {
+                formKey.currentState?.save();
+                final dbi = await TradeDatabase.instance.database;
+                await dbi.insert(
+                  'products',
+                  Product(
+                    exhibitorId: exhibitorId,
+                    name: name,
+                    modelCode: model,
+                    specs: specs,
+                    moq: moq,
+                    quotedPrice: price,
+                    priceCurrency: currency,
+                    leadTime: lead,
+                    paymentTerms: terms,
+                    shortlisted: shortlisted,
+                    rating: rating,
+                  ).toMap(),
+                );
+                _load();
+                if (!mounted) return;
+                Navigator.pop(ctx);
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        ),
       ),
-    ),
-  );
+    );
   }
 
   Future<void> _openMeetingSheet(int exhibitorId) async {
@@ -931,7 +1072,8 @@ class _CapturesScreenState extends State<CapturesScreen> {
             child: Column(
               children: [
                 TextFormField(
-                  decoration: const InputDecoration(labelText: 'Meeting date (YYYY-MM-DD HH:mm)'),
+                  decoration: const InputDecoration(
+                      labelText: 'Meeting date (YYYY-MM-DD HH:mm)'),
                   onSaved: (v) {
                     if (v != null && v.isNotEmpty) {
                       try {
@@ -942,7 +1084,8 @@ class _CapturesScreenState extends State<CapturesScreen> {
                   },
                 ),
                 TextFormField(
-                  decoration: const InputDecoration(labelText: 'Follow-up date (YYYY-MM-DD HH:mm)'),
+                  decoration: const InputDecoration(
+                      labelText: 'Follow-up date (YYYY-MM-DD HH:mm)'),
                   onSaved: (v) {
                     if (v != null && v.isNotEmpty) {
                       try {
@@ -966,30 +1109,36 @@ class _CapturesScreenState extends State<CapturesScreen> {
                   ],
                   onChanged: (v) => priority = v ?? 'Medium',
                 ),
-                TextFormField(decoration: const InputDecoration(labelText: 'Notes'), onSaved: (v) => notes = v?.trim() ?? ''),
+                TextFormField(
+                    decoration: const InputDecoration(labelText: 'Notes'),
+                    onSaved: (v) => notes = v?.trim() ?? ''),
               ],
             ),
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           ElevatedButton(
             onPressed: () async {
               formKey.currentState?.save();
               final dbi = await TradeDatabase.instance.database;
-              final meetingId = await dbi.insert('meetings', Meeting(
-                exhibitorId: exhibitorId,
-                meetingDate: meeting,
-                followUpDate: followUp,
-                outcome: outcome,
-                priority: priority,
-                notes: notes,
-              ).toMap());
+              final meetingId = await dbi.insert(
+                  'meetings',
+                  Meeting(
+                    exhibitorId: exhibitorId,
+                    meetingDate: meeting,
+                    followUpDate: followUp,
+                    outcome: outcome,
+                    priority: priority,
+                    notes: notes,
+                  ).toMap());
               if (followUp != null) {
                 await ReminderService.scheduleFollowUp(
                   id: meetingId,
                   title: 'Supplier follow-up is due',
-                  body: 'Follow-up scheduled for outcome: $outcome (${priority})',
+                  body:
+                      'Follow-up scheduled for outcome: $outcome (${priority})',
                   at: followUp!,
                 );
               }
@@ -1016,10 +1165,12 @@ class _CapturesScreenState extends State<CapturesScreen> {
     String leadTime = '',
   }) {
     final ratingScore = (rating / 5.0) * 40.0;
-    final priceScore = quotedPrice == null ? 0.0 : 1000.0 / (1.0 + quotedPrice.abs());
+    final priceScore =
+        quotedPrice == null ? 0.0 : 1000.0 / (1.0 + quotedPrice.abs());
     final moqScore = moq == null ? 0.0 : 30.0 / (1.0 + moq);
     final leadMatch = RegExp(r'\d+').firstMatch(leadTime);
-    final lead = leadMatch == null ? null : double.tryParse(leadMatch.group(0)!);
+    final lead =
+        leadMatch == null ? null : double.tryParse(leadMatch.group(0)!);
     final leadScore = lead == null ? 0.0 : 15.0 / (1.0 + lead);
     return ratingScore + priceScore + moqScore + leadScore;
   }
@@ -1067,8 +1218,10 @@ class _CapturesScreenState extends State<CapturesScreen> {
       await targetDir.create(recursive: true);
     }
     final extensionIndex = picked.path.lastIndexOf('.');
-    final extension = extensionIndex >= 0 ? picked.path.substring(extensionIndex) : '.jpg';
-    final fileName = 'attachment_${DateTime.now().millisecondsSinceEpoch}$extension';
+    final extension =
+        extensionIndex >= 0 ? picked.path.substring(extensionIndex) : '.jpg';
+    final fileName =
+        'attachment_${DateTime.now().millisecondsSinceEpoch}$extension';
     final saved = await File(picked.path).copy('${targetDir.path}/$fileName');
     await db.addAttachment(
       Attachment(
@@ -1085,7 +1238,8 @@ class _CapturesScreenState extends State<CapturesScreen> {
 
   Future<void> _openAttachment(String path) async {
     if (await canLaunchUrl(Uri.parse('file://$path'))) {
-      await launchUrl(Uri.parse('file://$path'), mode: LaunchMode.externalApplication);
+      await launchUrl(Uri.parse('file://$path'),
+          mode: LaunchMode.externalApplication);
       return;
     }
     if (!mounted) return;
@@ -1098,13 +1252,19 @@ class _CapturesScreenState extends State<CapturesScreen> {
                 path.toLowerCase().endsWith('.png')
             ? Image.file(File(path), fit: BoxFit.contain)
             : const Text('This file is saved locally on the device.'),
-        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close'))],
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx), child: const Text('Close'))
+        ],
       ),
     );
   }
 
   Future<void> _openTemplateForContact(Contact c, Exhibitor e) async {
-    final options = _messageTemplates.map((tpl) => tpl.replaceAll('{name}', c.name).replaceAll('{company}', e.name)).toList();
+    final options = _messageTemplates
+        .map((tpl) =>
+            tpl.replaceAll('{name}', c.name).replaceAll('{company}', e.name))
+        .toList();
     final message = await showModalBottomSheet<String>(
       context: context,
       builder: (ctx) => SafeArea(
@@ -1160,20 +1320,26 @@ class _CapturesScreenState extends State<CapturesScreen> {
     );
   }
 
-  Future<void> _openEmailTemplate(Contact c, Exhibitor e, String message) async {
-    final subject = Uri.encodeComponent('Follow-up from Canton Fair: ${e.name}');
+  Future<void> _openEmailTemplate(
+      Contact c, Exhibitor e, String message) async {
+    final subject =
+        Uri.encodeComponent('Follow-up from Canton Fair: ${e.name}');
     final body = Uri.encodeComponent(message);
-    await _launchAction(Uri.parse('mailto:${c.email}?subject=$subject&body=$body'));
+    await _launchAction(
+        Uri.parse('mailto:${c.email}?subject=$subject&body=$body'));
   }
 
   Future<void> _openWhatsAppTemplate(Contact c, String message) async {
-    final normalized = _digitsOnly(c.whatsapp.isNotEmpty ? c.whatsapp : c.phone);
+    final normalized =
+        _digitsOnly(c.whatsapp.isNotEmpty ? c.whatsapp : c.phone);
     if (normalized.isEmpty) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No WhatsApp number available')));
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No WhatsApp number available')));
       return;
     }
-    await _launchAction(Uri.parse('https://wa.me/$normalized?text=${Uri.encodeComponent(message)}'));
+    await _launchAction(Uri.parse(
+        'https://wa.me/$normalized?text=${Uri.encodeComponent(message)}'));
   }
 
   Widget _attachmentSection(String ownerType, int ownerId) {
@@ -1183,10 +1349,12 @@ class _CapturesScreenState extends State<CapturesScreen> {
         const SizedBox(height: 8),
         Row(
           children: [
-            const Text('Attachments', style: TextStyle(fontWeight: FontWeight.bold)),
+            const Text('Attachments',
+                style: TextStyle(fontWeight: FontWeight.bold)),
             const Spacer(),
             TextButton.icon(
-              onPressed: () => _openAttachmentPicker(ownerId: ownerId, ownerType: ownerType),
+              onPressed: () =>
+                  _openAttachmentPicker(ownerId: ownerId, ownerType: ownerType),
               icon: const Icon(Icons.add_photo_alternate),
               label: const Text('Add'),
             ),
@@ -1203,7 +1371,8 @@ class _CapturesScreenState extends State<CapturesScreen> {
               children: snap.data!.map((attachment) {
                 return ActionChip(
                   avatar: const Icon(Icons.attachment, size: 16),
-                  label: Text(attachment.note.isEmpty ? 'Image' : attachment.note),
+                  label:
+                      Text(attachment.note.isEmpty ? 'Image' : attachment.note),
                   onPressed: () => _openAttachment(attachment.path),
                 );
               }).toList(),
@@ -1217,7 +1386,8 @@ class _CapturesScreenState extends State<CapturesScreen> {
   Future<void> _launchAction(Uri uri) async {
     if (!await canLaunchUrl(uri)) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Cannot open ${uri.toString()}')));
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Cannot open ${uri.toString()}')));
       return;
     }
     await launchUrl(uri, mode: LaunchMode.externalApplication);
@@ -1229,7 +1399,8 @@ class _CapturesScreenState extends State<CapturesScreen> {
     final normalized = _digitsOnly(phone);
     if (normalized.isEmpty) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No phone number to open WhatsApp')));
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No phone number to open WhatsApp')));
       return;
     }
     await _launchAction(Uri.parse('https://wa.me/$normalized'));
@@ -1238,7 +1409,8 @@ class _CapturesScreenState extends State<CapturesScreen> {
   Future<void> _openCall(String phone) async {
     if (phone.trim().isEmpty) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No phone number to call')));
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No phone number to call')));
       return;
     }
     await _launchAction(Uri(scheme: 'tel', path: phone));
@@ -1247,7 +1419,8 @@ class _CapturesScreenState extends State<CapturesScreen> {
   Future<void> _openEmail(String email) async {
     if (email.trim().isEmpty) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No email to open')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('No email to open')));
       return;
     }
     await _launchAction(Uri.parse('mailto:$email'));
@@ -1256,7 +1429,8 @@ class _CapturesScreenState extends State<CapturesScreen> {
   Future<void> _copyText(String text) async {
     await Clipboard.setData(ClipboardData(text: text));
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Copied to clipboard')));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(const SnackBar(content: Text('Copied to clipboard')));
   }
 
   Widget _contactRow(Contact c, Exhibitor e) {
@@ -1270,16 +1444,27 @@ class _CapturesScreenState extends State<CapturesScreen> {
         trailing: Wrap(
           spacing: 2,
           children: [
-            IconButton(icon: const Icon(Icons.edit), onPressed: () => _openEditContactSheet(c)),
-            IconButton(icon: const Icon(Icons.call), onPressed: () => _openCall(c.phone)),
-            IconButton(icon: const Icon(Icons.message), onPressed: () => _openWhatsApp(c.phone)),
-            IconButton(icon: const Icon(Icons.email), onPressed: () => _openEmail(c.email)),
+            IconButton(
+                icon: const Icon(Icons.edit),
+                onPressed: () => _openEditContactSheet(c)),
+            IconButton(
+                icon: const Icon(Icons.call),
+                onPressed: () => _openCall(c.phone)),
+            IconButton(
+                icon: const Icon(Icons.message),
+                onPressed: () => _openWhatsApp(c.phone)),
+            IconButton(
+                icon: const Icon(Icons.email),
+                onPressed: () => _openEmail(c.email)),
             IconButton(
               icon: const Icon(Icons.speaker_notes),
               onPressed: () => _openTemplateForContact(c, e),
               tooltip: 'Message templates',
             ),
-            IconButton(icon: const Icon(Icons.copy_all), onPressed: () => _copyText(c.phone.isNotEmpty ? c.phone : c.email)),
+            IconButton(
+                icon: const Icon(Icons.copy_all),
+                onPressed: () =>
+                    _copyText(c.phone.isNotEmpty ? c.phone : c.email)),
           ],
         ),
       ),
@@ -1300,10 +1485,13 @@ class _CapturesScreenState extends State<CapturesScreen> {
               p.shortlisted ? Icons.star : Icons.star_border,
               color: p.shortlisted ? Colors.amber : null,
             ),
-            tooltip: p.shortlisted ? 'Remove from shortlist' : 'Add to shortlist',
+            tooltip:
+                p.shortlisted ? 'Remove from shortlist' : 'Add to shortlist',
             onPressed: () => _toggleProductShortlist(p),
           ),
-          IconButton(icon: const Icon(Icons.edit), onPressed: () => _openEditProductSheet(p)),
+          IconButton(
+              icon: const Icon(Icons.edit),
+              onPressed: () => _openEditProductSheet(p)),
           IconButton(
             icon: const Icon(Icons.delete),
             onPressed: () async {
@@ -1313,8 +1501,12 @@ class _CapturesScreenState extends State<CapturesScreen> {
                   title: const Text('Delete product'),
                   content: const Text('Do you want to remove this product?'),
                   actions: [
-                    TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-                    ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Delete')),
+                    TextButton(
+                        onPressed: () => Navigator.pop(ctx, false),
+                        child: const Text('Cancel')),
+                    ElevatedButton(
+                        onPressed: () => Navigator.pop(ctx, true),
+                        child: const Text('Delete')),
                   ],
                 ),
               );
@@ -1364,190 +1556,226 @@ class _CapturesScreenState extends State<CapturesScreen> {
     return FutureBuilder<List<Exhibitor>>(
       future: _exhibitors,
       builder: (context, snapshot) {
-        return Scaffold(
-          floatingActionButton: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              FloatingActionButton.extended(
-                heroTag: 'trip',
-                onPressed: _openAddTripSheet,
-                icon: const Icon(Icons.flight_takeoff),
-                label: const Text('Add Trip'),
-              ),
-              const SizedBox(height: 10),
-              FloatingActionButton.extended(
-                heroTag: 'ex',
-                onPressed: _openAddExhibitorSheet,
-                icon: const Icon(Icons.business),
-                label: const Text('Add Supplier'),
-              ),
-              const SizedBox(height: 10),
-              FloatingActionButton.extended(
-                heroTag: 'scan',
-                onPressed: _openScanner,
-                icon: const Icon(Icons.qr_code_scanner),
-                label: const Text('Scan QR'),
-              ),
-              const SizedBox(height: 10),
-              FloatingActionButton.extended(
-                heroTag: 'ocr',
-                onPressed: _openOcrCapture,
-                icon: const Icon(Icons.document_scanner),
-                label: const Text('OCR Card'),
-              ),
+        return RefreshIndicator(
+          onRefresh: () async => _load(),
+          child: EnterprisePage(
+            title: 'Supplier Capture',
+            subtitle:
+                'Create trips, capture supplier details, scan badges, and manage booth follow-through.',
+            actions: [
+              ElevatedButton.icon(
+                  onPressed: _openAddExhibitorSheet,
+                  icon: const Icon(Icons.business),
+                  label: const Text('Supplier')),
+              TextButton.icon(
+                  onPressed: _openAddTripSheet,
+                  icon: const Icon(Icons.flight_takeoff),
+                  label: const Text('Trip')),
+              TextButton.icon(
+                  onPressed: _openScanner,
+                  icon: const Icon(Icons.qr_code_scanner),
+                  label: const Text('QR')),
+              TextButton.icon(
+                  onPressed: _openOcrCapture,
+                  icon: const Icon(Icons.document_scanner),
+                  label: const Text('OCR')),
             ],
-          ),
-          body: RefreshIndicator(
-            onRefresh: () async => _load(),
-            child: ListView(
-              padding: const EdgeInsets.all(12),
-              children: [
-                    Row(
+            children: [
+              SectionPanel(
+                title: 'Filters',
+                subtitle:
+                    'Narrow records by trip, shortlist status, supplier, booth, or category.',
+                child: Column(
                   children: [
-                    Expanded(
-                      child: FutureBuilder<List<Trip>>(
-                        future: _trips,
-                        builder: (_, snap) {
-                          if (!snap.hasData) return const SizedBox.shrink();
-                          return DropdownButtonFormField<int?>(
-                            value: _tripFilter,
-                            decoration: const InputDecoration(labelText: 'Trip'),
-                            items: [
-                              const DropdownMenuItem(value: null, child: Text('All Trips')),
-                              ...snap.data!
-                                  .where((t) => t.id != null)
-                                  .map((t) => DropdownMenuItem(value: t.id, child: Text(t.name))),
-                            ],
-                            onChanged: (v) {
-                              _tripFilter = v;
-                              _load();
-                            },
-                          );
-                        },
+                    FutureBuilder<List<Trip>>(
+                      future: _trips,
+                      builder: (_, snap) {
+                        if (!snap.hasData) return const SizedBox.shrink();
+                        return DropdownButtonFormField<int?>(
+                          value: _tripFilter,
+                          decoration: const InputDecoration(labelText: 'Trip'),
+                          isExpanded: true,
+                          items: [
+                            const DropdownMenuItem(
+                                value: null, child: Text('All trips')),
+                            ...snap.data!.where((t) => t.id != null).map(
+                                  (t) => DropdownMenuItem(
+                                      value: t.id,
+                                      child: Text(t.name,
+                                          overflow: TextOverflow.ellipsis)),
+                                ),
+                          ],
+                          onChanged: (v) {
+                            _tripFilter = v;
+                            _load();
+                          },
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      decoration: const InputDecoration(
+                        prefixIcon: Icon(Icons.search),
+                        hintText: 'Search supplier, booth, or category',
                       ),
+                      onChanged: (v) {
+                        _query = v.trim();
+                        _load();
+                      },
                     ),
-                    const SizedBox(width: 8),
-                    TextButton.icon(
-                      onPressed: _tripFilter == null ? null : () => _openCloseTripSheet(_tripFilter!),
-                      icon: const Icon(Icons.lock_clock),
-                      label: const Text('Close trip'),
-                    ),
-                    const SizedBox(width: 8),
-                    TextButton.icon(
-                      onPressed: _tripFilter == null ? null : () => _openDeleteTripDialog(_tripFilter!),
-                      icon: const Icon(Icons.delete_forever),
-                      label: const Text('Delete trip'),
-                      style: TextButton.styleFrom(foregroundColor: Colors.red),
-                    ),
-                    const SizedBox(width: 8),
-                    SizedBox(
-                      width: 120,
-                      child: CheckboxListTile(
-                        value: _shortlistOnly,
-                        title: const Text('Shortlist only'),
-                        onChanged: (v) {
-                          _shortlistOnly = v ?? false;
-                          _load();
-                        },
-                        controlAffinity: ListTileControlAffinity.leading,
-                        contentPadding: EdgeInsets.zero,
-                      ),
+                    const SizedBox(height: 10),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        FilterChip(
+                          avatar: const Icon(Icons.star, size: 18),
+                          label: const Text('Shortlist only'),
+                          selected: _shortlistOnly,
+                          onSelected: (v) {
+                            _shortlistOnly = v;
+                            _load();
+                          },
+                        ),
+                        TextButton.icon(
+                          onPressed: _tripFilter == null
+                              ? null
+                              : () => _openCloseTripSheet(_tripFilter!),
+                          icon: const Icon(Icons.lock_clock),
+                          label: const Text('Close trip'),
+                        ),
+                        TextButton.icon(
+                          onPressed: _tripFilter == null
+                              ? null
+                              : () => _openDeleteTripDialog(_tripFilter!),
+                          icon: const Icon(Icons.delete_forever),
+                          label: const Text('Delete trip'),
+                          style: TextButton.styleFrom(
+                              foregroundColor: AppColors.danger),
+                        ),
+                      ],
                     ),
                   ],
                 ),
-                const SizedBox(height: 8),
-                TextField(
-                  decoration: InputDecoration(
-                    prefixIcon: const Icon(Icons.search),
-                    hintText: 'Search supplier / booth / category',
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                  onChanged: (v) {
-                    _query = v.trim();
-                    _load();
-                  },
-                ),
-                const SizedBox(height: 12),
-                if (!snapshot.hasData) const SizedBox(height: 300, child: Center(child: CircularProgressIndicator()))
-                else if (snapshot.data!.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.all(24),
-                    child: Text('No suppliers yet. Add your first visit and supplier.'),
-                  )
-                else
-                  ...snapshot.data!.map(
-                    (e) => Card(
-                      child: ExpansionTile(
-                        title: Text('${e.name}  (${e.booth.isEmpty ? 'No booth' : e.booth})'),
-                        subtitle: Text(
-                          'Hall: ${e.hall}  |  Category: ${e.category}  |  Country: ${e.country}',
-                        ),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if (e.shortlisted) const Icon(Icons.star, color: Colors.amber),
-                            _exhibitorActions(e),
-                          ],
-                        ),
-                        children: [
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text('Notes: ${e.contactCompanyNotes}'),
-                                const SizedBox(height: 8),
-                                Text(
-                                  'Tags: ${e.tags.join(", ").isEmpty ? "No tags" : e.tags.join(", ")}',
-                                  style: const TextStyle(fontSize: 13),
-                                ),
-                                const SizedBox(height: 8),
-                                FutureBuilder<List<Contact>>(
-                                  future: db.getContacts(e.id!),
-                                  builder: (ctx, cSnap) {
-                                    if (!cSnap.hasData || cSnap.data!.isEmpty) {
-                                      return const Text('No contacts yet');
-                                    }
-                                    return Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: cSnap.data!.map((c) => _contactRow(c, e)).toList(),
-                                    );
-                                  },
-                                ),
-                                const SizedBox(height: 8),
-                                FutureBuilder<List<Product>>(
-                                  future: db.getProducts(e.id!),
-                                  builder: (ctx, pSnap) {
-                                    if (!pSnap.hasData || pSnap.data!.isEmpty) {
-                                      return const Text('No products yet');
-                                    }
-                                return Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: pSnap.data!.expand((p) {
-                                    return [
-                                      _productRow(p),
-                                      Padding(
-                                        padding: const EdgeInsets.only(left: 16),
-                                        child: _attachmentSection('product', p.id ?? 0),
-                                      ),
-                                    ];
-                                  }).toList(),
-                                );
-                              },
-                            ),
-                                _attachmentSection('exhibitor', e.id!),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-              ],
-            ),
+              ),
+              const SizedBox(height: 16),
+              if (!snapshot.hasData)
+                const SizedBox(
+                    height: 300,
+                    child: Center(child: CircularProgressIndicator()))
+              else if (snapshot.data!.isEmpty)
+                const EmptyState(
+                  icon: Icons.business_outlined,
+                  title: 'No suppliers yet',
+                  message: 'Add a trip and capture your first supplier visit.',
+                )
+              else
+                ...snapshot.data!.map((e) => _supplierCard(e)),
+            ],
           ),
         );
       },
+    );
+  }
+
+  Widget _supplierCard(Exhibitor e) {
+    final tags = e.tags.join(', ');
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Card(
+        child: ExpansionTile(
+          tilePadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+          childrenPadding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+          title: Text(e.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontWeight: FontWeight.w800)),
+          subtitle: Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                InfoChip(
+                    label: e.booth.isEmpty ? 'No booth' : e.booth,
+                    icon: Icons.place),
+                if (e.hall.isNotEmpty)
+                  InfoChip(
+                      label: e.hall,
+                      icon: Icons.location_city,
+                      color: AppColors.teal),
+                if (e.category.isNotEmpty)
+                  InfoChip(
+                      label: e.category,
+                      icon: Icons.category,
+                      color: const Color(0xFF6B4E9B)),
+                if (e.country.isNotEmpty)
+                  InfoChip(
+                      label: e.country,
+                      icon: Icons.flag,
+                      color: AppColors.amber),
+                if (e.shortlisted)
+                  const InfoChip(
+                      label: 'Shortlisted',
+                      icon: Icons.star,
+                      color: Color(0xFF2F855A)),
+              ],
+            ),
+          ),
+          trailing: _exhibitorActions(e),
+          children: [
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                e.contactCompanyNotes.isEmpty
+                    ? 'No supplier notes recorded.'
+                    : e.contactCompanyNotes,
+                style: const TextStyle(color: AppColors.muted),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(tags.isEmpty ? 'No tags' : tags,
+                  style: const TextStyle(fontSize: 13, color: AppColors.muted)),
+            ),
+            const SizedBox(height: 10),
+            FutureBuilder<List<Contact>>(
+              future: db.getContacts(e.id!),
+              builder: (ctx, cSnap) {
+                if (!cSnap.hasData || cSnap.data!.isEmpty)
+                  return const Text('No contacts yet');
+                return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children:
+                        cSnap.data!.map((c) => _contactRow(c, e)).toList());
+              },
+            ),
+            const SizedBox(height: 8),
+            FutureBuilder<List<Product>>(
+              future: db.getProducts(e.id!),
+              builder: (ctx, pSnap) {
+                if (!pSnap.hasData || pSnap.data!.isEmpty)
+                  return const Text('No products yet');
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: pSnap.data!.expand((p) {
+                    return [
+                      _productRow(p),
+                      Padding(
+                        padding: const EdgeInsets.only(left: 8),
+                        child: _attachmentSection('product', p.id ?? 0),
+                      ),
+                    ];
+                  }).toList(),
+                );
+              },
+            ),
+            _attachmentSection('exhibitor', e.id!),
+          ],
+        ),
+      ),
     );
   }
 }

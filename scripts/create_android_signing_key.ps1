@@ -45,6 +45,13 @@ storeFile=app/canton-fair-release.jks
 $keystoreBase64 = [Convert]::ToBase64String([IO.File]::ReadAllBytes($keystorePath))
 
 @"
+storePassword=$storePassword
+keyPassword=$keyPassword
+keyAlias=$alias
+storeFile=app/canton-fair-release.jks
+"@ | Set-Content -Path $keyPropertiesPath -Encoding ASCII
+
+@"
 ANDROID_KEYSTORE_BASE64=$keystoreBase64
 ANDROID_KEYSTORE_PASSWORD=$storePassword
 ANDROID_KEY_PASSWORD=$keyPassword

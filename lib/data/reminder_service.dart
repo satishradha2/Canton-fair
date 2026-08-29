@@ -3,7 +3,8 @@ import 'package:timezone/data/latest.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
 
 class ReminderService {
-  static final FlutterLocalNotificationsPlugin _plugin = FlutterLocalNotificationsPlugin();
+  static final FlutterLocalNotificationsPlugin _plugin =
+      FlutterLocalNotificationsPlugin();
   static bool _ready = false;
 
   static Future<void> initialize() async {
@@ -11,13 +12,15 @@ class ReminderService {
     tz.initializeTimeZones();
     tz.setLocalLocation(tz.getLocation('Asia/Dubai'));
 
-    const AndroidInitializationSettings android = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const AndroidInitializationSettings android =
+        AndroidInitializationSettings('@mipmap/ic_launcher');
     const DarwinInitializationSettings ios = DarwinInitializationSettings(
       requestAlertPermission: true,
       requestBadgePermission: true,
       requestSoundPermission: true,
     );
-    const InitializationSettings settings = InitializationSettings(android: android, iOS: ios);
+    const InitializationSettings settings =
+        InitializationSettings(android: android, iOS: ios);
 
     await _plugin.initialize(
       settings,
@@ -32,7 +35,8 @@ class ReminderService {
       playSound: true,
     );
     await _plugin
-        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>()
         ?.createNotificationChannel(channel);
     _ready = true;
   }
@@ -61,7 +65,8 @@ class ReminderService {
       ),
       androidAllowWhileIdle: true,
       matchDateTimeComponents: null,
-      uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
+      uiLocalNotificationDateInterpretation:
+          UILocalNotificationDateInterpretation.absoluteTime,
     );
   }
 
@@ -69,4 +74,3 @@ class ReminderService {
     await _plugin.cancel(id);
   }
 }
-

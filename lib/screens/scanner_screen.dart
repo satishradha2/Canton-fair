@@ -22,4 +22,3 @@ class ScannerScreen extends StatelessWidget {
     );
   }
 }
-
