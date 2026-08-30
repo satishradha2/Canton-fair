@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'data/update_service.dart';
 import 'data/app_lock_service.dart';
+import 'data/language_service.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/captures_screen.dart';
 import 'screens/shortlist_screen.dart';
@@ -25,8 +26,10 @@ class _CantonFairAppState extends State<CantonFairApp>
   final _updates = UpdateService();
   bool _checkedStartupUpdate = false;
   final _appLock = AppLockService();
+  final _languageService = LanguageService();
   bool _lockReady = false;
   bool _locked = false;
+  String _language = 'en';
 
   late final _screens = [
     DashboardScreen(),
@@ -35,17 +38,10 @@ class _CantonFairAppState extends State<CantonFairApp>
     FollowUpScreen(),
     AnalyticsScreen(),
     ExportScreen(),
-    SettingsScreen(onAppLockChanged: _refreshAppLock),
-  ];
-
-  final _titles = const [
-    'Dashboard',
-    'Captures',
-    'Shortlist',
-    'Follow-Ups',
-    'Analytics',
-    'Export',
-    'Settings',
+    SettingsScreen(
+      onAppLockChanged: _refreshAppLock,
+      onLanguageChanged: _changeLanguage,
+    ),
   ];
 
   @override
@@ -53,8 +49,19 @@ class _CantonFairAppState extends State<CantonFairApp>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _refreshAppLock();
+    _loadLanguage();
     WidgetsBinding.instance
         .addPostFrameCallback((_) => _checkForStartupUpdate());
+  }
+
+  Future<void> _loadLanguage() async {
+    final language = await _languageService.load();
+    if (mounted) setState(() => _language = language);
+  }
+
+  Future<void> _changeLanguage(String language) async {
+    await _languageService.save(language);
+    if (mounted) setState(() => _language = language);
   }
 
   @override
@@ -136,41 +143,66 @@ class _CantonFairAppState extends State<CantonFairApp>
     if (_locked) {
       return AppLockScreen(onUnlocked: () => setState(() => _locked = false));
     }
-    return Scaffold(
-      appBar: AppBar(
-        title: Row(
-          children: [
-            Container(
-              width: 32,
-              height: 32,
-              decoration: BoxDecoration(
-                color: AppColors.primary.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8),
+    return AppLanguage(
+        code: _language,
+        child: Builder(
+          builder: (context) => Scaffold(
+            appBar: AppBar(
+              title: Row(
+                children: [
+                  Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(Icons.apartment,
+                        color: AppColors.primary, size: 19),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                      child: Text([
+                    tr(context, 'dashboard'),
+                    tr(context, 'captures'),
+                    tr(context, 'shortlist'),
+                    tr(context, 'followUps'),
+                    tr(context, 'analytics'),
+                    tr(context, 'export'),
+                    tr(context, 'settings'),
+                  ][_index])),
+                ],
               ),
-              child: const Icon(Icons.apartment,
-                  color: AppColors.primary, size: 19),
             ),
-            const SizedBox(width: 10),
-            Expanded(child: Text(_titles[_index])),
-          ],
-        ),
-      ),
-      body: _screens[_index],
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _index,
-        onDestinationSelected: (i) => setState(() => _index = i),
-        destinations: const [
-          NavigationDestination(
-              icon: Icon(Icons.dashboard), label: 'Dashboard'),
-          NavigationDestination(
-              icon: Icon(Icons.record_voice_over), label: 'Capture'),
-          NavigationDestination(icon: Icon(Icons.star), label: 'Shortlist'),
-          NavigationDestination(icon: Icon(Icons.event), label: 'Follow-ups'),
-          NavigationDestination(icon: Icon(Icons.insights), label: 'Analytics'),
-          NavigationDestination(icon: Icon(Icons.file_upload), label: 'Export'),
-          NavigationDestination(icon: Icon(Icons.settings), label: 'Settings'),
-        ],
-      ),
-    );
+            body: _screens[_index],
+            bottomNavigationBar: NavigationBar(
+              selectedIndex: _index,
+              onDestinationSelected: (i) => setState(() => _index = i),
+              destinations: [
+                NavigationDestination(
+                    icon: const Icon(Icons.dashboard),
+                    label: tr(context, 'dashboard')),
+                NavigationDestination(
+                    icon: const Icon(Icons.record_voice_over),
+                    label: tr(context, 'capture')),
+                NavigationDestination(
+                    icon: const Icon(Icons.star),
+                    label: tr(context, 'shortlist')),
+                NavigationDestination(
+                    icon: const Icon(Icons.event),
+                    label: tr(context, 'followUps')),
+                NavigationDestination(
+                    icon: const Icon(Icons.insights),
+                    label: tr(context, 'analytics')),
+                NavigationDestination(
+                    icon: const Icon(Icons.file_upload),
+                    label: tr(context, 'export')),
+                NavigationDestination(
+                    icon: const Icon(Icons.settings),
+                    label: tr(context, 'settings')),
+              ],
+            ),
+          ),
+        ));
   }
 }

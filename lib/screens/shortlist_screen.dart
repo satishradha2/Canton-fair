@@ -7,6 +7,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:share_plus/share_plus.dart';
 import '../data/database.dart';
+import '../data/language_service.dart';
 import '../models/models.dart';
 import '../theme/app_theme.dart';
 import '../widgets/enterprise_widgets.dart';
@@ -512,7 +513,7 @@ class _ShortlistScreenState extends State<ShortlistScreen> {
     return RefreshIndicator(
       onRefresh: () async => setState(_load),
       child: EnterprisePage(
-        title: 'Shortlist Workspace',
+        title: tr(context, 'shortlistWorkspace'),
         subtitle:
             'Compare suppliers and products using score, quote, MOQ, lead time, and trip timing.',
         actions: [
@@ -527,7 +528,7 @@ class _ShortlistScreenState extends State<ShortlistScreen> {
         ],
         children: [
           SectionPanel(
-            title: 'Controls',
+            title: tr(context, 'controls'),
             subtitle: _filterSummaryText,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,

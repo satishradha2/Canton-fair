@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../data/database.dart';
+import '../data/language_service.dart';
 import '../data/reminder_service.dart';
 import '../models/models.dart';
 import '../theme/app_theme.dart';
@@ -413,7 +414,7 @@ class _CapturesScreenState extends State<CapturesScreen> {
     await showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Add Trip'),
+        title: Text(tr(context, 'addTrip')),
         content: Form(
           key: formKey,
           child: SingleChildScrollView(
@@ -447,9 +448,10 @@ class _CapturesScreenState extends State<CapturesScreen> {
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+              onPressed: () => Navigator.pop(ctx),
+              child: Text(tr(context, 'cancel'))),
           ElevatedButton(
-            child: const Text('Save'),
+            child: Text(tr(context, 'save')),
             onPressed: () async {
               formKey.currentState?.save();
               final trip = Trip(
@@ -499,7 +501,7 @@ class _CapturesScreenState extends State<CapturesScreen> {
     await showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Add Exhibitor / Supplier'),
+        title: Text(tr(context, 'addSupplier')),
         content: Form(
           key: formKey,
           child: SingleChildScrollView(
@@ -563,9 +565,10 @@ class _CapturesScreenState extends State<CapturesScreen> {
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+              onPressed: () => Navigator.pop(ctx),
+              child: Text(tr(context, 'cancel'))),
           ElevatedButton(
-            child: const Text('Save'),
+            child: Text(tr(context, 'save')),
             onPressed: () async {
               formKey.currentState?.save();
               final candidate = Exhibitor(
@@ -641,7 +644,7 @@ class _CapturesScreenState extends State<CapturesScreen> {
     await showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Edit Supplier'),
+        title: Text(tr(context, 'editSupplier')),
         content: Form(
           key: formKey,
           child: SingleChildScrollView(
@@ -1060,7 +1063,7 @@ class _CapturesScreenState extends State<CapturesScreen> {
     await showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Add Contact'),
+        title: Text(tr(context, 'addContact')),
         content: Form(
           key: formKey,
           child: SingleChildScrollView(
@@ -1147,7 +1150,7 @@ class _CapturesScreenState extends State<CapturesScreen> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setStateDialog) => AlertDialog(
-          title: const Text('Add Product'),
+          title: Text(tr(context, 'addProduct')),
           content: Form(
             key: formKey,
             child: SingleChildScrollView(
@@ -1268,7 +1271,7 @@ class _CapturesScreenState extends State<CapturesScreen> {
     await showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Add Meeting / Follow-up'),
+        title: Text(tr(context, 'addMeeting')),
         content: Form(
           key: formKey,
           child: SingleChildScrollView(
@@ -1598,7 +1601,7 @@ class _CapturesScreenState extends State<CapturesScreen> {
         const SizedBox(height: 8),
         Row(
           children: [
-            const Text('Attachments',
+            Text(tr(context, 'attachments'),
                 style: TextStyle(fontWeight: FontWeight.bold)),
             const Spacer(),
             TextButton.icon(
@@ -1887,7 +1890,7 @@ class _CapturesScreenState extends State<CapturesScreen> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
-          title: const Text('Schedule supplier visit'),
+          title: Text(tr(context, 'scheduleVisit')),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1988,7 +1991,7 @@ class _CapturesScreenState extends State<CapturesScreen> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
-          title: const Text('Add quote version'),
+          title: Text(tr(context, 'addQuote')),
           content: Form(
             key: formKey,
             child: SingleChildScrollView(
@@ -2242,14 +2245,14 @@ class _CapturesScreenState extends State<CapturesScreen> {
       builder: (context, snapshot) {
         if (!snapshot.hasData) {
           return const SectionPanel(
-            title: 'Visit queues',
+            title: tr(context, 'visitQueues'),
             child: SizedBox(
                 height: 56, child: Center(child: CircularProgressIndicator())),
           );
         }
         final queues = snapshot.data!;
         return SectionPanel(
-          title: 'Visit queues',
+          title: tr(context, 'visitQueues'),
           subtitle:
               'Plan booth visits, then mark suppliers visited as you meet them.',
           child: Column(
@@ -2409,7 +2412,7 @@ class _CapturesScreenState extends State<CapturesScreen> {
         return RefreshIndicator(
           onRefresh: () async => _load(),
           child: EnterprisePage(
-            title: 'Supplier Capture',
+            title: tr(context, 'supplierCapture'),
             subtitle:
                 'Create trips, capture supplier details, scan badges, and manage booth follow-through.',
             actions: [

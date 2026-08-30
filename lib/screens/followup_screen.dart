@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../data/database.dart';
+import '../data/language_service.dart';
 import '../data/reminder_service.dart';
 import '../models/models.dart';
 import '../theme/app_theme.dart';
@@ -50,7 +51,7 @@ class _FollowUpScreenState extends State<FollowUpScreen> {
             ..sort((a, b) =>
                 (a.followUpDate ?? now).compareTo(b.followUpDate ?? now));
           return EnterprisePage(
-            title: 'Follow-up Queue',
+            title: tr(context, 'followUpQueue'),
             subtitle:
                 'Prioritized supplier follow-ups and reminders that still need action.',
             children: [

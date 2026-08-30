@@ -7,6 +7,7 @@ import 'package:csv/csv.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import '../data/database.dart';
+import '../data/language_service.dart';
 import '../models/models.dart';
 import '../theme/app_theme.dart';
 import '../widgets/enterprise_widgets.dart';
@@ -485,12 +486,12 @@ class _ExportScreenState extends State<ExportScreen> {
   @override
   Widget build(BuildContext context) {
     return EnterprisePage(
-      title: 'Export & Sharing Hub',
+      title: tr(context, 'exportHub'),
       subtitle:
           'Generate supplier, shortlist, follow-up, and trip closeout documents for review.',
       children: [
         SectionPanel(
-          title: 'Reports',
+          title: tr(context, 'reports'),
           subtitle: 'CSV exports for analysis and PDF reports for sharing.',
           child: Column(
             children: [

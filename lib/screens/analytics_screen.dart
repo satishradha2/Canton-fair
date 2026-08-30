@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../data/database.dart';
+import '../data/language_service.dart';
 import '../models/models.dart';
 import '../theme/app_theme.dart';
 import '../widgets/enterprise_widgets.dart';
@@ -172,7 +173,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
             return const Center(child: CircularProgressIndicator());
           final data = snapshot.data!;
           return EnterprisePage(
-            title: 'Business Intelligence',
+            title: tr(context, 'businessIntelligence'),
             subtitle:
                 'Visit productivity, follow-up exposure, quote health, and supplier decision risk.',
             actions: [

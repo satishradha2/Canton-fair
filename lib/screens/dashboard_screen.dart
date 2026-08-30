@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../data/database.dart';
+import '../data/language_service.dart';
 import '../models/models.dart';
 import '../theme/app_theme.dart';
 import '../widgets/enterprise_widgets.dart';
@@ -79,7 +80,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ];
 
           return EnterprisePage(
-            title: 'Canton Fair Operations',
+            title: tr(context, 'operations'),
             subtitle:
                 'Live workspace for supplier capture, shortlisting, meetings, and trip closeout.',
             children: [

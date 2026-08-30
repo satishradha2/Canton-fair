@@ -6,13 +6,16 @@ import '../data/update_service.dart';
 import '../data/backup_service.dart';
 import '../data/database.dart';
 import '../data/app_lock_service.dart';
+import '../data/language_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/enterprise_widgets.dart';
 
 class SettingsScreen extends StatefulWidget {
   final Future<void> Function()? onAppLockChanged;
+  final Future<void> Function(String language)? onLanguageChanged;
 
-  const SettingsScreen({super.key, this.onAppLockChanged});
+  const SettingsScreen(
+      {super.key, this.onAppLockChanged, this.onLanguageChanged});
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -27,6 +30,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _creatingBackup = false;
   bool _restoringBackup = false;
   bool _appLockEnabled = false;
+  String _language = 'en';
 
   Future<void> _createBackup() async {
     setState(() => _creatingBackup = true);
@@ -46,6 +50,39 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void initState() {
     super.initState();
     _loadAppLock();
+    _loadLanguage();
+  }
+
+  Future<void> _loadLanguage() async {
+    final language = await LanguageService().load();
+    if (mounted) setState(() => _language = language);
+  }
+
+  Future<void> _chooseLanguage() async {
+    final selected = await showDialog<String>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: Text(tr(context, 'chooseLanguage')),
+        children: ['en', 'zh', 'hi']
+            .map((code) => RadioListTile<String>(
+                  value: code,
+                  groupValue: _language,
+                  title: Text({
+                    'en': tr(context, 'english'),
+                    'zh': tr(context, 'chinese'),
+                    'hi': tr(context, 'hindi')
+                  }[code]!),
+                  onChanged: (value) => Navigator.pop(context, value),
+                ))
+            .toList(),
+      ),
+    );
+    if (selected == null) return;
+    await widget.onLanguageChanged?.call(selected);
+    if (!mounted) return;
+    setState(() => _language = selected);
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(tr(context, 'languageSaved'))));
   }
 
   Future<void> _loadAppLock() async {
@@ -275,12 +312,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     return EnterprisePage(
-      title: 'Settings',
+      title: tr(context, 'settings'),
       subtitle:
           'Device-level controls, app updates, backup readiness, and data governance.',
       children: [
         SectionPanel(
-          title: 'System',
+          title: tr(context, 'system'),
           child: Column(
             children: [
               _settingTile(
@@ -319,6 +356,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       : const Icon(Icons.chevron_right),
                   onTap: _creatingBackup ? null : _createBackup),
               _settingTile(
+                icon: Icons.language,
+                title: tr(context, 'language'),
+                subtitle: {
+                  'en': tr(context, 'english'),
+                  'zh': tr(context, 'chinese'),
+                  'hi': tr(context, 'hindi')
+                }[_language]!,
+                trailing: const Icon(Icons.chevron_right),
+                onTap: _chooseLanguage,
+              ),
+              _settingTile(
                 icon: Icons.settings_backup_restore,
                 title: 'Restore backup',
                 subtitle:
@@ -342,10 +390,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   icon: Icons.delete_forever,
                   title: 'Delete data',
                   subtitle: 'Planned: export-before-delete workflow'),
-              _settingTile(
-                  icon: Icons.language,
-                  title: 'Language',
-                  subtitle: 'Planned: English, Chinese, Hindi'),
             ],
           ),
         ),
