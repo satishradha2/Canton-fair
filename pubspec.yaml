@@ -28,6 +28,7 @@ dependencies:
   local_auth: ^2.3.0
   crypto: ^3.0.6
   supabase_flutter: ^2.10.3
+  speech_to_text: ^7.3.0
 
 dev_dependencies:
   flutter_test:

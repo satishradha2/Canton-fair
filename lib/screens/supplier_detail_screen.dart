@@ -19,6 +19,7 @@ class SupplierDetailScreen extends StatefulWidget {
 
 class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
   final _db = TradeDatabase.instance;
+  late String _decision;
   late Future<List<Contact>> _contacts;
   late Future<List<Product>> _products;
   late Future<List<Meeting>> _meetings;
@@ -27,7 +28,42 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
   @override
   void initState() {
     super.initState();
+    _decision = widget.supplier.decision;
     _reload();
+  }
+
+  Future<void> _setDecision(String decision) async {
+    var reason = '';
+    if (decision == 'Reject') {
+      final controller = TextEditingController();
+      reason = await showDialog<String>(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text('Why reject this supplier?'),
+              content: TextField(
+                  controller: controller,
+                  decoration: const InputDecoration(labelText: 'Reason')),
+              actions: [
+                TextButton(
+                    onPressed: () => Navigator.pop(context, ''),
+                    child: const Text('Cancel')),
+                FilledButton(
+                    onPressed: () =>
+                        Navigator.pop(context, controller.text.trim()),
+                    child: const Text('Save')),
+              ],
+            ),
+          ) ??
+          '';
+      controller.dispose();
+      if (reason.isEmpty) return;
+    }
+    await _db.update('exhibitors', widget.supplier.id!, {
+      'decision': decision,
+      'decision_reason': reason,
+      'shortlisted': decision == 'Shortlist' ? 1 : 0,
+    });
+    if (mounted) setState(() => _decision = decision);
   }
 
   void _reload() {
@@ -155,9 +191,46 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
                   color: supplier.visitedAt == null
                       ? AppColors.amber
                       : AppColors.teal),
+              InfoChip(
+                label: _decision,
+                icon: _decision == 'Shortlist'
+                    ? Icons.star
+                    : _decision == 'Reject'
+                        ? Icons.block_outlined
+                        : Icons.help_outline,
+                color: _decision == 'Shortlist'
+                    ? const Color(0xFF2F855A)
+                    : _decision == 'Reject'
+                        ? AppColors.danger
+                        : AppColors.amber,
+              ),
             ],
           ),
           const SizedBox(height: 18),
+          SectionPanel(
+            title: 'Supplier decision',
+            subtitle:
+                'Make a sourcing decision while the conversation is fresh.',
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                ChoiceChip(
+                    label: const Text('Shortlist'),
+                    selected: _decision == 'Shortlist',
+                    onSelected: (_) => _setDecision('Shortlist')),
+                ChoiceChip(
+                    label: const Text('Maybe'),
+                    selected: _decision == 'Maybe',
+                    onSelected: (_) => _setDecision('Maybe')),
+                ChoiceChip(
+                    label: const Text('Reject'),
+                    selected: _decision == 'Reject',
+                    onSelected: (_) => _setDecision('Reject')),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
           SectionPanel(
             title: 'Supplier notes',
             child: Text(supplier.contactCompanyNotes.isEmpty

@@ -62,6 +62,8 @@ class Exhibitor {
   final int reliabilityScore;
   final DateTime? plannedVisitAt;
   final DateTime? visitedAt;
+  final String decision;
+  final String decisionReason;
 
   Exhibitor({
     this.id,
@@ -82,6 +84,8 @@ class Exhibitor {
     this.reliabilityScore = 0,
     this.plannedVisitAt,
     this.visitedAt,
+    this.decision = 'Maybe',
+    this.decisionReason = '',
   });
 
   double get decisionScore =>
@@ -120,6 +124,8 @@ class Exhibitor {
         'reliability_score': reliabilityScore,
         'planned_visit_at': plannedVisitAt?.toIso8601String(),
         'visited_at': visitedAt?.toIso8601String(),
+        'decision': decision,
+        'decision_reason': decisionReason,
       };
 
   factory Exhibitor.fromMap(Map<String, dynamic> map) => Exhibitor(
@@ -145,6 +151,8 @@ class Exhibitor {
         visitedAt: map['visited_at'] != null
             ? DateTime.parse(map['visited_at'] as String)
             : null,
+        decision: map['decision'] as String? ?? 'Maybe',
+        decisionReason: map['decision_reason'] as String? ?? '',
       );
 }
 

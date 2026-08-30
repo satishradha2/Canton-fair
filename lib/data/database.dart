@@ -22,7 +22,7 @@ class TradeDatabase {
     final path = join(dbPath, 'canton_fair_crm.db');
     return openDatabase(
       path,
-      version: 9,
+      version: 10,
       onCreate: (db, version) async {
         await db.execute('''
         CREATE TABLE trips(
@@ -54,6 +54,8 @@ class TradeDatabase {
           reliability_score INTEGER NOT NULL DEFAULT 0,
           planned_visit_at TEXT,
           visited_at TEXT,
+          decision TEXT NOT NULL DEFAULT 'Maybe',
+          decision_reason TEXT NOT NULL DEFAULT '',
           created_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
         ''');
@@ -172,6 +174,12 @@ class TradeDatabase {
         if (oldVersion < 9) {
           await db.execute(
               "ALTER TABLE meetings ADD COLUMN assignee_email TEXT NOT NULL DEFAULT ''");
+        }
+        if (oldVersion < 10) {
+          await db.execute(
+              "ALTER TABLE exhibitors ADD COLUMN decision TEXT NOT NULL DEFAULT 'Maybe'");
+          await db.execute(
+              "ALTER TABLE exhibitors ADD COLUMN decision_reason TEXT NOT NULL DEFAULT ''");
         }
       },
     );

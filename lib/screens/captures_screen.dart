@@ -16,6 +16,7 @@ import '../data/reminder_service.dart';
 import '../models/models.dart';
 import '../theme/app_theme.dart';
 import '../widgets/enterprise_widgets.dart';
+import '../widgets/voice_note_field.dart';
 import 'scanner_screen.dart';
 import 'ocr_screen.dart';
 import 'supplier_detail_screen.dart';
@@ -1561,6 +1562,7 @@ class _CapturesScreenState extends State<CapturesScreen> {
     String outcome = 'Interested';
     String priority = 'Medium';
     String notes = '';
+    final notesController = TextEditingController();
     String assigneeEmail = '';
     bool reminderEnabled = true;
     Duration reminderOffset = const Duration(minutes: 15);
@@ -1640,10 +1642,9 @@ class _CapturesScreenState extends State<CapturesScreen> {
                     decoration: const InputDecoration(labelText: 'Outcome'),
                     onSaved: (value) => outcome = value?.trim() ?? 'Interested',
                   ),
-                  TextFormField(
-                    maxLines: 2,
-                    decoration: const InputDecoration(labelText: 'Notes'),
-                    onSaved: (value) => notes = value?.trim() ?? '',
+                  VoiceNoteField(
+                    controller: notesController,
+                    label: 'Notes',
                   ),
                   const SizedBox(height: 8),
                   SwitchListTile.adaptive(
@@ -1688,6 +1689,7 @@ class _CapturesScreenState extends State<CapturesScreen> {
             FilledButton(
               onPressed: () async {
                 formKey.currentState?.save();
+                notes = notesController.text.trim();
                 final dbi = await TradeDatabase.instance.database;
                 final meetingId = await dbi.insert(
                   'meetings',
@@ -1719,6 +1721,7 @@ class _CapturesScreenState extends State<CapturesScreen> {
         ),
       ),
     );
+    notesController.dispose();
   }
 
   Future<void> _toggleProductShortlist(Product p) async {
