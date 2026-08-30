@@ -22,7 +22,7 @@ class TradeDatabase {
     final path = join(dbPath, 'canton_fair_crm.db');
     return openDatabase(
       path,
-      version: 8,
+      version: 9,
       onCreate: (db, version) async {
         await db.execute('''
         CREATE TABLE trips(
@@ -97,6 +97,7 @@ class TradeDatabase {
           outcome TEXT NOT NULL DEFAULT 'Interested',
           priority TEXT NOT NULL DEFAULT 'Medium',
           notes TEXT NOT NULL DEFAULT '',
+          assignee_email TEXT NOT NULL DEFAULT '',
           completed INTEGER NOT NULL DEFAULT 0
         );
         ''');
@@ -167,6 +168,10 @@ class TradeDatabase {
         }
         if (oldVersion < 8) {
           await _createCloudSyncConflictsTable(db);
+        }
+        if (oldVersion < 9) {
+          await db.execute(
+              "ALTER TABLE meetings ADD COLUMN assignee_email TEXT NOT NULL DEFAULT ''");
         }
       },
     );

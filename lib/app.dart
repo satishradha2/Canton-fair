@@ -10,7 +10,6 @@ import 'screens/followup_screen.dart';
 import 'screens/analytics_screen.dart';
 import 'screens/export_screen.dart';
 import 'screens/settings_screen.dart';
-import 'theme/app_theme.dart';
 import 'widgets/app_lock_screen.dart';
 
 class CantonFairApp extends StatefulWidget {
@@ -32,7 +31,7 @@ class _CantonFairAppState extends State<CantonFairApp>
   String _language = 'en';
 
   late final _screens = [
-    DashboardScreen(),
+    DashboardScreen(onCapture: () => setState(() => _index = 1)),
     CapturesScreen(),
     ShortlistScreen(),
     FollowUpScreen(),
@@ -135,6 +134,43 @@ class _CantonFairAppState extends State<CantonFairApp>
     }
   }
 
+  Future<void> _openMore(BuildContext context) async {
+    final destination = await showModalBottomSheet<int>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          ListTile(
+            leading: const Icon(Icons.event_available_outlined),
+            title: const Text('Follow-ups'),
+            subtitle: const Text('Tasks, reminders, and due meetings'),
+            onTap: () => Navigator.pop(context, 3),
+          ),
+          ListTile(
+            leading: const Icon(Icons.insights_outlined),
+            title: const Text('Analytics'),
+            subtitle: const Text('Performance and sourcing trends'),
+            onTap: () => Navigator.pop(context, 4),
+          ),
+          ListTile(
+            leading: const Icon(Icons.ios_share_outlined),
+            title: const Text('Export reports'),
+            subtitle: const Text('CSV and PDF reports'),
+            onTap: () => Navigator.pop(context, 5),
+          ),
+          ListTile(
+            leading: const Icon(Icons.settings_outlined),
+            title: const Text('Settings'),
+            subtitle: const Text('Team, sync, backup, and app controls'),
+            onTap: () => Navigator.pop(context, 6),
+          ),
+          const SizedBox(height: 8),
+        ]),
+      ),
+    );
+    if (destination != null && mounted) setState(() => _index = destination);
+  }
+
   @override
   Widget build(BuildContext context) {
     if (!_lockReady) {
@@ -147,37 +183,16 @@ class _CantonFairAppState extends State<CantonFairApp>
         code: _language,
         child: Builder(
           builder: (context) => Scaffold(
-            appBar: AppBar(
-              title: Row(
-                children: [
-                  Container(
-                    width: 32,
-                    height: 32,
-                    decoration: BoxDecoration(
-                      color: AppColors.primary.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Icon(Icons.apartment,
-                        color: AppColors.primary, size: 19),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                      child: Text([
-                    tr(context, 'dashboard'),
-                    tr(context, 'captures'),
-                    tr(context, 'shortlist'),
-                    tr(context, 'followUps'),
-                    tr(context, 'analytics'),
-                    tr(context, 'export'),
-                    tr(context, 'settings'),
-                  ][_index])),
-                ],
-              ),
-            ),
             body: _screens[_index],
             bottomNavigationBar: NavigationBar(
-              selectedIndex: _index,
-              onDestinationSelected: (i) => setState(() => _index = i),
+              selectedIndex: _index > 2 ? 3 : _index,
+              onDestinationSelected: (i) {
+                if (i == 3) {
+                  _openMore(context);
+                } else {
+                  setState(() => _index = i);
+                }
+              },
               destinations: [
                 NavigationDestination(
                     icon: const Icon(Icons.dashboard),
@@ -189,17 +204,7 @@ class _CantonFairAppState extends State<CantonFairApp>
                     icon: const Icon(Icons.star),
                     label: tr(context, 'shortlist')),
                 NavigationDestination(
-                    icon: const Icon(Icons.event),
-                    label: tr(context, 'followUps')),
-                NavigationDestination(
-                    icon: const Icon(Icons.insights),
-                    label: tr(context, 'analytics')),
-                NavigationDestination(
-                    icon: const Icon(Icons.file_upload),
-                    label: tr(context, 'export')),
-                NavigationDestination(
-                    icon: const Icon(Icons.settings),
-                    label: tr(context, 'settings')),
+                    icon: const Icon(Icons.more_horiz), label: 'More'),
               ],
             ),
           ),

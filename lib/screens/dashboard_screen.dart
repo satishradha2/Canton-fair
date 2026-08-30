@@ -8,7 +8,9 @@ import '../widgets/enterprise_widgets.dart';
 import '../widgets/stat_card.dart';
 
 class DashboardScreen extends StatefulWidget {
-  const DashboardScreen({super.key});
+  final VoidCallback? onCapture;
+
+  const DashboardScreen({super.key, this.onCapture});
 
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
@@ -83,6 +85,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
             title: tr(context, 'operations'),
             subtitle:
                 'Live workspace for supplier capture, shortlisting, meetings, and trip closeout.',
+            actions: [
+              ElevatedButton.icon(
+                onPressed: widget.onCapture,
+                icon: const Icon(Icons.add_business_outlined),
+                label: const Text('Capture supplier'),
+              ),
+            ],
             children: [
               LayoutBuilder(
                 builder: (context, constraints) {

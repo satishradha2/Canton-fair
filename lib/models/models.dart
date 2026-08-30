@@ -7,6 +7,7 @@ class Trip {
   final DateTime? endDate;
   final String city;
   final String notes;
+  final String assigneeEmail;
 
   Trip({
     this.id,
@@ -15,6 +16,7 @@ class Trip {
     this.endDate,
     required this.city,
     this.notes = '',
+    this.assigneeEmail = '',
   });
 
   Map<String, Object?> toMap() => {
@@ -24,6 +26,7 @@ class Trip {
         'end_date': endDate?.toIso8601String(),
         'city': city,
         'notes': notes,
+        'assignee_email': assigneeEmail,
       };
 
   factory Trip.fromMap(Map<String, dynamic> map) => Trip(
@@ -36,6 +39,7 @@ class Trip {
             map['end_date'] != null ? DateTime.parse(map['end_date']) : null,
         city: map['city'] as String,
         notes: map['notes'] as String? ?? '',
+        assigneeEmail: map['assignee_email'] as String? ?? '',
       );
 }
 

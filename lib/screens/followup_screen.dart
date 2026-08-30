@@ -33,6 +33,29 @@ class _FollowUpScreenState extends State<FollowUpScreen> {
     _refresh();
   }
 
+  Future<void> _assign(Meeting meeting) async {
+    final controller = TextEditingController(text: meeting.assigneeEmail);
+    final email = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Assign follow-up'),
+        content: TextField(
+          controller: controller,
+          keyboardType: TextInputType.emailAddress,
+          decoration: const InputDecoration(labelText: 'Team member email'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(context, controller.text.trim()), child: const Text('Assign')),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (email == null) return;
+    await db.update('meetings', meeting.id!, {'assignee_email': email});
+    _refresh();
+  }
+
   @override
   Widget build(BuildContext context) {
     return RefreshIndicator(
@@ -118,14 +141,17 @@ class _FollowUpScreenState extends State<FollowUpScreen> {
                                 Text(m.notes,
                                     maxLines: 2,
                                     overflow: TextOverflow.ellipsis),
+                              if (m.assigneeEmail.isNotEmpty)
+                                Text('Assigned: ${m.assigneeEmail}',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis),
                             ],
                           ),
                         ),
-                        trailing: IconButton(
-                          icon: const Icon(Icons.check_circle_outline),
-                          tooltip: 'Mark done',
-                          onPressed: () => _completeMeeting(m),
-                        ),
+                        trailing: Wrap(children: [
+                          IconButton(icon: const Icon(Icons.person_add_alt_1), tooltip: 'Assign', onPressed: () => _assign(m)),
+                          IconButton(icon: const Icon(Icons.check_circle_outline), tooltip: 'Mark done', onPressed: () => _completeMeeting(m)),
+                        ]),
                       ),
                     ),
                   );
