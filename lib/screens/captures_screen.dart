@@ -6,6 +6,11 @@ import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../data/database.dart';
+import '../data/cloud_sync_service.dart';
+import '../data/cloud_api_service.dart';
+import '../data/capture_defaults_service.dart';
+import '../data/sync_status_service.dart';
+import '../data/team_workspace_service.dart';
 import '../data/language_service.dart';
 import '../data/reminder_service.dart';
 import '../models/models.dart';
@@ -13,9 +18,14 @@ import '../theme/app_theme.dart';
 import '../widgets/enterprise_widgets.dart';
 import 'scanner_screen.dart';
 import 'ocr_screen.dart';
+import 'supplier_detail_screen.dart';
+
+enum CaptureQuickAction { manual, qr, card }
 
 class CapturesScreen extends StatefulWidget {
-  const CapturesScreen({super.key});
+  final ValueNotifier<CaptureQuickAction?>? quickAction;
+
+  const CapturesScreen({super.key, this.quickAction});
 
   @override
   State<CapturesScreen> createState() => _CapturesScreenState();
@@ -44,6 +54,7 @@ class _CapturesScreenState extends State<CapturesScreen> {
   final _maxMoqController = TextEditingController();
   late Future<List<Trip>> _trips;
   late Future<List<Exhibitor>> _exhibitors;
+  late Future<List<Exhibitor>> _recentSuppliers;
   late Future<List<SavedSupplierFilter>> _savedFilters;
   late Future<_VisitQueues> _visitQueues;
   late Future<List<Exhibitor>> _itinerary;
@@ -55,6 +66,33 @@ class _CapturesScreenState extends State<CapturesScreen> {
     _trips = db.getTrips();
     _itineraryDate = DateTime.now();
     _load();
+    widget.quickAction?.addListener(_handleQuickAction);
+  }
+
+  @override
+  void didUpdateWidget(covariant CapturesScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.quickAction != widget.quickAction) {
+      oldWidget.quickAction?.removeListener(_handleQuickAction);
+      widget.quickAction?.addListener(_handleQuickAction);
+    }
+  }
+
+  void _handleQuickAction() {
+    final action = widget.quickAction?.value;
+    if (action == null || !mounted) return;
+    widget.quickAction?.value = null;
+    switch (action) {
+      case CaptureQuickAction.manual:
+        _openAddExhibitorSheet();
+        break;
+      case CaptureQuickAction.qr:
+        _openScanner();
+        break;
+      case CaptureQuickAction.card:
+        _openOcrCapture();
+        break;
+    }
   }
 
   void _load() {
@@ -63,11 +101,221 @@ class _CapturesScreenState extends State<CapturesScreen> {
       _itinerary = _loadItinerary();
       _savedFilters = db.getSavedSupplierFilters();
       _exhibitors = _loadFilteredExhibitors();
+      _recentSuppliers = _loadRecentSuppliers();
     });
+  }
+
+  Future<List<Exhibitor>> _loadRecentSuppliers() async {
+    final rows = await db.queryAll('exhibitors', orderBy: 'created_at DESC');
+    return rows.take(3).map(Exhibitor.fromMap).toList();
+  }
+
+  Future<void> _syncAfterSave() async {
+    try {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Syncing your cloud team...')),
+      );
+      final result = await CloudSyncService().syncTeamWorkspace();
+      await SyncStatusService().recordSuccess(
+        uploaded: result.uploaded,
+        downloaded: result.downloaded,
+        conflicts: result.conflicts,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+              'Up to date: ${result.uploaded} uploaded, ${result.downloaded} downloaded.'),
+        ),
+      );
+    } catch (error) {
+      await SyncStatusService().recordFailure(error);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Saved locally. Sync later: $error')),
+      );
+    }
+  }
+
+  Future<List<CloudMember>> _loadCloudTeamMembers() async {
+    final workspace = await TeamWorkspaceService().load();
+    if (workspace == null) return const [];
+    return CloudApiService().members(
+      CloudTeam(id: workspace.id, name: workspace.name, role: 'member'),
+    );
+  }
+
+  Future<DateTime?> _pickDateTime(
+    BuildContext context,
+    DateTime initial,
+  ) async {
+    final date = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: DateTime.now().subtract(const Duration(days: 365)),
+      lastDate: DateTime.now().add(const Duration(days: 3650)),
+    );
+    if (date == null || !context.mounted) return null;
+    final time = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(initial),
+    );
+    if (time == null) return null;
+    return DateTime(date.year, date.month, date.day, time.hour, time.minute);
+  }
+
+  String _dateTimeLabel(DateTime? value, {String empty = 'Not scheduled'}) {
+    if (value == null) return empty;
+    final local = value.toLocal();
+    final date =
+        '${local.year}-${local.month.toString().padLeft(2, '0')}-${local.day.toString().padLeft(2, '0')}';
+    final time =
+        '${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
+    return '$date at $time';
+  }
+
+  Future<void> _openAdvancedFilters() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(
+            20,
+            4,
+            20,
+            20 + MediaQuery.viewInsetsOf(context).bottom,
+          ),
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Advanced filters',
+                    style:
+                        TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+                const SizedBox(height: 6),
+                const Text(
+                    'Use these only when you need to narrow a large supplier list.',
+                    style: TextStyle(color: AppColors.muted)),
+                const SizedBox(height: 18),
+                TextField(
+                  decoration:
+                      const InputDecoration(labelText: 'Country contains'),
+                  onChanged: (value) {
+                    _countryFilter = value.trim();
+                    _load();
+                  },
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<int>(
+                  value: _minRating,
+                  decoration:
+                      const InputDecoration(labelText: 'Minimum rating'),
+                  items: List.generate(
+                      6,
+                      (index) => DropdownMenuItem(
+                            value: index,
+                            child: Text(index == 0
+                                ? 'Any rating'
+                                : '$index stars or higher'),
+                          )),
+                  onChanged: (value) {
+                    _minRating = value ?? 0;
+                    _load();
+                  },
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    ChoiceChip(
+                        label: const Text('All visits'),
+                        selected: _visitStatus == 'all',
+                        onSelected: (_) {
+                          _visitStatus = 'all';
+                          _load();
+                        }),
+                    ChoiceChip(
+                        label: const Text('Need to visit'),
+                        selected: _visitStatus == 'need',
+                        onSelected: (_) {
+                          _visitStatus = 'need';
+                          _load();
+                        }),
+                    ChoiceChip(
+                        label: const Text('Visited'),
+                        selected: _visitStatus == 'visited',
+                        onSelected: (_) {
+                          _visitStatus = 'visited';
+                          _load();
+                        }),
+                    FilterChip(
+                        label: const Text('Quotes expire in 7 days'),
+                        selected: _expiringQuotesOnly,
+                        onSelected: (value) {
+                          _expiringQuotesOnly = value;
+                          _load();
+                        }),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Row(children: [
+                  Expanded(
+                      child: TextField(
+                          controller: _minPriceController,
+                          keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true),
+                          decoration:
+                              const InputDecoration(labelText: 'Min price'),
+                          onChanged: (_) => _load())),
+                  const SizedBox(width: 8),
+                  Expanded(
+                      child: TextField(
+                          controller: _maxPriceController,
+                          keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true),
+                          decoration:
+                              const InputDecoration(labelText: 'Max price'),
+                          onChanged: (_) => _load())),
+                ]),
+                const SizedBox(height: 12),
+                Row(children: [
+                  Expanded(
+                      child: TextField(
+                          controller: _minMoqController,
+                          keyboardType: TextInputType.number,
+                          decoration:
+                              const InputDecoration(labelText: 'Min MOQ'),
+                          onChanged: (_) => _load())),
+                  const SizedBox(width: 8),
+                  Expanded(
+                      child: TextField(
+                          controller: _maxMoqController,
+                          keyboardType: TextInputType.number,
+                          decoration:
+                              const InputDecoration(labelText: 'Max MOQ'),
+                          onChanged: (_) => _load())),
+                ]),
+                const SizedBox(height: 18),
+                SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                        onPressed: () => Navigator.pop(context),
+                        icon: const Icon(Icons.check),
+                        label: const Text('Done'))),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   @override
   void dispose() {
+    widget.quickAction?.removeListener(_handleQuickAction);
     _queryController.dispose();
     _minPriceController.dispose();
     _maxPriceController.dispose();
@@ -420,6 +668,19 @@ class _CapturesScreenState extends State<CapturesScreen> {
           child: SingleChildScrollView(
             child: Column(
               children: [
+                const Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text('Basics',
+                      style: TextStyle(fontWeight: FontWeight.w800)),
+                ),
+                const SizedBox(height: 8),
+                const Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                      'You can add contacts, products, scoring, and follow-ups after saving.',
+                      style: TextStyle(color: AppColors.muted, fontSize: 12)),
+                ),
+                const SizedBox(height: 12),
                 TextFormField(
                   decoration: const InputDecoration(labelText: 'Trip name'),
                   onSaved: (v) => name = v?.trim() ?? name,
@@ -496,17 +757,27 @@ class _CapturesScreenState extends State<CapturesScreen> {
     int rating = 0;
     bool shortlisted = false;
     final trips = await _trips;
-    int selectedTrip = trips.isNotEmpty ? trips.first.id! : 0;
+    final defaults = await CaptureDefaultsService().load();
+    if (country.isEmpty) country = defaults.country;
+    int selectedTrip = trips.any((trip) => trip.id == defaults.tripId)
+        ? defaults.tripId!
+        : trips.isNotEmpty
+            ? trips.first.id!
+            : 0;
 
     await showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(tr(context, 'addSupplier')),
+        title: const Text('Capture supplier'),
         content: Form(
           key: formKey,
           child: SingleChildScrollView(
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                const Text('1. Basics',
+                    style: TextStyle(fontWeight: FontWeight.w800)),
+                const SizedBox(height: 8),
                 if (trips.isEmpty)
                   const Text('Create a trip first to attach exhibitor records.')
                 else
@@ -524,25 +795,34 @@ class _CapturesScreenState extends State<CapturesScreen> {
                     onChanged: (v) => selectedTrip = v ?? selectedTrip,
                   ),
                 TextFormField(
+                    initialValue: name,
                     decoration:
                         const InputDecoration(labelText: 'Supplier Name'),
                     onSaved: (v) => name = v?.trim() ?? name),
                 TextFormField(
+                    initialValue: booth,
                     decoration: const InputDecoration(labelText: 'Booth'),
                     onSaved: (v) => booth = v?.trim() ?? ''),
                 TextFormField(
+                    initialValue: hall,
                     decoration: const InputDecoration(labelText: 'Hall'),
                     onSaved: (v) => hall = v?.trim() ?? ''),
                 TextFormField(
+                    initialValue: category,
                     decoration: const InputDecoration(labelText: 'Category'),
                     onSaved: (v) => category = v?.trim() ?? ''),
                 TextFormField(
+                    initialValue: country,
                     decoration: const InputDecoration(labelText: 'Country'),
                     onSaved: (v) => country = v?.trim() ?? ''),
                 TextFormField(
                     decoration:
                         const InputDecoration(labelText: 'Company notes'),
                     onSaved: (v) => notes = v?.trim() ?? ''),
+                const SizedBox(height: 8),
+                const Text('2. Score and next action',
+                    style: TextStyle(fontWeight: FontWeight.w800)),
+                const SizedBox(height: 8),
                 DropdownButtonFormField<int>(
                   value: rating,
                   items: List.generate(
@@ -587,9 +867,22 @@ class _CapturesScreenState extends State<CapturesScreen> {
                 return;
               }
               await db.upsertExhibitor(candidate);
+              await CaptureDefaultsService().save(
+                tripId: selectedTrip,
+                country: country,
+              );
               _load();
               if (!mounted) return;
               Navigator.pop(ctx);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: const Text('Supplier saved locally.'),
+                  action: SnackBarAction(
+                    label: 'Sync now',
+                    onPressed: _syncAfterSave,
+                  ),
+                ),
+              );
             },
           ),
         ],
@@ -1268,68 +1561,135 @@ class _CapturesScreenState extends State<CapturesScreen> {
     String outcome = 'Interested';
     String priority = 'Medium';
     String notes = '';
+    String assigneeEmail = '';
+    bool reminderEnabled = true;
+    Duration reminderOffset = const Duration(minutes: 15);
+    List<CloudMember> members = const [];
+    String? memberLoadError;
+    try {
+      members = await _loadCloudTeamMembers();
+    } catch (_) {
+      memberLoadError =
+          'Could not load the cloud team. You can still create an unassigned follow-up.';
+    }
+    if (!mounted) return;
     await showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(tr(context, 'addMeeting')),
-        content: Form(
-          key: formKey,
-          child: SingleChildScrollView(
-            child: Column(
-              children: [
-                TextFormField(
-                  decoration: const InputDecoration(
-                      labelText: 'Meeting date (YYYY-MM-DD HH:mm)'),
-                  onSaved: (v) {
-                    if (v != null && v.isNotEmpty) {
-                      try {
-                        final parsed = DateTime.parse(v);
-                        meeting = parsed;
-                      } catch (_) {}
-                    }
-                  },
-                ),
-                TextFormField(
-                  decoration: const InputDecoration(
-                      labelText: 'Follow-up date (YYYY-MM-DD HH:mm)'),
-                  onSaved: (v) {
-                    if (v != null && v.isNotEmpty) {
-                      try {
-                        followUp = DateTime.parse(v);
-                      } catch (_) {
-                        followUp = null;
-                      }
-                    }
-                  },
-                ),
-                TextFormField(
-                  decoration: const InputDecoration(labelText: 'Outcome'),
-                  onSaved: (v) => outcome = v?.trim() ?? 'Interested',
-                ),
-                DropdownButtonFormField<String>(
-                  value: priority,
-                  items: const [
-                    DropdownMenuItem(value: 'High', child: Text('High')),
-                    DropdownMenuItem(value: 'Medium', child: Text('Medium')),
-                    DropdownMenuItem(value: 'Low', child: Text('Low')),
-                  ],
-                  onChanged: (v) => priority = v ?? 'Medium',
-                ),
-                TextFormField(
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Create follow-up'),
+          content: Form(
+            key: formKey,
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: () async {
+                      final selected = await _pickDateTime(context, meeting);
+                      if (selected != null)
+                        setDialogState(() => meeting = selected);
+                    },
+                    icon: const Icon(Icons.event_outlined),
+                    label: Text('Meeting: ${_dateTimeLabel(meeting)}'),
+                  ),
+                  const SizedBox(height: 10),
+                  OutlinedButton.icon(
+                    onPressed: () async {
+                      final selected =
+                          await _pickDateTime(context, followUp ?? meeting);
+                      if (selected != null)
+                        setDialogState(() => followUp = selected);
+                    },
+                    icon: const Icon(Icons.event_available_outlined),
+                    label: Text(
+                        'Due: ${_dateTimeLabel(followUp, empty: 'Choose due date')}'),
+                  ),
+                  const SizedBox(height: 10),
+                  DropdownButtonFormField<String>(
+                    value: assigneeEmail,
+                    decoration: const InputDecoration(labelText: 'Assign to'),
+                    items: [
+                      const DropdownMenuItem(
+                          value: '', child: Text('Unassigned')),
+                      ...members.map((member) => DropdownMenuItem(
+                          value: member.email,
+                          child: Text('${member.email} (${member.role})'))),
+                    ],
+                    onChanged: (value) =>
+                        setDialogState(() => assigneeEmail = value ?? ''),
+                  ),
+                  if (memberLoadError != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: Text(memberLoadError,
+                          style: const TextStyle(color: AppColors.danger)),
+                    ),
+                  const SizedBox(height: 10),
+                  DropdownButtonFormField<String>(
+                    value: priority,
+                    decoration: const InputDecoration(labelText: 'Priority'),
+                    items: const [
+                      DropdownMenuItem(value: 'High', child: Text('High')),
+                      DropdownMenuItem(value: 'Medium', child: Text('Medium')),
+                      DropdownMenuItem(value: 'Low', child: Text('Low')),
+                    ],
+                    onChanged: (value) => priority = value ?? 'Medium',
+                  ),
+                  TextFormField(
+                    decoration: const InputDecoration(labelText: 'Outcome'),
+                    onSaved: (value) => outcome = value?.trim() ?? 'Interested',
+                  ),
+                  TextFormField(
+                    maxLines: 2,
                     decoration: const InputDecoration(labelText: 'Notes'),
-                    onSaved: (v) => notes = v?.trim() ?? ''),
-              ],
+                    onSaved: (value) => notes = value?.trim() ?? '',
+                  ),
+                  const SizedBox(height: 8),
+                  SwitchListTile.adaptive(
+                    contentPadding: EdgeInsets.zero,
+                    value: reminderEnabled,
+                    title: const Text('Reminder'),
+                    subtitle: Text(followUp == null
+                        ? 'Choose a due date first'
+                        : 'Notify before the due time'),
+                    onChanged: followUp == null
+                        ? null
+                        : (value) =>
+                            setDialogState(() => reminderEnabled = value),
+                  ),
+                  if (reminderEnabled && followUp != null)
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        for (final option in <(String, Duration)>[
+                          ('At due time', Duration.zero),
+                          ('15 min', const Duration(minutes: 15)),
+                          ('1 hour', const Duration(hours: 1)),
+                          ('1 day', const Duration(days: 1)),
+                        ])
+                          ChoiceChip(
+                            label: Text(option.$1),
+                            selected: reminderOffset == option.$2,
+                            onSelected: (_) => setDialogState(
+                                () => reminderOffset = option.$2),
+                          ),
+                      ],
+                    ),
+                ],
+              ),
             ),
           ),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () async {
-              formKey.currentState?.save();
-              final dbi = await TradeDatabase.instance.database;
-              final meetingId = await dbi.insert(
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel')),
+            FilledButton(
+              onPressed: () async {
+                formKey.currentState?.save();
+                final dbi = await TradeDatabase.instance.database;
+                final meetingId = await dbi.insert(
                   'meetings',
                   Meeting(
                     exhibitorId: exhibitorId,
@@ -1338,23 +1698,25 @@ class _CapturesScreenState extends State<CapturesScreen> {
                     outcome: outcome,
                     priority: priority,
                     notes: notes,
-                  ).toMap());
-              if (followUp != null) {
-                await ReminderService.scheduleFollowUp(
-                  id: meetingId,
-                  title: 'Supplier follow-up is due',
-                  body:
-                      'Follow-up scheduled for outcome: $outcome (${priority})',
-                  at: followUp!,
+                    assigneeEmail: assigneeEmail,
+                  ).toMap(),
                 );
-              }
-              _load();
-              if (!mounted) return;
-              Navigator.pop(ctx);
-            },
-            child: const Text('Save'),
-          ),
-        ],
+                if (reminderEnabled && followUp != null) {
+                  await ReminderService.scheduleFollowUp(
+                    id: meetingId,
+                    title: 'Supplier follow-up is due',
+                    body: 'Follow-up: $outcome ($priority)',
+                    at: followUp!.subtract(reminderOffset),
+                  );
+                }
+                _load();
+                if (!mounted) return;
+                Navigator.pop(ctx);
+              },
+              child: const Text('Create task'),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -2409,152 +2771,113 @@ class _CapturesScreenState extends State<CapturesScreen> {
     return FutureBuilder<List<Exhibitor>>(
       future: _exhibitors,
       builder: (context, snapshot) {
-        return RefreshIndicator(
-          onRefresh: () async => _load(),
-          child: EnterprisePage(
-            title: tr(context, 'supplierCapture'),
-            subtitle:
-                'Create trips, capture supplier details, scan badges, and manage booth follow-through.',
-            actions: [
-              ElevatedButton.icon(
-                  onPressed: _openAddExhibitorSheet,
-                  icon: const Icon(Icons.business),
-                  label: const Text('Supplier')),
-              TextButton.icon(
-                  onPressed: _openAddTripSheet,
-                  icon: const Icon(Icons.flight_takeoff),
-                  label: const Text('Trip')),
-              TextButton.icon(
-                  onPressed: _openScanner,
-                  icon: const Icon(Icons.qr_code_scanner),
-                  label: const Text('QR')),
-              TextButton.icon(
-                  onPressed: _openOcrCapture,
-                  icon: const Icon(Icons.document_scanner),
-                  label: const Text('OCR')),
-            ],
-            children: [
-              _visitQueueSection(),
-              const SizedBox(height: 16),
-              _itinerarySection(),
-              const SizedBox(height: 16),
-              SectionPanel(
-                title: 'Filters',
+        return Stack(
+          children: [
+            RefreshIndicator(
+              onRefresh: () async => _load(),
+              child: EnterprisePage(
+                title: tr(context, 'supplierCapture'),
                 subtitle:
-                    'Narrow records by trip, shortlist status, supplier, booth, or category.',
-                child: Column(
-                  children: [
-                    FutureBuilder<List<Trip>>(
-                      future: _trips,
-                      builder: (_, snap) {
-                        if (!snap.hasData) return const SizedBox.shrink();
-                        return DropdownButtonFormField<int?>(
-                          value: _tripFilter,
-                          decoration: const InputDecoration(labelText: 'Trip'),
-                          isExpanded: true,
-                          items: [
-                            const DropdownMenuItem(
-                                value: null, child: Text('All trips')),
-                            ...snap.data!.where((t) => t.id != null).map(
-                                  (t) => DropdownMenuItem(
-                                      value: t.id,
-                                      child: Text(t.name,
-                                          overflow: TextOverflow.ellipsis)),
-                                ),
-                          ],
-                          onChanged: (v) {
-                            _tripFilter = v;
-                            _load();
-                          },
+                    'Create trips, capture supplier details, scan badges, and manage booth follow-through.',
+                actions: [
+                  ElevatedButton.icon(
+                      onPressed: _openAddExhibitorSheet,
+                      icon: const Icon(Icons.business),
+                      label: const Text('Supplier')),
+                  TextButton.icon(
+                      onPressed: _openAddTripSheet,
+                      icon: const Icon(Icons.flight_takeoff),
+                      label: const Text('Trip')),
+                  TextButton.icon(
+                      onPressed: _openScanner,
+                      icon: const Icon(Icons.qr_code_scanner),
+                      label: const Text('QR')),
+                  TextButton.icon(
+                      onPressed: _openOcrCapture,
+                      icon: const Icon(Icons.document_scanner),
+                      label: const Text('OCR')),
+                ],
+                children: [
+                  _visitQueueSection(),
+                  const SizedBox(height: 16),
+                  _itinerarySection(),
+                  const SizedBox(height: 16),
+                  if (_query.isEmpty &&
+                      !_shortlistOnly &&
+                      _countryFilter.isEmpty)
+                    FutureBuilder<List<Exhibitor>>(
+                      future: _recentSuppliers,
+                      builder: (context, recentSnapshot) {
+                        final recent =
+                            recentSnapshot.data ?? const <Exhibitor>[];
+                        if (recent.isEmpty) return const SizedBox.shrink();
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 16),
+                          child: SectionPanel(
+                            title: 'Recently captured',
+                            subtitle: 'Your latest supplier records',
+                            child: Column(
+                              children: recent
+                                  .map((supplier) => ListTile(
+                                        dense: true,
+                                        contentPadding: EdgeInsets.zero,
+                                        leading:
+                                            const Icon(Icons.business_outlined),
+                                        title: Text(supplier.name,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis),
+                                        subtitle: Text(supplier.booth.isEmpty
+                                            ? 'Booth not recorded'
+                                            : 'Booth ${supplier.booth}'),
+                                      ))
+                                  .toList(),
+                            ),
+                          ),
                         );
                       },
                     ),
-                    const SizedBox(height: 10),
-                    TextField(
-                      controller: _queryController,
-                      decoration: const InputDecoration(
-                        prefixIcon: Icon(Icons.search),
-                        hintText:
-                            'Search supplier, contact, product, booth, tag',
-                      ),
-                      onChanged: (v) {
-                        _query = v.trim();
-                        _load();
-                      },
-                    ),
-                    const SizedBox(height: 10),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      crossAxisAlignment: WrapCrossAlignment.center,
+                  SectionPanel(
+                    title: 'Filters',
+                    subtitle:
+                        'Narrow records by trip, shortlist status, supplier, booth, or category.',
+                    child: Column(
                       children: [
-                        FilterChip(
-                          avatar: const Icon(Icons.star, size: 18),
-                          label: const Text('Shortlist only'),
-                          selected: _shortlistOnly,
-                          onSelected: (v) {
-                            _shortlistOnly = v;
-                            _load();
-                          },
-                        ),
-                        TextButton.icon(
-                          onPressed: _saveCurrentFilter,
-                          icon: const Icon(Icons.bookmark_add_outlined),
-                          label: const Text('Save filters'),
-                        ),
-                        TextButton.icon(
-                          onPressed: _clearAdvancedFilters,
-                          icon: const Icon(Icons.filter_alt_off),
-                          label: const Text('Clear filters'),
-                        ),
-                        TextButton.icon(
-                          onPressed: _tripFilter == null
-                              ? null
-                              : () => _openCloseTripSheet(_tripFilter!),
-                          icon: const Icon(Icons.lock_clock),
-                          label: const Text('Close trip'),
-                        ),
-                        TextButton.icon(
-                          onPressed: _tripFilter == null
-                              ? null
-                              : () => _openDeleteTripDialog(_tripFilter!),
-                          icon: const Icon(Icons.delete_forever),
-                          label: const Text('Delete trip'),
-                          style: TextButton.styleFrom(
-                              foregroundColor: AppColors.danger),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    ExpansionTile(
-                      tilePadding: EdgeInsets.zero,
-                      title: const Text('Advanced filters',
-                          style: TextStyle(fontWeight: FontWeight.w700)),
-                      children: [
-                        TextField(
-                          decoration: const InputDecoration(
-                              labelText: 'Country contains'),
-                          onChanged: (value) {
-                            _countryFilter = value.trim();
-                            _load();
+                        FutureBuilder<List<Trip>>(
+                          future: _trips,
+                          builder: (_, snap) {
+                            if (!snap.hasData) return const SizedBox.shrink();
+                            return DropdownButtonFormField<int?>(
+                              value: _tripFilter,
+                              decoration:
+                                  const InputDecoration(labelText: 'Trip'),
+                              isExpanded: true,
+                              items: [
+                                const DropdownMenuItem(
+                                    value: null, child: Text('All trips')),
+                                ...snap.data!.where((t) => t.id != null).map(
+                                      (t) => DropdownMenuItem(
+                                          value: t.id,
+                                          child: Text(t.name,
+                                              overflow: TextOverflow.ellipsis)),
+                                    ),
+                              ],
+                              onChanged: (v) {
+                                _tripFilter = v;
+                                _load();
+                              },
+                            );
                           },
                         ),
                         const SizedBox(height: 10),
-                        DropdownButtonFormField<int>(
-                          value: _minRating,
+                        TextField(
+                          controller: _queryController,
                           decoration: const InputDecoration(
-                              labelText: 'Minimum rating'),
-                          items: List.generate(
-                            6,
-                            (index) => DropdownMenuItem(
-                              value: index,
-                              child: Text(index == 0
-                                  ? 'Any rating'
-                                  : '$index stars or higher'),
-                            ),
+                            prefixIcon: Icon(Icons.search),
+                            hintText:
+                                'Search supplier, contact, product, booth, tag',
                           ),
-                          onChanged: (value) {
-                            _minRating = value ?? 0;
+                          onChanged: (v) {
+                            _query = v.trim();
                             _load();
                           },
                         ),
@@ -2562,143 +2885,123 @@ class _CapturesScreenState extends State<CapturesScreen> {
                         Wrap(
                           spacing: 8,
                           runSpacing: 8,
+                          crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
-                            ChoiceChip(
-                              label: const Text('All visits'),
-                              selected: _visitStatus == 'all',
-                              onSelected: (_) {
-                                _visitStatus = 'all';
-                                _load();
-                              },
-                            ),
-                            ChoiceChip(
-                              label: const Text('Need to visit'),
-                              selected: _visitStatus == 'need',
-                              onSelected: (_) {
-                                _visitStatus = 'need';
-                                _load();
-                              },
-                            ),
-                            ChoiceChip(
-                              label: const Text('Visited'),
-                              selected: _visitStatus == 'visited',
-                              onSelected: (_) {
-                                _visitStatus = 'visited';
-                                _load();
-                              },
-                            ),
                             FilterChip(
-                              label: const Text('Quotes expire in 7 days'),
-                              selected: _expiringQuotesOnly,
-                              onSelected: (value) {
-                                _expiringQuotesOnly = value;
+                              avatar: const Icon(Icons.star, size: 18),
+                              label: const Text('Shortlist only'),
+                              selected: _shortlistOnly,
+                              onSelected: (v) {
+                                _shortlistOnly = v;
                                 _load();
                               },
                             ),
-                          ],
-                        ),
-                        const SizedBox(height: 10),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: TextField(
-                                controller: _minPriceController,
-                                keyboardType:
-                                    const TextInputType.numberWithOptions(
-                                        decimal: true),
-                                decoration: const InputDecoration(
-                                    labelText: 'Min price'),
-                                onChanged: (_) => _load(),
-                              ),
+                            TextButton.icon(
+                              onPressed: _saveCurrentFilter,
+                              icon: const Icon(Icons.bookmark_add_outlined),
+                              label: const Text('Save filters'),
                             ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: TextField(
-                                controller: _maxPriceController,
-                                keyboardType:
-                                    const TextInputType.numberWithOptions(
-                                        decimal: true),
-                                decoration: const InputDecoration(
-                                    labelText: 'Max price'),
-                                onChanged: (_) => _load(),
-                              ),
+                            TextButton.icon(
+                              onPressed: _clearAdvancedFilters,
+                              icon: const Icon(Icons.filter_alt_off),
+                              label: const Text('Clear filters'),
+                            ),
+                            TextButton.icon(
+                              onPressed: _tripFilter == null
+                                  ? null
+                                  : () => _openCloseTripSheet(_tripFilter!),
+                              icon: const Icon(Icons.lock_clock),
+                              label: const Text('Close trip'),
+                            ),
+                            TextButton.icon(
+                              onPressed: _tripFilter == null
+                                  ? null
+                                  : () => _openDeleteTripDialog(_tripFilter!),
+                              icon: const Icon(Icons.delete_forever),
+                              label: const Text('Delete trip'),
+                              style: TextButton.styleFrom(
+                                  foregroundColor: AppColors.danger),
                             ),
                           ],
                         ),
-                        const SizedBox(height: 10),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: TextField(
-                                controller: _minMoqController,
-                                keyboardType:
-                                    const TextInputType.numberWithOptions(
-                                        decimal: true),
-                                decoration:
-                                    const InputDecoration(labelText: 'Min MOQ'),
-                                onChanged: (_) => _load(),
+                        const SizedBox(height: 8),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: OutlinedButton.icon(
+                            onPressed: _openAdvancedFilters,
+                            icon: const Icon(Icons.tune),
+                            label: const Text('Filters'),
+                          ),
+                        ),
+                        FutureBuilder<List<SavedSupplierFilter>>(
+                          future: _savedFilters,
+                          builder: (context, snapshot) {
+                            if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                              return const SizedBox.shrink();
+                            }
+                            return Padding(
+                              padding: const EdgeInsets.only(top: 10),
+                              child: Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: snapshot.data!.map((filter) {
+                                  return InputChip(
+                                    label: Text(filter.name),
+                                    onPressed: () => _applySavedFilter(filter),
+                                    onDeleted: () async {
+                                      await db.deleteSavedSupplierFilter(
+                                          filter.id!);
+                                      _load();
+                                    },
+                                  );
+                                }).toList(),
                               ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: TextField(
-                                controller: _maxMoqController,
-                                keyboardType:
-                                    const TextInputType.numberWithOptions(
-                                        decimal: true),
-                                decoration:
-                                    const InputDecoration(labelText: 'Max MOQ'),
-                                onChanged: (_) => _load(),
-                              ),
-                            ),
-                          ],
+                            );
+                          },
                         ),
                       ],
                     ),
-                    FutureBuilder<List<SavedSupplierFilter>>(
-                      future: _savedFilters,
-                      builder: (context, snapshot) {
-                        if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                          return const SizedBox.shrink();
-                        }
-                        return Padding(
-                          padding: const EdgeInsets.only(top: 10),
-                          child: Wrap(
-                            spacing: 8,
-                            runSpacing: 8,
-                            children: snapshot.data!.map((filter) {
-                              return InputChip(
-                                label: Text(filter.name),
-                                onPressed: () => _applySavedFilter(filter),
-                                onDeleted: () async {
-                                  await db
-                                      .deleteSavedSupplierFilter(filter.id!);
-                                  _load();
-                                },
-                              );
-                            }).toList(),
+                  ),
+                  const SizedBox(height: 16),
+                  if (!snapshot.hasData)
+                    const SizedBox(
+                        height: 300,
+                        child: Center(child: CircularProgressIndicator()))
+                  else if (snapshot.data!.isEmpty)
+                    Column(
+                      children: [
+                        const EmptyState(
+                          icon: Icons.business_outlined,
+                          title: 'No suppliers yet',
+                          message: 'Start with the first supplier you meet.',
+                        ),
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            onPressed: _openAddExhibitorSheet,
+                            icon: const Icon(Icons.add_business_outlined),
+                            label: const Text('Add first supplier'),
                           ),
-                        );
-                      },
-                    ),
-                  ],
-                ),
+                        ),
+                      ],
+                    )
+                  else
+                    ...snapshot.data!.map((e) => _supplierCard(e)),
+                ],
               ),
-              const SizedBox(height: 16),
-              if (!snapshot.hasData)
-                const SizedBox(
-                    height: 300,
-                    child: Center(child: CircularProgressIndicator()))
-              else if (snapshot.data!.isEmpty)
-                const EmptyState(
-                  icon: Icons.business_outlined,
-                  title: 'No suppliers yet',
-                  message: 'Add a trip and capture your first supplier visit.',
-                )
-              else
-                ...snapshot.data!.map((e) => _supplierCard(e)),
-            ],
-          ),
+            ),
+            Positioned(
+              right: 16,
+              bottom: 16,
+              child: FloatingActionButton.extended(
+                heroTag: 'captureSupplier',
+                onPressed: _openAddExhibitorSheet,
+                icon: const Icon(Icons.add),
+                label: const Text('Add supplier'),
+              ),
+            ),
+          ],
         );
       },
     );
@@ -2712,6 +3015,17 @@ class _CapturesScreenState extends State<CapturesScreen> {
         child: ExpansionTile(
           tilePadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
           childrenPadding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+          leading: IconButton(
+            tooltip: 'Open supplier workspace',
+            icon: const Icon(Icons.open_in_new_outlined),
+            onPressed: () async {
+              await Navigator.of(context).push(
+                MaterialPageRoute(
+                    builder: (_) => SupplierDetailScreen(supplier: e)),
+              );
+              if (mounted) _load();
+            },
+          ),
           title: Text(e.name,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -2757,6 +3071,70 @@ class _CapturesScreenState extends State<CapturesScreen> {
           ),
           trailing: _exhibitorActions(e),
           children: [
+            FutureBuilder<List<Contact>>(
+              future: db.getContacts(e.id!),
+              builder: (context, contactSnapshot) {
+                final contact = contactSnapshot.data
+                    ?.cast<Contact?>()
+                    .firstWhere(
+                      (item) =>
+                          item != null &&
+                          (item.phone.isNotEmpty || item.whatsapp.isNotEmpty),
+                      orElse: () => null,
+                    );
+                if (contact == null) return const SizedBox.shrink();
+                final phone = contact.whatsapp.isNotEmpty
+                    ? contact.whatsapp
+                    : contact.phone;
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Wrap(
+                    spacing: 4,
+                    children: [
+                      if (contact.phone.isNotEmpty)
+                        TextButton.icon(
+                          onPressed: () => _openCall(contact.phone),
+                          icon: const Icon(Icons.call_outlined, size: 18),
+                          label: const Text('Call'),
+                        ),
+                      TextButton.icon(
+                        onPressed: () => _openWhatsApp(phone),
+                        icon: const Icon(Icons.chat_outlined, size: 18),
+                        label: const Text('WhatsApp'),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+            Wrap(
+              spacing: 4,
+              runSpacing: 4,
+              children: [
+                TextButton.icon(
+                  onPressed: () => _openMeetingSheet(e.id!),
+                  icon: const Icon(Icons.event_note_outlined, size: 18),
+                  label: const Text('Follow-up'),
+                ),
+                TextButton.icon(
+                  onPressed: () => _openAddProductSheet(e.id!),
+                  icon: const Icon(Icons.inventory_2_outlined, size: 18),
+                  label: const Text('Product'),
+                ),
+                TextButton.icon(
+                  onPressed: () => _openAttachmentPicker(
+                      ownerId: e.id!, ownerType: 'exhibitor'),
+                  icon: const Icon(Icons.add_a_photo_outlined, size: 18),
+                  label: const Text('Photo'),
+                ),
+                TextButton.icon(
+                  onPressed: () => _openScheduleVisitDialog(e),
+                  icon: const Icon(Icons.calendar_month_outlined, size: 18),
+                  label: const Text('Visit'),
+                ),
+              ],
+            ),
+            const Divider(),
             Align(
               alignment: Alignment.centerLeft,
               child: Text(

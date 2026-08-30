@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class SyncStatus {
@@ -30,7 +31,15 @@ class SyncStatus {
 
 class SyncStatusService {
   static const _key = 'cloud_sync_status';
+  static final ValueNotifier<int> changes = ValueNotifier(0);
+  static final ValueNotifier<bool> isSyncing = ValueNotifier(false);
   final FlutterSecureStorage _storage = const FlutterSecureStorage();
+
+  static void setSyncing(bool value) {
+    if (isSyncing.value == value) return;
+    isSyncing.value = value;
+    changes.value++;
+  }
 
   Future<SyncStatus> load() async {
     final value = await _storage.read(key: _key);
@@ -66,6 +75,8 @@ class SyncStatusService {
     });
   }
 
-  Future<void> _save(Map<String, Object?> value) =>
-      _storage.write(key: _key, value: jsonEncode(value));
+  Future<void> _save(Map<String, Object?> value) async {
+    await _storage.write(key: _key, value: jsonEncode(value));
+    changes.value++;
+  }
 }

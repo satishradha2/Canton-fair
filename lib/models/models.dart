@@ -263,6 +263,7 @@ class Meeting {
   final String outcome;
   final String priority;
   final String notes;
+  final String assigneeEmail;
   final bool completed;
 
   Meeting({
@@ -274,6 +275,7 @@ class Meeting {
     this.outcome = 'Interested',
     this.priority = 'Medium',
     this.notes = '',
+    this.assigneeEmail = '',
     this.completed = false,
   });
 
@@ -286,6 +288,7 @@ class Meeting {
         'outcome': outcome,
         'priority': priority,
         'notes': notes,
+        'assignee_email': assigneeEmail,
         'completed': completed ? 1 : 0,
       };
 
@@ -300,6 +303,7 @@ class Meeting {
         outcome: map['outcome'] as String? ?? 'Interested',
         priority: map['priority'] as String? ?? 'Medium',
         notes: map['notes'] as String? ?? '',
+        assigneeEmail: map['assignee_email'] as String? ?? '',
         completed: (map['completed'] as int) == 1,
       );
 }

@@ -3,6 +3,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'data/update_service.dart';
 import 'data/app_lock_service.dart';
 import 'data/language_service.dart';
+import 'data/sync_status_service.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/captures_screen.dart';
 import 'screens/shortlist_screen.dart';
@@ -21,7 +22,7 @@ class CantonFairApp extends StatefulWidget {
 
 class _CantonFairAppState extends State<CantonFairApp>
     with WidgetsBindingObserver {
-  int _index = 0;
+  int _index = 1;
   final _updates = UpdateService();
   bool _checkedStartupUpdate = false;
   final _appLock = AppLockService();
@@ -29,10 +30,18 @@ class _CantonFairAppState extends State<CantonFairApp>
   bool _lockReady = false;
   bool _locked = false;
   String _language = 'en';
+  final ValueNotifier<CaptureQuickAction?> _captureQuickAction =
+      ValueNotifier(null);
 
   late final _screens = [
-    DashboardScreen(onCapture: () => setState(() => _index = 1)),
-    CapturesScreen(),
+    DashboardScreen(
+      onCapture: () => _openCapture(CaptureQuickAction.manual),
+      onScanQr: () => _openCapture(CaptureQuickAction.qr),
+      onScanCard: () => _openCapture(CaptureQuickAction.card),
+      onSync: () => setState(() => _index = 6),
+      onFollowUps: () => setState(() => _index = 3),
+    ),
+    CapturesScreen(quickAction: _captureQuickAction),
     ShortlistScreen(),
     FollowUpScreen(),
     AnalyticsScreen(),
@@ -66,7 +75,13 @@ class _CantonFairAppState extends State<CantonFairApp>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _captureQuickAction.dispose();
     super.dispose();
+  }
+
+  void _openCapture(CaptureQuickAction action) {
+    setState(() => _index = 1);
+    _captureQuickAction.value = action;
   }
 
   @override
@@ -184,27 +199,87 @@ class _CantonFairAppState extends State<CantonFairApp>
         child: Builder(
           builder: (context) => Scaffold(
             body: _screens[_index],
-            bottomNavigationBar: NavigationBar(
-              selectedIndex: _index > 2 ? 3 : _index,
-              onDestinationSelected: (i) {
-                if (i == 3) {
-                  _openMore(context);
-                } else {
-                  setState(() => _index = i);
-                }
-              },
-              destinations: [
-                NavigationDestination(
-                    icon: const Icon(Icons.dashboard),
-                    label: tr(context, 'dashboard')),
-                NavigationDestination(
-                    icon: const Icon(Icons.record_voice_over),
-                    label: tr(context, 'capture')),
-                NavigationDestination(
-                    icon: const Icon(Icons.star),
-                    label: tr(context, 'shortlist')),
-                NavigationDestination(
-                    icon: const Icon(Icons.more_horiz), label: 'More'),
+            bottomNavigationBar: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ValueListenableBuilder<int>(
+                  valueListenable: SyncStatusService.changes,
+                  builder: (context, _, __) => FutureBuilder<SyncStatus>(
+                    future: SyncStatusService().load(),
+                    builder: (context, snapshot) {
+                      final status = snapshot.data ?? const SyncStatus();
+                      final syncing = SyncStatusService.isSyncing.value;
+                      final needsAttention =
+                          status.lastError != null || status.conflicts > 0;
+                      final label = syncing
+                          ? 'Syncing'
+                          : needsAttention
+                              ? 'Needs attention'
+                              : status.lastSyncedAt == null
+                                  ? 'Saved locally'
+                                  : 'Up to date';
+                      final color = syncing
+                          ? Colors.blue.shade700
+                          : needsAttention
+                              ? Colors.orange.shade800
+                              : status.lastSyncedAt == null
+                                  ? Colors.blueGrey
+                                  : Colors.teal.shade700;
+                      return Material(
+                        color: color.withValues(alpha: 0.08),
+                        child: InkWell(
+                          onTap: () => setState(() => _index = 6),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                                vertical: 6, horizontal: 16),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                    syncing
+                                        ? Icons.sync
+                                        : needsAttention
+                                            ? Icons.cloud_off_outlined
+                                            : Icons.cloud_done_outlined,
+                                    size: 16,
+                                    color: color),
+                                const SizedBox(width: 6),
+                                Text(label,
+                                    style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w700,
+                                        color: color)),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                NavigationBar(
+                  selectedIndex: _index > 2 ? 3 : _index,
+                  onDestinationSelected: (i) {
+                    if (i == 3) {
+                      _openMore(context);
+                    } else {
+                      setState(() => _index = i);
+                    }
+                  },
+                  destinations: [
+                    NavigationDestination(
+                        icon: const Icon(Icons.dashboard),
+                        label: tr(context, 'dashboard')),
+                    NavigationDestination(
+                        icon: const Icon(Icons.record_voice_over),
+                        label: tr(context, 'capture')),
+                    NavigationDestination(
+                        icon: const Icon(Icons.star),
+                        label: tr(context, 'shortlist')),
+                    const NavigationDestination(
+                        icon: Icon(Icons.more_horiz), label: 'More'),
+                  ],
+                ),
               ],
             ),
           ),

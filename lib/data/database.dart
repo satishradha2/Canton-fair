@@ -401,6 +401,12 @@ class TradeDatabase {
     return rows.map((e) => Exhibitor.fromMap(e)).toList();
   }
 
+  Future<Exhibitor?> getExhibitorById(int id) async {
+    final rows = await queryAll('exhibitors', where: 'id = ?', whereArgs: [id]);
+    if (rows.isEmpty) return null;
+    return Exhibitor.fromMap(rows.first);
+  }
+
   Future<List<Contact>> getContacts(int exhibitorId) async {
     final rows = await queryAll(
       'contacts',

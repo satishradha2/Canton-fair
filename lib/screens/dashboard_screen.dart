@@ -9,8 +9,19 @@ import '../widgets/stat_card.dart';
 
 class DashboardScreen extends StatefulWidget {
   final VoidCallback? onCapture;
+  final VoidCallback? onScanQr;
+  final VoidCallback? onScanCard;
+  final VoidCallback? onSync;
+  final VoidCallback? onFollowUps;
 
-  const DashboardScreen({super.key, this.onCapture});
+  const DashboardScreen({
+    super.key,
+    this.onCapture,
+    this.onScanQr,
+    this.onScanCard,
+    this.onSync,
+    this.onFollowUps,
+  });
 
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
@@ -93,6 +104,156 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
             ],
             children: [
+              SectionPanel(
+                title: 'Quick capture',
+                subtitle: 'Choose the fastest way to record a supplier.',
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final compact = constraints.maxWidth < 390;
+                    return Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        SizedBox(
+                          width: compact ? double.infinity : 150,
+                          child: ElevatedButton.icon(
+                            onPressed: widget.onCapture,
+                            icon: const Icon(Icons.add_business_outlined),
+                            label: const Text('Add supplier'),
+                          ),
+                        ),
+                        SizedBox(
+                          width: compact ? double.infinity : 120,
+                          child: OutlinedButton.icon(
+                            onPressed: widget.onScanQr,
+                            icon: const Icon(Icons.qr_code_scanner),
+                            label: const Text('Scan QR'),
+                          ),
+                        ),
+                        SizedBox(
+                          width: compact ? double.infinity : 130,
+                          child: OutlinedButton.icon(
+                            onPressed: widget.onScanCard,
+                            icon: const Icon(Icons.document_scanner_outlined),
+                            label: const Text('Scan card'),
+                          ),
+                        ),
+                      ],
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 16),
+              SectionPanel(
+                title: 'Today',
+                subtitle: 'Your overdue and due-today follow-ups.',
+                trailing: TextButton(
+                  onPressed: widget.onFollowUps,
+                  child: const Text('View all'),
+                ),
+                child: FutureBuilder<List<Meeting>>(
+                  future: db.getDueFollowUps(),
+                  builder: (context, dueSnapshot) {
+                    final now = DateTime.now();
+                    final due = (dueSnapshot.data ?? const <Meeting>[])
+                        .where((meeting) {
+                      final date = meeting.followUpDate;
+                      if (date == null || meeting.completed) return false;
+                      return date.isBefore(now.add(const Duration(days: 1)));
+                    }).toList()
+                      ..sort(
+                          (a, b) => a.followUpDate!.compareTo(b.followUpDate!));
+                    if (dueSnapshot.connectionState != ConnectionState.done) {
+                      return const LinearProgressIndicator();
+                    }
+                    if (due.isEmpty) {
+                      return Row(
+                        children: [
+                          const Icon(Icons.task_alt, color: AppColors.teal),
+                          const SizedBox(width: 10),
+                          const Expanded(
+                              child: Text('No follow-ups due today.')),
+                          TextButton.icon(
+                              onPressed: widget.onSync,
+                              icon: const Icon(Icons.sync),
+                              label: const Text('Sync')),
+                        ],
+                      );
+                    }
+                    return Column(
+                      children: due
+                          .take(3)
+                          .map((meeting) => ListTile(
+                                contentPadding: EdgeInsets.zero,
+                                leading: Icon(
+                                    meeting.followUpDate!.isBefore(now)
+                                        ? Icons.warning_amber_outlined
+                                        : Icons.schedule,
+                                    color: meeting.followUpDate!.isBefore(now)
+                                        ? AppColors.danger
+                                        : AppColors.amber),
+                                title: Text(
+                                    meeting.assigneeEmail.isEmpty
+                                        ? 'Unassigned follow-up'
+                                        : meeting.assigneeEmail,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis),
+                                subtitle: Text(
+                                    '${meeting.priority} priority | due ${meeting.followUpDate!.toLocal()}'),
+                                trailing: const Icon(Icons.chevron_right),
+                                onTap: widget.onFollowUps,
+                              ))
+                          .toList(),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 16),
+              if (stats.every((item) => (item['value'] as int? ?? 0) == 0)) ...[
+                SectionPanel(
+                  title: 'Get started',
+                  subtitle:
+                      'A short path to a useful shared sourcing workspace.',
+                  child: Column(
+                    children: [
+                      const ListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        leading: Icon(Icons.looks_one_outlined),
+                        title: Text('Create your first trip'),
+                        subtitle: Text(
+                            'Organize suppliers by fair visit or sourcing trip.'),
+                      ),
+                      const ListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        leading: Icon(Icons.looks_two_outlined),
+                        title: Text('Capture a supplier'),
+                        subtitle: Text(
+                            'Record booth, contacts, products, and next steps.'),
+                      ),
+                      const ListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        leading: Icon(Icons.looks_3_outlined),
+                        title: Text('Invite a teammate and sync'),
+                        subtitle: Text(
+                            'Use Settings when you are ready to share the workspace.'),
+                      ),
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: widget.onCapture,
+                          icon: const Icon(Icons.add_business_outlined),
+                          label: const Text('Capture first supplier'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
               LayoutBuilder(
                 builder: (context, constraints) {
                   final width = constraints.maxWidth;
