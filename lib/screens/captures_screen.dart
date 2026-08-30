@@ -2244,7 +2244,7 @@ class _CapturesScreenState extends State<CapturesScreen> {
       future: _visitQueues,
       builder: (context, snapshot) {
         if (!snapshot.hasData) {
-          return const SectionPanel(
+          return SectionPanel(
             title: tr(context, 'visitQueues'),
             child: SizedBox(
                 height: 56, child: Center(child: CircularProgressIndicator())),
