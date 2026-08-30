@@ -5,6 +5,8 @@ class AppColors {
   static const muted = Color(0xFF657083);
   static const line = Color(0xFFE3E8EF);
   static const surface = Color(0xFFF7F9FC);
+  static const controlSurface = Color(0xFFFFFFFF);
+  static const controlSelected = Color(0xFF168579);
   static const primary = Color(0xFF2454A6);
   static const teal = Color(0xFF168579);
   static const amber = Color(0xFFB7791F);
@@ -22,6 +24,9 @@ ThemeData buildAppTheme() {
     onError: Colors.white,
     surface: Colors.white,
     onSurface: AppColors.ink,
+    surfaceContainerHighest: Color(0xFFF0F4F8),
+    onSurfaceVariant: AppColors.muted,
+    outline: AppColors.line,
   );
 
   final inputBorder = OutlineInputBorder(
@@ -65,6 +70,10 @@ ThemeData buildAppTheme() {
       ),
       contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       labelStyle: const TextStyle(color: AppColors.muted),
+      floatingLabelStyle: const TextStyle(color: AppColors.primary),
+      hintStyle: const TextStyle(color: AppColors.muted),
+      prefixIconColor: AppColors.primary,
+      suffixIconColor: AppColors.muted,
     ),
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(
@@ -82,10 +91,30 @@ ThemeData buildAppTheme() {
       ),
     ),
     chipTheme: const ChipThemeData(
+      backgroundColor: AppColors.controlSurface,
+      selectedColor: AppColors.controlSelected,
+      disabledColor: Color(0xFFF0F2F5),
       side: BorderSide(color: AppColors.line),
       shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.all(Radius.circular(8))),
-      labelStyle: TextStyle(fontWeight: FontWeight.w600),
+      labelStyle: TextStyle(color: AppColors.ink, fontWeight: FontWeight.w600),
+      secondaryLabelStyle:
+          TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+      checkmarkColor: Colors.white,
+      iconTheme: IconThemeData(color: AppColors.primary, size: 18),
+    ),
+    dropdownMenuTheme: const DropdownMenuThemeData(
+      textStyle: TextStyle(color: AppColors.ink),
+      inputDecorationTheme: InputDecorationTheme(
+        hintStyle: TextStyle(color: AppColors.muted),
+      ),
+    ),
+    textTheme: const TextTheme(
+      bodyLarge: TextStyle(color: AppColors.ink),
+      bodyMedium: TextStyle(color: AppColors.ink),
+      bodySmall: TextStyle(color: AppColors.muted),
+      labelLarge: TextStyle(color: AppColors.ink, fontWeight: FontWeight.w700),
+      labelMedium: TextStyle(color: AppColors.ink, fontWeight: FontWeight.w600),
     ),
     navigationBarTheme: NavigationBarThemeData(
       backgroundColor: Colors.white,
