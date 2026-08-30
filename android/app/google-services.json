@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "135500747138",
+    "project_id": "canton-fair-a4b20",
+    "storage_bucket": "canton-fair-a4b20.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:135500747138:android:11021e2371dc353152bf9b",
+        "android_client_info": {
+          "package_name": "com.example.canton_fair_crm"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBbykSkYQM-psZDLLDku9MfdoF7y5p2gwY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
