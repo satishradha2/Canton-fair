@@ -51,6 +51,11 @@ class Exhibitor {
   final bool shortlisted;
   final int rating;
   final String tagsJson;
+  final int qualityScore;
+  final int responseSpeedScore;
+  final int trustScore;
+  final int moqFitScore;
+  final int reliabilityScore;
 
   Exhibitor({
     this.id,
@@ -64,7 +69,20 @@ class Exhibitor {
     this.shortlisted = false,
     this.rating = 0,
     this.tagsJson = '[]',
+    this.qualityScore = 0,
+    this.responseSpeedScore = 0,
+    this.trustScore = 0,
+    this.moqFitScore = 0,
+    this.reliabilityScore = 0,
   });
+
+  double get decisionScore =>
+      (qualityScore +
+          responseSpeedScore +
+          trustScore +
+          moqFitScore +
+          reliabilityScore) *
+      4.0;
 
   List<String> get tags {
     try {
@@ -87,6 +105,11 @@ class Exhibitor {
         'shortlisted': shortlisted ? 1 : 0,
         'rating': rating,
         'tags_json': tagsJson,
+        'quality_score': qualityScore,
+        'response_speed_score': responseSpeedScore,
+        'trust_score': trustScore,
+        'moq_fit_score': moqFitScore,
+        'reliability_score': reliabilityScore,
       };
 
   factory Exhibitor.fromMap(Map<String, dynamic> map) => Exhibitor(
@@ -101,6 +124,11 @@ class Exhibitor {
         shortlisted: (map['shortlisted'] as int) == 1,
         rating: map['rating'] as int? ?? 0,
         tagsJson: map['tags_json'] as String? ?? '[]',
+        qualityScore: map['quality_score'] as int? ?? 0,
+        responseSpeedScore: map['response_speed_score'] as int? ?? 0,
+        trustScore: map['trust_score'] as int? ?? 0,
+        moqFitScore: map['moq_fit_score'] as int? ?? 0,
+        reliabilityScore: map['reliability_score'] as int? ?? 0,
       );
 }
 

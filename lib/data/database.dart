@@ -20,7 +20,7 @@ class TradeDatabase {
     final path = join(dbPath, 'canton_fair_crm.db');
     return openDatabase(
       path,
-      version: 1,
+      version: 2,
       onCreate: (db, version) async {
         await db.execute('''
         CREATE TABLE trips(
@@ -45,6 +45,11 @@ class TradeDatabase {
           shortlisted INTEGER NOT NULL DEFAULT 0,
           rating INTEGER NOT NULL DEFAULT 0,
           tags_json TEXT NOT NULL DEFAULT '[]',
+          quality_score INTEGER NOT NULL DEFAULT 0,
+          response_speed_score INTEGER NOT NULL DEFAULT 0,
+          trust_score INTEGER NOT NULL DEFAULT 0,
+          moq_fit_score INTEGER NOT NULL DEFAULT 0,
+          reliability_score INTEGER NOT NULL DEFAULT 0,
           created_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
         ''');
@@ -120,6 +125,20 @@ class TradeDatabase {
         ''');
         await db.execute(
             'CREATE INDEX idx_attachment_owner ON attachments(owner_type, owner_id);');
+      },
+      onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 2) {
+          await db.execute(
+              'ALTER TABLE exhibitors ADD COLUMN quality_score INTEGER NOT NULL DEFAULT 0');
+          await db.execute(
+              'ALTER TABLE exhibitors ADD COLUMN response_speed_score INTEGER NOT NULL DEFAULT 0');
+          await db.execute(
+              'ALTER TABLE exhibitors ADD COLUMN trust_score INTEGER NOT NULL DEFAULT 0');
+          await db.execute(
+              'ALTER TABLE exhibitors ADD COLUMN moq_fit_score INTEGER NOT NULL DEFAULT 0');
+          await db.execute(
+              'ALTER TABLE exhibitors ADD COLUMN reliability_score INTEGER NOT NULL DEFAULT 0');
+        }
       },
     );
   }

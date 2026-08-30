@@ -192,8 +192,7 @@ class _ShortlistScreenState extends State<ShortlistScreen> {
   }
 
   Future<List<Exhibitor>> _loadExhibitors() async {
-    final rows = await db.queryAll('exhibitors',
-        where: 'shortlisted = 1', orderBy: 'rating DESC');
+    final rows = await db.queryAll('exhibitors', where: 'shortlisted = 1');
     final tripIds = _tripDayOnly ? await _loadTripDayIds() : null;
     if (tripIds != null && tripIds.isEmpty) return [];
 
@@ -202,7 +201,9 @@ class _ShortlistScreenState extends State<ShortlistScreen> {
         : rows
             .where((row) => tripIds.contains(row['trip_id'] as int?))
             .toList();
-    return effectiveRows.map((e) => Exhibitor.fromMap(e)).toList();
+    final exhibitors = effectiveRows.map(Exhibitor.fromMap).toList()
+      ..sort((a, b) => b.decisionScore.compareTo(a.decisionScore));
+    return exhibitors;
   }
 
   Future<void> _toggleExhibitorShortlist(Exhibitor e) async {
@@ -633,6 +634,45 @@ class _ShortlistScreenState extends State<ShortlistScreen> {
           ),
           const SizedBox(height: 16),
           SectionPanel(
+            title: 'Top 10 supplier snapshot',
+            subtitle:
+                'Ranked by the quality, response, trust, MOQ fit, and reliability scorecard.',
+            child: FutureBuilder<List<Exhibitor>>(
+              future: _shortlistExhibitors,
+              builder: (context, snap) {
+                if (!snap.hasData || snap.data!.isEmpty) {
+                  return const EmptyState(
+                    icon: Icons.workspace_premium_outlined,
+                    title: 'No ranked suppliers yet',
+                    message:
+                        'Shortlist suppliers and complete their scorecards to create a Top 10.',
+                  );
+                }
+                return Column(
+                  children:
+                      snap.data!.take(10).toList().asMap().entries.map((entry) {
+                    final supplier = entry.value;
+                    return ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: CircleAvatar(child: Text('${entry.key + 1}')),
+                      title: Text(supplier.name,
+                          maxLines: 1, overflow: TextOverflow.ellipsis),
+                      subtitle: Text(
+                          'Quality ${supplier.qualityScore} | Response ${supplier.responseSpeedScore} | Trust ${supplier.trustScore}'),
+                      trailing: InfoChip(
+                        label:
+                            '${supplier.decisionScore.toStringAsFixed(0)} / 100',
+                        icon: Icons.verified,
+                        color: AppColors.teal,
+                      ),
+                    );
+                  }).toList(),
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 16),
+          SectionPanel(
             title: 'Shortlisted suppliers',
             child: FutureBuilder<List<Exhibitor>>(
               future: _shortlistExhibitors,
@@ -653,7 +693,7 @@ class _ShortlistScreenState extends State<ShortlistScreen> {
                       title: Text(e.name,
                           maxLines: 1, overflow: TextOverflow.ellipsis),
                       subtitle: Text(
-                          'Booth ${e.booth.isEmpty ? "-" : e.booth}  |  Rating ${e.rating}'),
+                          'Booth ${e.booth.isEmpty ? "-" : e.booth}  |  Decision score ${e.decisionScore.toStringAsFixed(0)} / 100'),
                       trailing: IconButton(
                         icon: const Icon(Icons.star_border),
                         tooltip: 'Remove from shortlist',

@@ -533,6 +533,11 @@ class _CapturesScreenState extends State<CapturesScreen> {
                   shortlisted: shortlisted,
                   rating: rating,
                   tagsJson: e.tagsJson,
+                  qualityScore: e.qualityScore,
+                  responseSpeedScore: e.responseSpeedScore,
+                  trustScore: e.trustScore,
+                  moqFitScore: e.moqFitScore,
+                  reliabilityScore: e.reliabilityScore,
                 ).toMap()
                   ..remove('id'),
               );
@@ -1520,6 +1525,97 @@ class _CapturesScreenState extends State<CapturesScreen> {
     );
   }
 
+  Future<void> _openSupplierScorecard(Exhibitor exhibitor) async {
+    var quality = exhibitor.qualityScore;
+    var responseSpeed = exhibitor.responseSpeedScore;
+    var trust = exhibitor.trustScore;
+    var moqFit = exhibitor.moqFitScore;
+    var reliability = exhibitor.reliabilityScore;
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          Widget scoreField(
+              String label, int value, ValueChanged<double> onChanged) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(label),
+                    Text('$value / 5',
+                        style: const TextStyle(fontWeight: FontWeight.w700)),
+                  ],
+                ),
+                Slider(
+                  value: value.toDouble(),
+                  min: 0,
+                  max: 5,
+                  divisions: 5,
+                  label: '$value',
+                  onChanged: onChanged,
+                ),
+              ],
+            );
+          }
+
+          final decisionScore =
+              (quality + responseSpeed + trust + moqFit + reliability) * 4;
+          return AlertDialog(
+            title: const Text('Supplier scorecard'),
+            content: SingleChildScrollView(
+              child: SizedBox(
+                width: 360,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(exhibitor.name,
+                        style: const TextStyle(fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 8),
+                    Text('Decision score: $decisionScore / 100'),
+                    const SizedBox(height: 12),
+                    scoreField('Quality', quality,
+                        (v) => setDialogState(() => quality = v.round())),
+                    scoreField('Response speed', responseSpeed,
+                        (v) => setDialogState(() => responseSpeed = v.round())),
+                    scoreField('Trust', trust,
+                        (v) => setDialogState(() => trust = v.round())),
+                    scoreField('MOQ fit', moqFit,
+                        (v) => setDialogState(() => moqFit = v.round())),
+                    scoreField('Reliability', reliability,
+                        (v) => setDialogState(() => reliability = v.round())),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Cancel')),
+              ElevatedButton(
+                onPressed: () async {
+                  await db.update('exhibitors', exhibitor.id!, {
+                    'quality_score': quality,
+                    'response_speed_score': responseSpeed,
+                    'trust_score': trust,
+                    'moq_fit_score': moqFit,
+                    'reliability_score': reliability,
+                  });
+                  _load();
+                  if (!mounted) return;
+                  Navigator.pop(ctx);
+                },
+                child: const Text('Save scorecard'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
   Widget _exhibitorActions(Exhibitor e) {
     return PopupMenuButton<String>(
       onSelected: (value) async {
@@ -1533,6 +1629,8 @@ class _CapturesScreenState extends State<CapturesScreen> {
           await _openAttachmentPicker(ownerId: e.id!, ownerType: 'exhibitor');
         } else if (value == 'edit') {
           await _openEditExhibitorSheet(e);
+        } else if (value == 'scorecard') {
+          await _openSupplierScorecard(e);
         } else if (value == 'merge') {
           await _openMergeDuplicateDialog(e);
         } else if (value == 'delete') {
@@ -1541,6 +1639,7 @@ class _CapturesScreenState extends State<CapturesScreen> {
       },
       itemBuilder: (_) => const [
         PopupMenuItem(value: 'edit', child: Text('Edit supplier')),
+        PopupMenuItem(value: 'scorecard', child: Text('Supplier scorecard')),
         PopupMenuItem(value: 'merge', child: Text('Merge duplicate')),
         PopupMenuItem(value: 'delete', child: Text('Delete supplier')),
         PopupMenuItem(value: 'contact', child: Text('Add contact')),
