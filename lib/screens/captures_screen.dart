@@ -32,8 +32,18 @@ class _CapturesScreenState extends State<CapturesScreen> {
   int? _tripFilter;
   String _query = '';
   bool _shortlistOnly = false;
+  String _countryFilter = '';
+  int _minRating = 0;
+  String _visitStatus = 'all';
+  bool _expiringQuotesOnly = false;
+  final _queryController = TextEditingController();
+  final _minPriceController = TextEditingController();
+  final _maxPriceController = TextEditingController();
+  final _minMoqController = TextEditingController();
+  final _maxMoqController = TextEditingController();
   late Future<List<Trip>> _trips;
   late Future<List<Exhibitor>> _exhibitors;
+  late Future<List<SavedSupplierFilter>> _savedFilters;
   late Future<_VisitQueues> _visitQueues;
   late Future<List<Exhibitor>> _itinerary;
   late DateTime _itineraryDate;
@@ -50,19 +60,154 @@ class _CapturesScreenState extends State<CapturesScreen> {
     setState(() {
       _visitQueues = _loadVisitQueues();
       _itinerary = _loadItinerary();
-      if (_query.isNotEmpty) {
-        _exhibitors = db.searchExhibitors(_query);
-      } else if (_shortlistOnly) {
-        _exhibitors = db.queryAll('exhibitors', orderBy: 'name ASC').then(
-              (rows) => rows
-                  .map((e) => Exhibitor.fromMap(e))
-                  .where((it) => it.shortlisted)
-                  .toList(),
-            );
-      } else {
-        _exhibitors = db.getExhibitors(_tripFilter);
-      }
+      _savedFilters = db.getSavedSupplierFilters();
+      _exhibitors = _loadFilteredExhibitors();
     });
+  }
+
+  @override
+  void dispose() {
+    _queryController.dispose();
+    _minPriceController.dispose();
+    _maxPriceController.dispose();
+    _minMoqController.dispose();
+    _maxMoqController.dispose();
+    super.dispose();
+  }
+
+  Future<List<Exhibitor>> _loadFilteredExhibitors() async {
+    final suppliers = _query.isEmpty
+        ? await db.getExhibitors(_tripFilter)
+        : await db.searchExhibitors(_query);
+    final minPrice = double.tryParse(_minPriceController.text.trim());
+    final maxPrice = double.tryParse(_maxPriceController.text.trim());
+    final minMoq = double.tryParse(_minMoqController.text.trim());
+    final maxMoq = double.tryParse(_maxMoqController.text.trim());
+    final now = DateTime.now();
+    final quoteWindow = now.add(const Duration(days: 7));
+    final filtered = <Exhibitor>[];
+
+    for (final supplier in suppliers) {
+      if (_tripFilter != null && supplier.tripId != _tripFilter) continue;
+      if (_shortlistOnly && !supplier.shortlisted) continue;
+      if (_countryFilter.isNotEmpty &&
+          !supplier.country
+              .toLowerCase()
+              .contains(_countryFilter.toLowerCase())) {
+        continue;
+      }
+      if (supplier.rating < _minRating) continue;
+      if (_visitStatus == 'need' && supplier.visitedAt != null) continue;
+      if (_visitStatus == 'visited' && supplier.visitedAt == null) continue;
+
+      final needsProductFilter = minPrice != null ||
+          maxPrice != null ||
+          minMoq != null ||
+          maxMoq != null ||
+          _expiringQuotesOnly;
+      if (!needsProductFilter) {
+        filtered.add(supplier);
+        continue;
+      }
+
+      final products = await db.getProducts(supplier.id!);
+      var matches = false;
+      for (final product in products) {
+        final priceMatches = (minPrice == null ||
+                (product.quotedPrice != null &&
+                    product.quotedPrice! >= minPrice)) &&
+            (maxPrice == null ||
+                (product.quotedPrice != null &&
+                    product.quotedPrice! <= maxPrice));
+        final moqMatches = (minMoq == null ||
+                (product.moq != null && product.moq! >= minMoq)) &&
+            (maxMoq == null || (product.moq != null && product.moq! <= maxMoq));
+        if (!priceMatches || !moqMatches) continue;
+        if (_expiringQuotesOnly) {
+          final quotes = await db.getQuotes(product.id!);
+          if (!quotes.any((quote) =>
+              quote.validUntil != null &&
+              !quote.validUntil!.isBefore(now) &&
+              quote.validUntil!.isBefore(quoteWindow))) {
+            continue;
+          }
+        }
+        matches = true;
+        break;
+      }
+      if (matches) filtered.add(supplier);
+    }
+    return filtered;
+  }
+
+  void _clearAdvancedFilters() {
+    _countryFilter = '';
+    _minRating = 0;
+    _visitStatus = 'all';
+    _expiringQuotesOnly = false;
+    _minPriceController.clear();
+    _maxPriceController.clear();
+    _minMoqController.clear();
+    _maxMoqController.clear();
+    _load();
+  }
+
+  Future<void> _saveCurrentFilter() async {
+    final nameController = TextEditingController();
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Save current filters'),
+        content: TextField(
+          controller: nameController,
+          autofocus: true,
+          decoration: const InputDecoration(labelText: 'Filter name'),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () async {
+              final name = nameController.text.trim();
+              if (name.isEmpty) return;
+              await db.saveSupplierFilter(SavedSupplierFilter(
+                name: name,
+                query: _query,
+                country: _countryFilter,
+                minRating: _minRating,
+                shortlistOnly: _shortlistOnly,
+                visitStatus: _visitStatus,
+                minPrice: double.tryParse(_minPriceController.text.trim()),
+                maxPrice: double.tryParse(_maxPriceController.text.trim()),
+                minMoq: double.tryParse(_minMoqController.text.trim()),
+                maxMoq: double.tryParse(_maxMoqController.text.trim()),
+                expiringQuotesOnly: _expiringQuotesOnly,
+              ));
+              _load();
+              if (!mounted) return;
+              Navigator.pop(ctx);
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    nameController.dispose();
+  }
+
+  void _applySavedFilter(SavedSupplierFilter filter) {
+    _query = filter.query;
+    _queryController.text = filter.query;
+    _countryFilter = filter.country;
+    _minRating = filter.minRating;
+    _shortlistOnly = filter.shortlistOnly;
+    _visitStatus = filter.visitStatus;
+    _expiringQuotesOnly = filter.expiringQuotesOnly;
+    _minPriceController.text = filter.minPrice?.toString() ?? '';
+    _maxPriceController.text = filter.maxPrice?.toString() ?? '';
+    _minMoqController.text = filter.minMoq?.toString() ?? '';
+    _maxMoqController.text = filter.maxMoq?.toString() ?? '';
+    _load();
   }
 
   Future<List<Exhibitor>> _loadItinerary() async {
@@ -2270,9 +2415,11 @@ class _CapturesScreenState extends State<CapturesScreen> {
                     ),
                     const SizedBox(height: 10),
                     TextField(
+                      controller: _queryController,
                       decoration: const InputDecoration(
                         prefixIcon: Icon(Icons.search),
-                        hintText: 'Search supplier, booth, or category',
+                        hintText:
+                            'Search supplier, contact, product, booth, tag',
                       ),
                       onChanged: (v) {
                         _query = v.trim();
@@ -2295,6 +2442,16 @@ class _CapturesScreenState extends State<CapturesScreen> {
                           },
                         ),
                         TextButton.icon(
+                          onPressed: _saveCurrentFilter,
+                          icon: const Icon(Icons.bookmark_add_outlined),
+                          label: const Text('Save filters'),
+                        ),
+                        TextButton.icon(
+                          onPressed: _clearAdvancedFilters,
+                          icon: const Icon(Icons.filter_alt_off),
+                          label: const Text('Clear filters'),
+                        ),
+                        TextButton.icon(
                           onPressed: _tripFilter == null
                               ? null
                               : () => _openCloseTripSheet(_tripFilter!),
@@ -2311,6 +2468,162 @@ class _CapturesScreenState extends State<CapturesScreen> {
                               foregroundColor: AppColors.danger),
                         ),
                       ],
+                    ),
+                    const SizedBox(height: 8),
+                    ExpansionTile(
+                      tilePadding: EdgeInsets.zero,
+                      title: const Text('Advanced filters',
+                          style: TextStyle(fontWeight: FontWeight.w700)),
+                      children: [
+                        TextField(
+                          decoration: const InputDecoration(
+                              labelText: 'Country contains'),
+                          onChanged: (value) {
+                            _countryFilter = value.trim();
+                            _load();
+                          },
+                        ),
+                        const SizedBox(height: 10),
+                        DropdownButtonFormField<int>(
+                          value: _minRating,
+                          decoration: const InputDecoration(
+                              labelText: 'Minimum rating'),
+                          items: List.generate(
+                            6,
+                            (index) => DropdownMenuItem(
+                              value: index,
+                              child: Text(index == 0
+                                  ? 'Any rating'
+                                  : '$index stars or higher'),
+                            ),
+                          ),
+                          onChanged: (value) {
+                            _minRating = value ?? 0;
+                            _load();
+                          },
+                        ),
+                        const SizedBox(height: 10),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            ChoiceChip(
+                              label: const Text('All visits'),
+                              selected: _visitStatus == 'all',
+                              onSelected: (_) {
+                                _visitStatus = 'all';
+                                _load();
+                              },
+                            ),
+                            ChoiceChip(
+                              label: const Text('Need to visit'),
+                              selected: _visitStatus == 'need',
+                              onSelected: (_) {
+                                _visitStatus = 'need';
+                                _load();
+                              },
+                            ),
+                            ChoiceChip(
+                              label: const Text('Visited'),
+                              selected: _visitStatus == 'visited',
+                              onSelected: (_) {
+                                _visitStatus = 'visited';
+                                _load();
+                              },
+                            ),
+                            FilterChip(
+                              label: const Text('Quotes expire in 7 days'),
+                              selected: _expiringQuotesOnly,
+                              onSelected: (value) {
+                                _expiringQuotesOnly = value;
+                                _load();
+                              },
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextField(
+                                controller: _minPriceController,
+                                keyboardType:
+                                    const TextInputType.numberWithOptions(
+                                        decimal: true),
+                                decoration: const InputDecoration(
+                                    labelText: 'Min price'),
+                                onChanged: (_) => _load(),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: TextField(
+                                controller: _maxPriceController,
+                                keyboardType:
+                                    const TextInputType.numberWithOptions(
+                                        decimal: true),
+                                decoration: const InputDecoration(
+                                    labelText: 'Max price'),
+                                onChanged: (_) => _load(),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextField(
+                                controller: _minMoqController,
+                                keyboardType:
+                                    const TextInputType.numberWithOptions(
+                                        decimal: true),
+                                decoration:
+                                    const InputDecoration(labelText: 'Min MOQ'),
+                                onChanged: (_) => _load(),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: TextField(
+                                controller: _maxMoqController,
+                                keyboardType:
+                                    const TextInputType.numberWithOptions(
+                                        decimal: true),
+                                decoration:
+                                    const InputDecoration(labelText: 'Max MOQ'),
+                                onChanged: (_) => _load(),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                    FutureBuilder<List<SavedSupplierFilter>>(
+                      future: _savedFilters,
+                      builder: (context, snapshot) {
+                        if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                          return const SizedBox.shrink();
+                        }
+                        return Padding(
+                          padding: const EdgeInsets.only(top: 10),
+                          child: Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: snapshot.data!.map((filter) {
+                              return InputChip(
+                                label: Text(filter.name),
+                                onPressed: () => _applySavedFilter(filter),
+                                onDeleted: () async {
+                                  await db
+                                      .deleteSavedSupplierFilter(filter.id!);
+                                  _load();
+                                },
+                              );
+                            }).toList(),
+                          ),
+                        );
+                      },
                     ),
                   ],
                 ),

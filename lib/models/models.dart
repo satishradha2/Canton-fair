@@ -391,3 +391,70 @@ class Attachment {
         createdAt: DateTime.parse(map['created_at']),
       );
 }
+
+class SavedSupplierFilter {
+  final int? id;
+  final String name;
+  final String query;
+  final String country;
+  final int minRating;
+  final bool shortlistOnly;
+  final String visitStatus;
+  final double? minPrice;
+  final double? maxPrice;
+  final double? minMoq;
+  final double? maxMoq;
+  final bool expiringQuotesOnly;
+
+  const SavedSupplierFilter({
+    this.id,
+    required this.name,
+    this.query = '',
+    this.country = '',
+    this.minRating = 0,
+    this.shortlistOnly = false,
+    this.visitStatus = 'all',
+    this.minPrice,
+    this.maxPrice,
+    this.minMoq,
+    this.maxMoq,
+    this.expiringQuotesOnly = false,
+  });
+
+  Map<String, Object?> toMap() => {
+        'id': id,
+        'name': name,
+        'query': query,
+        'country': country,
+        'min_rating': minRating,
+        'shortlist_only': shortlistOnly ? 1 : 0,
+        'visit_status': visitStatus,
+        'min_price': minPrice,
+        'max_price': maxPrice,
+        'min_moq': minMoq,
+        'max_moq': maxMoq,
+        'expiring_quotes_only': expiringQuotesOnly ? 1 : 0,
+      };
+
+  factory SavedSupplierFilter.fromMap(Map<String, dynamic> map) =>
+      SavedSupplierFilter(
+        id: map['id'] as int?,
+        name: map['name'] as String,
+        query: map['query'] as String? ?? '',
+        country: map['country'] as String? ?? '',
+        minRating: map['min_rating'] as int? ?? 0,
+        shortlistOnly: (map['shortlist_only'] as int? ?? 0) == 1,
+        visitStatus: map['visit_status'] as String? ?? 'all',
+        minPrice: map['min_price'] == null
+            ? null
+            : (map['min_price'] as num).toDouble(),
+        maxPrice: map['max_price'] == null
+            ? null
+            : (map['max_price'] as num).toDouble(),
+        minMoq:
+            map['min_moq'] == null ? null : (map['min_moq'] as num).toDouble(),
+        maxMoq:
+            map['max_moq'] == null ? null : (map['max_moq'] as num).toDouble(),
+        expiringQuotesOnly: (map['expiring_quotes_only'] as int? ?? 0) == 1,
+      );
+}

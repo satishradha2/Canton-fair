@@ -20,7 +20,7 @@ class TradeDatabase {
     final path = join(dbPath, 'canton_fair_crm.db');
     return openDatabase(
       path,
-      version: 3,
+      version: 5,
       onCreate: (db, version) async {
         await db.execute('''
         CREATE TABLE trips(
@@ -127,6 +127,8 @@ class TradeDatabase {
         ''');
         await db.execute(
             'CREATE INDEX idx_attachment_owner ON attachments(owner_type, owner_id);');
+        await _createSavedFiltersTable(db);
+        await _createAuditLogsTable(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -146,8 +148,44 @@ class TradeDatabase {
               'ALTER TABLE exhibitors ADD COLUMN planned_visit_at TEXT');
           await db.execute('ALTER TABLE exhibitors ADD COLUMN visited_at TEXT');
         }
+        if (oldVersion < 4) {
+          await _createSavedFiltersTable(db);
+        }
+        if (oldVersion < 5) {
+          await _createAuditLogsTable(db);
+        }
       },
     );
+  }
+
+  Future<void> _createSavedFiltersTable(DatabaseExecutor db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS saved_supplier_filters(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        query TEXT NOT NULL DEFAULT '',
+        country TEXT NOT NULL DEFAULT '',
+        min_rating INTEGER NOT NULL DEFAULT 0,
+        shortlist_only INTEGER NOT NULL DEFAULT 0,
+        visit_status TEXT NOT NULL DEFAULT 'all',
+        min_price REAL,
+        max_price REAL,
+        min_moq REAL,
+        max_moq REAL,
+        expiring_quotes_only INTEGER NOT NULL DEFAULT 0
+      )
+    ''');
+  }
+
+  Future<void> _createAuditLogsTable(DatabaseExecutor db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS audit_logs(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        action TEXT NOT NULL,
+        details TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL
+      )
+    ''');
   }
 
   Future<int> insert(String table, Map<String, Object?> values) async {
@@ -629,14 +667,54 @@ class TradeDatabase {
 
   Future<List<Exhibitor>> searchExhibitors(String query) async {
     final q = '%${query.toLowerCase()}%';
-    final rows = await queryAll(
-      'exhibitors',
-      where:
-          'LOWER(name) LIKE ? OR LOWER(booth) LIKE ? OR LOWER(country) LIKE ? OR LOWER(category) LIKE ?',
-      whereArgs: [q, q, q, q],
-      orderBy: 'name ASC',
-    );
+    final db = await database;
+    final rows = await db.rawQuery('''
+      SELECT DISTINCT e.*
+      FROM exhibitors e
+      LEFT JOIN contacts c ON c.exhibitor_id = e.id
+      LEFT JOIN products p ON p.exhibitor_id = e.id
+      WHERE LOWER(e.name) LIKE ?
+         OR LOWER(e.booth) LIKE ?
+         OR LOWER(e.hall) LIKE ?
+         OR LOWER(e.country) LIKE ?
+         OR LOWER(e.category) LIKE ?
+         OR LOWER(e.tags_json) LIKE ?
+         OR LOWER(c.name) LIKE ?
+         OR LOWER(c.phone) LIKE ?
+         OR LOWER(c.email) LIKE ?
+         OR LOWER(c.whatsapp) LIKE ?
+         OR LOWER(c.wechat) LIKE ?
+         OR LOWER(p.name) LIKE ?
+         OR LOWER(p.model_code) LIKE ?
+         OR LOWER(p.specs) LIKE ?
+      ORDER BY e.name ASC
+    ''', List.filled(14, q));
     return rows.map((e) => Exhibitor.fromMap(e)).toList();
+  }
+
+  Future<List<SavedSupplierFilter>> getSavedSupplierFilters() async {
+    final rows = await queryAll('saved_supplier_filters', orderBy: 'name ASC');
+    return rows.map(SavedSupplierFilter.fromMap).toList();
+  }
+
+  Future<int> saveSupplierFilter(SavedSupplierFilter filter) async {
+    return insert('saved_supplier_filters', filter.toMap()..remove('id'));
+  }
+
+  Future<int> deleteSavedSupplierFilter(int id) =>
+      delete('saved_supplier_filters', id);
+
+  Future<void> logAudit(String action, String details) async {
+    await insert('audit_logs', {
+      'action': action,
+      'details': details,
+      'created_at': DateTime.now().toIso8601String(),
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> getAuditLogs({int limit = 50}) async {
+    final db = await database;
+    return db.query('audit_logs', orderBy: 'created_at DESC', limit: limit);
   }
 
   Future<List<Map<String, dynamic>>> getStats() async {

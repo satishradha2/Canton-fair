@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../data/update_service.dart';
+import '../data/backup_service.dart';
+import '../data/database.dart';
+import '../theme/app_theme.dart';
 import '../widgets/enterprise_widgets.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -13,7 +16,24 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   final _updates = UpdateService();
+  final _backup = BackupService();
+  final _database = TradeDatabase.instance;
   bool _checking = false;
+  bool _creatingBackup = false;
+
+  Future<void> _createBackup() async {
+    setState(() => _creatingBackup = true);
+    try {
+      await _backup.createAndShareBackup();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Backup export failed: $error')),
+      );
+    } finally {
+      if (mounted) setState(() => _creatingBackup = false);
+    }
+  }
 
   Future<void> _checkForUpdate() async {
     setState(() => _checking = true);
@@ -55,6 +75,64 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  Future<void> _showAuditHistory() async {
+    final records = await _database.getAuditLogs();
+    if (!mounted) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+          child: SizedBox(
+            height: MediaQuery.sizeOf(context).height * 0.65,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Audit history',
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w800, color: AppColors.ink)),
+                const SizedBox(height: 4),
+                const Text('Recent actions performed on this device.',
+                    style: TextStyle(color: AppColors.muted)),
+                const SizedBox(height: 12),
+                Expanded(
+                  child: records.isEmpty
+                      ? const Center(child: Text('No recorded activity yet.'))
+                      : ListView.separated(
+                          itemCount: records.length,
+                          separatorBuilder: (_, __) => const Divider(height: 1),
+                          itemBuilder: (context, index) {
+                            final record = records[index];
+                            final timestamp = DateTime.tryParse(
+                                record['created_at'] as String? ?? '');
+                            return ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              leading: const Icon(Icons.history),
+                              title: Text(
+                                  record['action'] as String? ?? 'Activity'),
+                              subtitle:
+                                  Text(record['details'] as String? ?? ''),
+                              trailing: Text(
+                                timestamp == null
+                                    ? ''
+                                    : '${timestamp.day.toString().padLeft(2, '0')}/${timestamp.month.toString().padLeft(2, '0')}\n${timestamp.hour.toString().padLeft(2, '0')}:${timestamp.minute.toString().padLeft(2, '0')}',
+                                textAlign: TextAlign.right,
+                                style: const TextStyle(
+                                    color: AppColors.muted, fontSize: 12),
+                              ),
+                            );
+                          },
+                        ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _openUrl(String url) async {
     final uri = Uri.parse(url);
     if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
@@ -91,11 +169,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
               _settingTile(
                   icon: Icons.lock,
                   title: 'App lock',
-                  subtitle: 'Planned: PIN and biometric security'),
+                  subtitle: 'Coming next: PIN and biometric security'),
               _settingTile(
                   icon: Icons.cloud_upload,
-                  title: 'Backup',
-                  subtitle: 'Planned: cloud sync profile and trip restore'),
+                  title: 'Export backup',
+                  subtitle:
+                      'Create a shareable local JSON backup of your records',
+                  trailing: _creatingBackup
+                      ? const SizedBox(
+                          width: 22,
+                          height: 22,
+                          child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Icon(Icons.chevron_right),
+                  onTap: _creatingBackup ? null : _createBackup),
+              _settingTile(
+                icon: Icons.history,
+                title: 'Audit history',
+                subtitle: 'Review recent backup and data-management activity',
+                trailing: const Icon(Icons.chevron_right),
+                onTap: _showAuditHistory,
+              ),
               _settingTile(
                   icon: Icons.delete_forever,
                   title: 'Delete data',
