@@ -717,6 +717,45 @@ class TradeDatabase {
     return db.query('audit_logs', orderBy: 'created_at DESC', limit: limit);
   }
 
+  Future<int> replaceWithBackup(
+      Map<String, List<Map<String, dynamic>>> tables) async {
+    final db = await database;
+    const deleteOrder = [
+      'attachments',
+      'quotes',
+      'meetings',
+      'contacts',
+      'products',
+      'exhibitors',
+      'trips',
+      'saved_supplier_filters',
+    ];
+    const insertOrder = [
+      'trips',
+      'exhibitors',
+      'contacts',
+      'products',
+      'meetings',
+      'quotes',
+      'attachments',
+      'saved_supplier_filters',
+    ];
+
+    var restored = 0;
+    await db.transaction((txn) async {
+      for (final table in deleteOrder) {
+        await txn.delete(table);
+      }
+      for (final table in insertOrder) {
+        for (final row in tables[table] ?? const []) {
+          await txn.insert(table, Map<String, Object?>.from(row));
+          restored++;
+        }
+      }
+    });
+    return restored;
+  }
+
   Future<List<Map<String, dynamic>>> getStats() async {
     final db = await database;
     final trips = Sqflite.firstIntValue(

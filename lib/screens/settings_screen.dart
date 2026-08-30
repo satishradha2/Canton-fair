@@ -1,14 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../data/update_service.dart';
 import '../data/backup_service.dart';
 import '../data/database.dart';
+import '../data/app_lock_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/enterprise_widgets.dart';
 
 class SettingsScreen extends StatefulWidget {
-  const SettingsScreen({super.key});
+  final Future<void> Function()? onAppLockChanged;
+
+  const SettingsScreen({super.key, this.onAppLockChanged});
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -18,8 +22,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final _updates = UpdateService();
   final _backup = BackupService();
   final _database = TradeDatabase.instance;
+  final _appLock = AppLockService();
   bool _checking = false;
   bool _creatingBackup = false;
+  bool _restoringBackup = false;
+  bool _appLockEnabled = false;
 
   Future<void> _createBackup() async {
     setState(() => _creatingBackup = true);
@@ -32,6 +39,75 @@ class _SettingsScreenState extends State<SettingsScreen> {
       );
     } finally {
       if (mounted) setState(() => _creatingBackup = false);
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAppLock();
+  }
+
+  Future<void> _loadAppLock() async {
+    final enabled = await _appLock.isEnabled;
+    if (mounted) setState(() => _appLockEnabled = enabled);
+  }
+
+  Future<void> _configureAppLock() async {
+    if (_appLockEnabled) {
+      await _appLock.disable();
+      await _loadAppLock();
+      await widget.onAppLockChanged?.call();
+      return;
+    }
+    final pin = TextEditingController();
+    final confirm = TextEditingController();
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Set app lock PIN'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: pin,
+              obscureText: true,
+              keyboardType: TextInputType.number,
+              maxLength: 8,
+              decoration: const InputDecoration(labelText: 'PIN (4-8 digits)'),
+            ),
+            TextField(
+              controller: confirm,
+              obscureText: true,
+              keyboardType: TextInputType.number,
+              maxLength: 8,
+              decoration: const InputDecoration(labelText: 'Confirm PIN'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () async {
+              if (!RegExp(r'^\d{4,8}$').hasMatch(pin.text) ||
+                  pin.text != confirm.text) {
+                return;
+              }
+              await _appLock.setPin(pin.text);
+              if (context.mounted) Navigator.pop(context, true);
+            },
+            child: const Text('Save PIN'),
+          ),
+        ],
+      ),
+    );
+    pin.dispose();
+    confirm.dispose();
+    if (saved == true) {
+      await _loadAppLock();
+      await widget.onAppLockChanged?.call();
     }
   }
 
@@ -72,6 +148,59 @@ class _SettingsScreenState extends State<SettingsScreen> {
       );
     } finally {
       if (mounted) setState(() => _checking = false);
+    }
+  }
+
+  Future<void> _restoreBackup() async {
+    setState(() => _restoringBackup = true);
+    try {
+      final preview = await _backup.selectBackup();
+      if (!mounted || preview == null) return;
+      final confirmed = await showDialog<bool>(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text('Replace local data?'),
+              content: Text(
+                'This backup contains ${preview.recordCount} records. Restoring it replaces current trips, suppliers, products, meetings, quotes, attachments, and saved filters on this device. This cannot be undone.',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(context, true),
+                  child: const Text('Replace data'),
+                ),
+              ],
+            ),
+          ) ??
+          false;
+      if (!confirmed || !mounted) return;
+      final count = await _backup.restoreReplacingLocalData(preview);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Backup restored: $count records imported.')),
+      );
+    } on PlatformException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+            content: Text(
+                'Backup selection failed: ${error.message ?? error.code}')),
+      );
+    } on FormatException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.message)),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Backup restore failed: $error')),
+      );
+    } finally {
+      if (mounted) setState(() => _restoringBackup = false);
     }
   }
 
@@ -169,7 +298,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
               _settingTile(
                   icon: Icons.lock,
                   title: 'App lock',
-                  subtitle: 'Coming next: PIN and biometric security'),
+                  subtitle: _appLockEnabled
+                      ? 'Enabled: PIN and supported biometrics unlock the app'
+                      : 'Protect local supplier and pricing data with a PIN',
+                  trailing: Switch(
+                    value: _appLockEnabled,
+                    onChanged: (_) => _configureAppLock(),
+                  ),
+                  onTap: _configureAppLock),
               _settingTile(
                   icon: Icons.cloud_upload,
                   title: 'Export backup',
@@ -182,6 +318,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           child: CircularProgressIndicator(strokeWidth: 2))
                       : const Icon(Icons.chevron_right),
                   onTap: _creatingBackup ? null : _createBackup),
+              _settingTile(
+                icon: Icons.settings_backup_restore,
+                title: 'Restore backup',
+                subtitle:
+                    'Replace this device data from a Canton Fair JSON backup',
+                trailing: _restoringBackup
+                    ? const SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Icon(Icons.chevron_right),
+                onTap: _restoringBackup ? null : _restoreBackup,
+              ),
               _settingTile(
                 icon: Icons.history,
                 title: 'Audit history',

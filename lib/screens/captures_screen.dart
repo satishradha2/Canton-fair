@@ -1389,7 +1389,7 @@ class _CapturesScreenState extends State<CapturesScreen> {
     required int ownerId,
     required String ownerType,
   }) async {
-    final source = await showModalBottomSheet<ImageSource>(
+    final source = await showModalBottomSheet<String>(
       context: context,
       builder: (ctx) => SafeArea(
         child: Column(
@@ -1398,12 +1398,18 @@ class _CapturesScreenState extends State<CapturesScreen> {
             ListTile(
               leading: const Icon(Icons.photo_camera),
               title: const Text('Take Photo'),
-              onTap: () => Navigator.pop(ctx, ImageSource.camera),
+              onTap: () => Navigator.pop(ctx, 'camera'),
             ),
             ListTile(
               leading: const Icon(Icons.photo_library),
               title: const Text('Choose from Gallery'),
-              onTap: () => Navigator.pop(ctx, ImageSource.gallery),
+              onTap: () => Navigator.pop(ctx, 'gallery'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.description_outlined),
+              title: const Text('Choose Document'),
+              subtitle: const Text('PDF, certificate, catalog, or spreadsheet'),
+              onTap: () => Navigator.pop(ctx, 'document'),
             ),
           ],
         ),
@@ -1411,8 +1417,16 @@ class _CapturesScreenState extends State<CapturesScreen> {
     );
     if (source == null) return;
 
+    if (source == 'document') {
+      await _pickDocumentAttachment(ownerId: ownerId, ownerType: ownerType);
+      return;
+    }
+
     final picker = ImagePicker();
-    final picked = await picker.pickImage(source: source, imageQuality: 70);
+    final picked = await picker.pickImage(
+      source: source == 'camera' ? ImageSource.camera : ImageSource.gallery,
+      imageQuality: 70,
+    );
     if (picked == null || !mounted) return;
 
     final root = await getApplicationDocumentsDirectory();
@@ -1433,6 +1447,38 @@ class _CapturesScreenState extends State<CapturesScreen> {
         kind: 'image',
         path: saved.path,
         note: 'Photo',
+        createdAt: DateTime.now(),
+      ),
+    );
+    _load();
+  }
+
+  Future<void> _pickDocumentAttachment({
+    required int ownerId,
+    required String ownerType,
+  }) async {
+    const channel = MethodChannel('canton_fair_crm/backup');
+    final sourcePath = await channel.invokeMethod<String>('pickDocument');
+    if (sourcePath == null) return;
+    final source = File(sourcePath);
+    final root = await getApplicationDocumentsDirectory();
+    final targetDir = Directory('${root.path}/attachments/$ownerType/$ownerId');
+    await targetDir.create(recursive: true);
+    final extension = sourcePath.contains('.')
+        ? sourcePath.substring(sourcePath.lastIndexOf('.'))
+        : '';
+    final saved = await source.copy(
+      '${targetDir.path}/document_${DateTime.now().millisecondsSinceEpoch}$extension',
+    );
+    final lower = extension.toLowerCase();
+    final kind = lower == '.pdf' ? 'pdf' : 'document';
+    await db.addAttachment(
+      Attachment(
+        ownerType: ownerType,
+        ownerId: ownerId,
+        kind: kind,
+        path: saved.path,
+        note: kind == 'pdf' ? 'PDF document' : 'Document',
         createdAt: DateTime.now(),
       ),
     );
@@ -1573,9 +1619,16 @@ class _CapturesScreenState extends State<CapturesScreen> {
               spacing: 8,
               children: snap.data!.map((attachment) {
                 return ActionChip(
-                  avatar: const Icon(Icons.attachment, size: 16),
-                  label:
-                      Text(attachment.note.isEmpty ? 'Image' : attachment.note),
+                  avatar: Icon(
+                    attachment.kind == 'pdf'
+                        ? Icons.picture_as_pdf
+                        : attachment.kind == 'image'
+                            ? Icons.image_outlined
+                            : Icons.description_outlined,
+                    size: 16,
+                  ),
+                  label: Text(
+                      attachment.note.isEmpty ? 'Attachment' : attachment.note),
                   onPressed: () => _openAttachment(attachment.path),
                 );
               }).toList(),

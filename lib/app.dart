@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'data/update_service.dart';
+import 'data/app_lock_service.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/captures_screen.dart';
 import 'screens/shortlist_screen.dart';
@@ -9,6 +10,7 @@ import 'screens/analytics_screen.dart';
 import 'screens/export_screen.dart';
 import 'screens/settings_screen.dart';
 import 'theme/app_theme.dart';
+import 'widgets/app_lock_screen.dart';
 
 class CantonFairApp extends StatefulWidget {
   const CantonFairApp({super.key});
@@ -17,19 +19,23 @@ class CantonFairApp extends StatefulWidget {
   State<CantonFairApp> createState() => _CantonFairAppState();
 }
 
-class _CantonFairAppState extends State<CantonFairApp> {
+class _CantonFairAppState extends State<CantonFairApp>
+    with WidgetsBindingObserver {
   int _index = 0;
   final _updates = UpdateService();
   bool _checkedStartupUpdate = false;
+  final _appLock = AppLockService();
+  bool _lockReady = false;
+  bool _locked = false;
 
-  final _screens = const [
+  late final _screens = [
     DashboardScreen(),
     CapturesScreen(),
     ShortlistScreen(),
     FollowUpScreen(),
     AnalyticsScreen(),
     ExportScreen(),
-    SettingsScreen(),
+    SettingsScreen(onAppLockChanged: _refreshAppLock),
   ];
 
   final _titles = const [
@@ -45,8 +51,33 @@ class _CantonFairAppState extends State<CantonFairApp> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _refreshAppLock();
     WidgetsBinding.instance
         .addPostFrameCallback((_) => _checkForStartupUpdate());
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused && _lockReady) {
+      _refreshAppLock(lockWhenEnabled: true);
+    }
+  }
+
+  Future<void> _refreshAppLock({bool lockWhenEnabled = false}) async {
+    final enabled = await _appLock.isEnabled;
+    if (!mounted) return;
+    final shouldLock = enabled && (lockWhenEnabled || _locked || !_lockReady);
+    setState(() {
+      _lockReady = true;
+      _locked = shouldLock;
+    });
   }
 
   Future<void> _checkForStartupUpdate() async {
@@ -99,6 +130,12 @@ class _CantonFairAppState extends State<CantonFairApp> {
 
   @override
   Widget build(BuildContext context) {
+    if (!_lockReady) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+    if (_locked) {
+      return AppLockScreen(onUnlocked: () => setState(() => _locked = false));
+    }
     return Scaffold(
       appBar: AppBar(
         title: Row(
