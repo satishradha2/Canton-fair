@@ -20,6 +20,13 @@ class CapturesScreen extends StatefulWidget {
   State<CapturesScreen> createState() => _CapturesScreenState();
 }
 
+class _VisitQueues {
+  final List<Exhibitor> needToVisit;
+  final List<Exhibitor> visitedToday;
+
+  const _VisitQueues({required this.needToVisit, required this.visitedToday});
+}
+
 class _CapturesScreenState extends State<CapturesScreen> {
   final db = TradeDatabase.instance;
   int? _tripFilter;
@@ -27,16 +34,22 @@ class _CapturesScreenState extends State<CapturesScreen> {
   bool _shortlistOnly = false;
   late Future<List<Trip>> _trips;
   late Future<List<Exhibitor>> _exhibitors;
+  late Future<_VisitQueues> _visitQueues;
+  late Future<List<Exhibitor>> _itinerary;
+  late DateTime _itineraryDate;
 
   @override
   void initState() {
     super.initState();
     _trips = db.getTrips();
+    _itineraryDate = DateTime.now();
     _load();
   }
 
   void _load() {
     setState(() {
+      _visitQueues = _loadVisitQueues();
+      _itinerary = _loadItinerary();
       if (_query.isNotEmpty) {
         _exhibitors = db.searchExhibitors(_query);
       } else if (_shortlistOnly) {
@@ -50,6 +63,46 @@ class _CapturesScreenState extends State<CapturesScreen> {
         _exhibitors = db.getExhibitors(_tripFilter);
       }
     });
+  }
+
+  Future<List<Exhibitor>> _loadItinerary() async {
+    final suppliers = await db.getExhibitors(_tripFilter);
+    final day =
+        DateTime(_itineraryDate.year, _itineraryDate.month, _itineraryDate.day);
+    final itinerary = suppliers.where((supplier) {
+      final planned = supplier.plannedVisitAt?.toLocal();
+      return planned != null &&
+          planned.year == day.year &&
+          planned.month == day.month &&
+          planned.day == day.day;
+    }).toList()
+      ..sort((a, b) => a.plannedVisitAt!.compareTo(b.plannedVisitAt!));
+    return itinerary;
+  }
+
+  Future<_VisitQueues> _loadVisitQueues() async {
+    final suppliers = await db.getExhibitors(_tripFilter);
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final needToVisit =
+        suppliers.where((supplier) => supplier.visitedAt == null).toList()
+          ..sort((a, b) {
+            final aDate = a.plannedVisitAt ?? DateTime(9999);
+            final bDate = b.plannedVisitAt ?? DateTime(9999);
+            return aDate.compareTo(bDate);
+          });
+    final visitedToday = suppliers.where((supplier) {
+      final visited = supplier.visitedAt;
+      return visited != null &&
+          visited.year == today.year &&
+          visited.month == today.month &&
+          visited.day == today.day;
+    }).toList()
+      ..sort((a, b) => b.visitedAt!.compareTo(a.visitedAt!));
+    return _VisitQueues(
+      needToVisit: needToVisit,
+      visitedToday: visitedToday,
+    );
   }
 
   Future<List<Exhibitor>> _getDuplicateCandidates(Exhibitor candidate) async {
@@ -1498,6 +1551,11 @@ class _CapturesScreenState extends State<CapturesScreen> {
               icon: const Icon(Icons.edit),
               onPressed: () => _openEditProductSheet(p)),
           IconButton(
+            icon: const Icon(Icons.request_quote),
+            tooltip: 'Add quote version',
+            onPressed: () => _openAddQuoteDialog(p),
+          ),
+          IconButton(
             icon: const Icon(Icons.delete),
             onPressed: () async {
               final confirm = await showDialog<bool>(
@@ -1616,6 +1674,327 @@ class _CapturesScreenState extends State<CapturesScreen> {
     );
   }
 
+  Future<void> _setVisited(Exhibitor exhibitor, bool visited) async {
+    await db.update('exhibitors', exhibitor.id!, {
+      'visited_at': visited ? DateTime.now().toIso8601String() : null,
+    });
+    _load();
+  }
+
+  Future<void> _openScheduleVisitDialog(Exhibitor exhibitor) async {
+    var scheduledAt = exhibitor.plannedVisitAt?.toLocal() ??
+        DateTime.now().add(const Duration(hours: 1));
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text('Schedule supplier visit'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(exhibitor.name,
+                  style: const TextStyle(fontWeight: FontWeight.w700)),
+              const SizedBox(height: 12),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.calendar_today),
+                title: const Text('Date'),
+                subtitle: Text(
+                    '${scheduledAt.year.toString().padLeft(4, '0')}-${scheduledAt.month.toString().padLeft(2, '0')}-${scheduledAt.day.toString().padLeft(2, '0')}'),
+                onTap: () async {
+                  final picked = await showDatePicker(
+                    context: ctx,
+                    initialDate: scheduledAt,
+                    firstDate: DateTime(2020),
+                    lastDate: DateTime(2100),
+                  );
+                  if (picked == null) return;
+                  setDialogState(() => scheduledAt = DateTime(
+                        picked.year,
+                        picked.month,
+                        picked.day,
+                        scheduledAt.hour,
+                        scheduledAt.minute,
+                      ));
+                },
+              ),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.schedule),
+                title: const Text('Time'),
+                subtitle: Text(
+                    '${scheduledAt.hour.toString().padLeft(2, '0')}:${scheduledAt.minute.toString().padLeft(2, '0')}'),
+                onTap: () async {
+                  final picked = await showTimePicker(
+                    context: ctx,
+                    initialTime: TimeOfDay.fromDateTime(scheduledAt),
+                  );
+                  if (picked == null) return;
+                  setDialogState(() => scheduledAt = DateTime(
+                        scheduledAt.year,
+                        scheduledAt.month,
+                        scheduledAt.day,
+                        picked.hour,
+                        picked.minute,
+                      ));
+                },
+              ),
+            ],
+          ),
+          actions: [
+            if (exhibitor.plannedVisitAt != null)
+              TextButton(
+                onPressed: () async {
+                  await db.update('exhibitors', exhibitor.id!, {
+                    'planned_visit_at': null,
+                  });
+                  _load();
+                  if (!mounted) return;
+                  Navigator.pop(ctx);
+                },
+                child: const Text('Clear schedule'),
+              ),
+            TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel')),
+            ElevatedButton(
+              onPressed: () async {
+                await db.update('exhibitors', exhibitor.id!, {
+                  'planned_visit_at': scheduledAt.toIso8601String(),
+                  'visited_at': null,
+                });
+                _load();
+                if (!mounted) return;
+                Navigator.pop(ctx);
+              },
+              child: const Text('Save visit'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openAddQuoteDialog(Product product) async {
+    final formKey = GlobalKey<FormState>();
+    var quoteType = 'Production';
+    var currency = product.priceCurrency;
+    var price = product.quotedPrice;
+    var moq = product.moq;
+    var validUntil = DateTime.now().add(const Duration(days: 30));
+    var note = '';
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text('Add quote version'),
+          content: Form(
+            key: formKey,
+            child: SingleChildScrollView(
+              child: SizedBox(
+                width: 360,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(product.name,
+                        style: const TextStyle(fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<String>(
+                      value: quoteType,
+                      decoration:
+                          const InputDecoration(labelText: 'Quote type'),
+                      items: const [
+                        DropdownMenuItem(
+                            value: 'Sample', child: Text('Sample')),
+                        DropdownMenuItem(
+                            value: 'Production', child: Text('Production')),
+                        DropdownMenuItem(value: 'Bulk', child: Text('Bulk')),
+                      ],
+                      onChanged: (value) =>
+                          setDialogState(() => quoteType = value ?? quoteType),
+                    ),
+                    TextFormField(
+                      initialValue: price?.toString() ?? '',
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
+                      decoration:
+                          const InputDecoration(labelText: 'Unit price'),
+                      onSaved: (value) =>
+                          price = double.tryParse(value?.trim() ?? ''),
+                    ),
+                    TextFormField(
+                      initialValue: currency,
+                      decoration: const InputDecoration(labelText: 'Currency'),
+                      onSaved: (value) =>
+                          currency = value?.trim().toUpperCase() ?? currency,
+                    ),
+                    TextFormField(
+                      initialValue: moq?.toString() ?? '',
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
+                      decoration: const InputDecoration(labelText: 'MOQ'),
+                      onSaved: (value) =>
+                          moq = double.tryParse(value?.trim() ?? ''),
+                    ),
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.event_available),
+                      title: const Text('Valid until'),
+                      subtitle: Text(
+                          '${validUntil.year.toString().padLeft(4, '0')}-${validUntil.month.toString().padLeft(2, '0')}-${validUntil.day.toString().padLeft(2, '0')}'),
+                      onTap: () async {
+                        final picked = await showDatePicker(
+                          context: ctx,
+                          initialDate: validUntil,
+                          firstDate: DateTime(2020),
+                          lastDate: DateTime(2100),
+                        );
+                        if (picked != null) {
+                          setDialogState(() => validUntil = picked);
+                        }
+                      },
+                    ),
+                    TextFormField(
+                      maxLines: 2,
+                      decoration:
+                          const InputDecoration(labelText: 'Quote notes'),
+                      onSaved: (value) => note = value?.trim() ?? '',
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel')),
+            ElevatedButton(
+              onPressed: () async {
+                formKey.currentState?.save();
+                final quoteId = await db.insert(
+                  'quotes',
+                  Quote(
+                    productId: product.id!,
+                    label: quoteType,
+                    unitPrice: price,
+                    currency: currency.isEmpty ? 'USD' : currency,
+                    moq: moq,
+                    note: note,
+                    validUntil: validUntil,
+                    isSampleQuote: quoteType == 'Sample',
+                  ).toMap()
+                    ..remove('id'),
+                );
+                await db.update('products', product.id!, {
+                  'quoted_price': price,
+                  'price_currency': currency.isEmpty ? 'USD' : currency,
+                  'moq': moq,
+                });
+                final reminderAt = validUntil.subtract(const Duration(days: 3));
+                if (reminderAt.isAfter(DateTime.now())) {
+                  await ReminderService.scheduleFollowUp(
+                    id: 1000000 + quoteId,
+                    title: 'Quote expires soon',
+                    body: '${product.name} $quoteType quote expires in 3 days.',
+                    at: reminderAt,
+                  );
+                }
+                _load();
+                if (!mounted) return;
+                Navigator.pop(ctx);
+              },
+              child: const Text('Save quote'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  bool _isQuoteExpired(Quote quote) =>
+      quote.validUntil != null && quote.validUntil!.isBefore(DateTime.now());
+
+  bool _isQuoteExpiring(Quote quote) {
+    if (quote.validUntil == null || _isQuoteExpired(quote)) return false;
+    return quote.validUntil!
+        .isBefore(DateTime.now().add(const Duration(days: 8)));
+  }
+
+  Widget _quoteHistory(Product product) {
+    return FutureBuilder<List<Quote>>(
+      future: db.getQuotes(product.id!),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData || snapshot.data!.isEmpty) {
+          return Padding(
+            padding: const EdgeInsets.only(left: 8, bottom: 8),
+            child: TextButton.icon(
+              icon: const Icon(Icons.request_quote),
+              label: const Text('Add first quote'),
+              onPressed: () => _openAddQuoteDialog(product),
+            ),
+          );
+        }
+        return Padding(
+          padding: const EdgeInsets.only(left: 8, bottom: 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Text('Quote history',
+                      style: TextStyle(fontWeight: FontWeight.w700)),
+                  const Spacer(),
+                  TextButton.icon(
+                    icon: const Icon(Icons.add),
+                    label: const Text('Version'),
+                    onPressed: () => _openAddQuoteDialog(product),
+                  ),
+                ],
+              ),
+              ...snapshot.data!.map((quote) {
+                final expired = _isQuoteExpired(quote);
+                final expiring = _isQuoteExpiring(quote);
+                final color = expired
+                    ? AppColors.danger
+                    : expiring
+                        ? AppColors.amber
+                        : AppColors.teal;
+                final status = expired
+                    ? 'Expired'
+                    : expiring
+                        ? 'Expires soon'
+                        : quote.validUntil == null
+                            ? 'No expiry'
+                            : 'Active';
+                return ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(Icons.request_quote, color: color),
+                  title: Text(
+                      '${quote.label} | ${quote.unitPrice ?? '-'} ${quote.currency}'),
+                  subtitle: Text(
+                    'MOQ ${quote.moq ?? '-'} | Valid ${quote.validUntil == null ? '-' : quote.validUntil!.toLocal().toString().substring(0, 10)}${quote.note.isEmpty ? '' : ' | ${quote.note}'}',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  trailing: InfoChip(label: status, color: color),
+                );
+              }),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _changeItineraryDate(int days) {
+    _itineraryDate = _itineraryDate.add(Duration(days: days));
+    _load();
+  }
+
   Widget _exhibitorActions(Exhibitor e) {
     return PopupMenuButton<String>(
       onSelected: (value) async {
@@ -1631,6 +2010,12 @@ class _CapturesScreenState extends State<CapturesScreen> {
           await _openEditExhibitorSheet(e);
         } else if (value == 'scorecard') {
           await _openSupplierScorecard(e);
+        } else if (value == 'visited') {
+          await _setVisited(e, true);
+        } else if (value == 'needVisit') {
+          await _setVisited(e, false);
+        } else if (value == 'scheduleVisit') {
+          await _openScheduleVisitDialog(e);
         } else if (value == 'merge') {
           await _openMergeDuplicateDialog(e);
         } else if (value == 'delete') {
@@ -1640,6 +2025,9 @@ class _CapturesScreenState extends State<CapturesScreen> {
       itemBuilder: (_) => const [
         PopupMenuItem(value: 'edit', child: Text('Edit supplier')),
         PopupMenuItem(value: 'scorecard', child: Text('Supplier scorecard')),
+        PopupMenuItem(value: 'visited', child: Text('Mark visited now')),
+        PopupMenuItem(value: 'needVisit', child: Text('Move to need-to-visit')),
+        PopupMenuItem(value: 'scheduleVisit', child: Text('Schedule visit')),
         PopupMenuItem(value: 'merge', child: Text('Merge duplicate')),
         PopupMenuItem(value: 'delete', child: Text('Delete supplier')),
         PopupMenuItem(value: 'contact', child: Text('Add contact')),
@@ -1647,6 +2035,171 @@ class _CapturesScreenState extends State<CapturesScreen> {
         PopupMenuItem(value: 'meeting', child: Text('Add meeting')),
         PopupMenuItem(value: 'attachment', child: Text('Add attachment')),
       ],
+    );
+  }
+
+  Widget _visitQueueSection() {
+    return FutureBuilder<_VisitQueues>(
+      future: _visitQueues,
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return const SectionPanel(
+            title: 'Visit queues',
+            child: SizedBox(
+                height: 56, child: Center(child: CircularProgressIndicator())),
+          );
+        }
+        final queues = snapshot.data!;
+        return SectionPanel(
+          title: 'Visit queues',
+          subtitle:
+              'Plan booth visits, then mark suppliers visited as you meet them.',
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: MetricPill(
+                      label: 'Need to visit',
+                      value: queues.needToVisit.length.toString(),
+                      icon: Icons.route_outlined,
+                      color: AppColors.amber,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: MetricPill(
+                      label: 'Visited today',
+                      value: queues.visitedToday.length.toString(),
+                      icon: Icons.task_alt,
+                      color: AppColors.teal,
+                    ),
+                  ),
+                ],
+              ),
+              if (queues.needToVisit.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                ...queues.needToVisit.take(5).map(
+                      (supplier) => ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.location_on_outlined,
+                            color: AppColors.amber),
+                        title: Text(supplier.name,
+                            maxLines: 1, overflow: TextOverflow.ellipsis),
+                        subtitle: Text(
+                          supplier.plannedVisitAt == null
+                              ? 'Booth ${supplier.booth.isEmpty ? '-' : supplier.booth}'
+                              : 'Planned ${supplier.plannedVisitAt!.toLocal().toString().substring(0, 16)}',
+                        ),
+                        trailing: IconButton(
+                          tooltip: 'Mark visited',
+                          icon: const Icon(Icons.check_circle_outline),
+                          onPressed: () => _setVisited(supplier, true),
+                        ),
+                      ),
+                    ),
+              ],
+              if (queues.visitedToday.isNotEmpty) ...[
+                const Divider(height: 22),
+                ...queues.visitedToday.take(5).map(
+                      (supplier) => ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.check_circle,
+                            color: AppColors.teal),
+                        title: Text(supplier.name,
+                            maxLines: 1, overflow: TextOverflow.ellipsis),
+                        subtitle: Text(
+                            'Visited ${supplier.visitedAt!.toLocal().toString().substring(11, 16)}'),
+                        trailing: IconButton(
+                          tooltip: 'Move to need-to-visit',
+                          icon: const Icon(Icons.undo),
+                          onPressed: () => _setVisited(supplier, false),
+                        ),
+                      ),
+                    ),
+              ],
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _itinerarySection() {
+    final dateLabel =
+        '${_itineraryDate.year.toString().padLeft(4, '0')}-${_itineraryDate.month.toString().padLeft(2, '0')}-${_itineraryDate.day.toString().padLeft(2, '0')}';
+    return SectionPanel(
+      title: 'Day itinerary',
+      subtitle: 'Scheduled supplier visits for the selected day.',
+      child: Column(
+        children: [
+          Row(
+            children: [
+              IconButton(
+                tooltip: 'Previous day',
+                icon: const Icon(Icons.chevron_left),
+                onPressed: () => _changeItineraryDate(-1),
+              ),
+              Expanded(
+                child: Text(dateLabel,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontWeight: FontWeight.w800)),
+              ),
+              IconButton(
+                tooltip: 'Next day',
+                icon: const Icon(Icons.chevron_right),
+                onPressed: () => _changeItineraryDate(1),
+              ),
+              TextButton(
+                onPressed: () {
+                  _itineraryDate = DateTime.now();
+                  _load();
+                },
+                child: const Text('Today'),
+              ),
+            ],
+          ),
+          FutureBuilder<List<Exhibitor>>(
+            future: _itinerary,
+            builder: (context, snapshot) {
+              if (!snapshot.hasData) {
+                return const Padding(
+                  padding: EdgeInsets.all(12),
+                  child: CircularProgressIndicator(),
+                );
+              }
+              if (snapshot.data!.isEmpty) {
+                return const Padding(
+                  padding: EdgeInsets.only(top: 8),
+                  child: Text('No supplier visits are scheduled for this day.',
+                      style: TextStyle(color: AppColors.muted)),
+                );
+              }
+              return Column(
+                children: snapshot.data!.map((supplier) {
+                  final scheduled = supplier.plannedVisitAt!.toLocal();
+                  return ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Text(
+                      '${scheduled.hour.toString().padLeft(2, '0')}:${scheduled.minute.toString().padLeft(2, '0')}',
+                      style: const TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                    title: Text(supplier.name,
+                        maxLines: 1, overflow: TextOverflow.ellipsis),
+                    subtitle: Text(
+                        'Booth ${supplier.booth.isEmpty ? '-' : supplier.booth}${supplier.hall.isEmpty ? '' : ' | ${supplier.hall}'}'),
+                    trailing: IconButton(
+                      tooltip: 'Reschedule',
+                      icon: const Icon(Icons.edit_calendar),
+                      onPressed: () => _openScheduleVisitDialog(supplier),
+                    ),
+                  );
+                }).toList(),
+              );
+            },
+          ),
+        ],
+      ),
     );
   }
 
@@ -1680,6 +2233,10 @@ class _CapturesScreenState extends State<CapturesScreen> {
                   label: const Text('OCR')),
             ],
             children: [
+              _visitQueueSection(),
+              const SizedBox(height: 16),
+              _itinerarySection(),
+              const SizedBox(height: 16),
               SectionPanel(
                 title: 'Filters',
                 subtitle:
@@ -1819,6 +2376,13 @@ class _CapturesScreenState extends State<CapturesScreen> {
                       label: 'Shortlisted',
                       icon: Icons.star,
                       color: Color(0xFF2F855A)),
+                InfoChip(
+                  label: e.visitedAt == null ? 'Need to visit' : 'Visited',
+                  icon: e.visitedAt == null
+                      ? Icons.route_outlined
+                      : Icons.task_alt,
+                  color: e.visitedAt == null ? AppColors.amber : AppColors.teal,
+                ),
               ],
             ),
           ),
@@ -1862,6 +2426,7 @@ class _CapturesScreenState extends State<CapturesScreen> {
                   children: pSnap.data!.expand((p) {
                     return [
                       _productRow(p),
+                      _quoteHistory(p),
                       Padding(
                         padding: const EdgeInsets.only(left: 8),
                         child: _attachmentSection('product', p.id ?? 0),

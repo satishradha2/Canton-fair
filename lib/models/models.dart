@@ -56,6 +56,8 @@ class Exhibitor {
   final int trustScore;
   final int moqFitScore;
   final int reliabilityScore;
+  final DateTime? plannedVisitAt;
+  final DateTime? visitedAt;
 
   Exhibitor({
     this.id,
@@ -74,6 +76,8 @@ class Exhibitor {
     this.trustScore = 0,
     this.moqFitScore = 0,
     this.reliabilityScore = 0,
+    this.plannedVisitAt,
+    this.visitedAt,
   });
 
   double get decisionScore =>
@@ -110,6 +114,8 @@ class Exhibitor {
         'trust_score': trustScore,
         'moq_fit_score': moqFitScore,
         'reliability_score': reliabilityScore,
+        'planned_visit_at': plannedVisitAt?.toIso8601String(),
+        'visited_at': visitedAt?.toIso8601String(),
       };
 
   factory Exhibitor.fromMap(Map<String, dynamic> map) => Exhibitor(
@@ -129,6 +135,12 @@ class Exhibitor {
         trustScore: map['trust_score'] as int? ?? 0,
         moqFitScore: map['moq_fit_score'] as int? ?? 0,
         reliabilityScore: map['reliability_score'] as int? ?? 0,
+        plannedVisitAt: map['planned_visit_at'] != null
+            ? DateTime.parse(map['planned_visit_at'] as String)
+            : null,
+        visitedAt: map['visited_at'] != null
+            ? DateTime.parse(map['visited_at'] as String)
+            : null,
       );
 }
 
