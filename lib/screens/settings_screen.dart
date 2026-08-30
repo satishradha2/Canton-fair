@@ -9,6 +9,7 @@ import '../data/app_lock_service.dart';
 import '../data/language_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/enterprise_widgets.dart';
+import 'team_setup_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   final Future<void> Function()? onAppLockChanged;
@@ -320,6 +321,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
           title: tr(context, 'system'),
           child: Column(
             children: [
+              _settingTile(
+                icon: Icons.groups,
+                title: 'Cloud team',
+                subtitle: 'Choose the shared team workspace for sync',
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Navigator.push(context,
+                    MaterialPageRoute(builder: (_) => const TeamSetupScreen())),
+              ),
               _settingTile(
                 icon: Icons.system_update,
                 title: 'App updates',

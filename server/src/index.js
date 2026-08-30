@@ -6,10 +6,10 @@ import pg from 'pg';
 import { readFileSync } from 'node:fs';
 
 const { Pool } = pg;
-if (!process.env.DATABASE_URL || !process.env.FIREBASE_SERVICE_ACCOUNT_PATH) {
-  throw new Error('DATABASE_URL and FIREBASE_SERVICE_ACCOUNT_PATH are required.');
+if (!process.env.DATABASE_URL || (!process.env.FIREBASE_SERVICE_ACCOUNT_PATH && !process.env.FIREBASE_SERVICE_ACCOUNT_JSON)) {
+  throw new Error('DATABASE_URL and a Firebase service account are required.');
 }
-const serviceAccount = JSON.parse(readFileSync(process.env.FIREBASE_SERVICE_ACCOUNT_PATH, 'utf8'));
+const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON ?? readFileSync(process.env.FIREBASE_SERVICE_ACCOUNT_PATH, 'utf8'));
 admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
 const databaseUrl = new URL(process.env.DATABASE_URL);
 const isLocalDatabase = ['localhost', '127.0.0.1', '::1'].includes(databaseUrl.hostname);
