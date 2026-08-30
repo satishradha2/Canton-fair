@@ -94,20 +94,28 @@ class _TeamSetupScreenState extends State<TeamSetupScreen> {
     }
   }
 
+  Future<void> _manageMembers(CloudTeam team) async {
+    await Navigator.of(context).push(MaterialPageRoute(
+        builder: (_) => TeamMembersScreen(team: team, api: _api)));
+    if (mounted) setState(() => _teams = _api.teams());
+  }
+
   @override
   Widget build(BuildContext context) => Scaffold(
       appBar: AppBar(title: const Text('Cloud team')),
       body: FutureBuilder<List<CloudTeam>>(
           future: _teams,
           builder: (context, snapshot) {
-            if (snapshot.connectionState != ConnectionState.done)
+            if (snapshot.connectionState != ConnectionState.done) {
               return const Center(child: CircularProgressIndicator());
-            if (snapshot.hasError)
+            }
+            if (snapshot.hasError) {
               return Center(
                   child: Padding(
                       padding: const EdgeInsets.all(24),
                       child: Text(
                           '${snapshot.error}\n\nCheck your Supabase connection and team setup.')));
+            }
             final teams = snapshot.data!;
             return ListView(padding: const EdgeInsets.all(16), children: [
               const Text(
@@ -119,11 +127,18 @@ class _TeamSetupScreenState extends State<TeamSetupScreen> {
                   leading: const Icon(Icons.groups),
                   onTap: () => _select(team),
                   trailing: team.role == 'admin'
-                      ? IconButton(
-                          icon: const Icon(Icons.person_add_alt_1),
-                          tooltip: 'Add team member',
-                          onPressed: () => _invite(team),
-                        )
+                      ? Row(mainAxisSize: MainAxisSize.min, children: [
+                          IconButton(
+                            icon: const Icon(Icons.person_add_alt_1),
+                            tooltip: 'Add team member',
+                            onPressed: () => _invite(team),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.manage_accounts_outlined),
+                            tooltip: 'Manage team members',
+                            onPressed: () => _manageMembers(team),
+                          ),
+                        ])
                       : null)),
               OutlinedButton.icon(
                   onPressed: _create,
@@ -131,4 +146,120 @@ class _TeamSetupScreenState extends State<TeamSetupScreen> {
                   label: const Text('Create team'))
             ]);
           }));
+}
+
+class TeamMembersScreen extends StatefulWidget {
+  final CloudTeam team;
+  final CloudApiService api;
+
+  const TeamMembersScreen({super.key, required this.team, required this.api});
+
+  @override
+  State<TeamMembersScreen> createState() => _TeamMembersScreenState();
+}
+
+class _TeamMembersScreenState extends State<TeamMembersScreen> {
+  late Future<List<CloudMember>> _members = widget.api.members(widget.team);
+
+  void _refresh() => setState(() => _members = widget.api.members(widget.team));
+
+  Future<void> _changeRole(CloudMember member, String role) async {
+    try {
+      await widget.api.changeMemberRole(widget.team, member, role);
+      _refresh();
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Could not update member: $error')));
+      }
+    }
+  }
+
+  Future<void> _remove(CloudMember member) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Remove member?'),
+        content: Text('${member.email} will lose access to this team.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel')),
+          ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Remove')),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await widget.api.removeMember(widget.team, member);
+      _refresh();
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Could not remove member: $error')));
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        appBar: AppBar(title: Text('${widget.team.name} members')),
+        body: FutureBuilder<List<CloudMember>>(
+          future: _members,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState != ConnectionState.done) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            if (snapshot.hasError) {
+              return Center(
+                child: TextButton.icon(
+                  onPressed: _refresh,
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('Retry loading members'),
+                ),
+              );
+            }
+            final members = snapshot.data ?? const <CloudMember>[];
+            return ListView.separated(
+              padding: const EdgeInsets.all(16),
+              itemCount: members.length,
+              separatorBuilder: (_, __) => const Divider(height: 1),
+              itemBuilder: (context, index) {
+                final member = members[index];
+                final isCurrentUser = member.userId == widget.api.currentUserId;
+                return ListTile(
+                  leading: const Icon(Icons.person_outline),
+                  title: Text(member.email),
+                  subtitle: Text(member.role),
+                  trailing: isCurrentUser
+                      ? const Text('You')
+                      : PopupMenuButton<String>(
+                          tooltip: 'Manage member',
+                          onSelected: (value) {
+                            if (value == 'remove') {
+                              _remove(member);
+                            } else {
+                              _changeRole(member, value);
+                            }
+                          },
+                          itemBuilder: (context) => [
+                            const PopupMenuItem(
+                                value: 'viewer', child: Text('Set as viewer')),
+                            const PopupMenuItem(
+                                value: 'member', child: Text('Set as member')),
+                            const PopupMenuItem(
+                                value: 'admin', child: Text('Set as admin')),
+                            const PopupMenuDivider(),
+                            const PopupMenuItem(
+                                value: 'remove', child: Text('Remove member')),
+                          ],
+                        ),
+                );
+              },
+            );
+          },
+        ),
+      );
 }

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 import 'dart:io';
@@ -20,7 +22,7 @@ class TradeDatabase {
     final path = join(dbPath, 'canton_fair_crm.db');
     return openDatabase(
       path,
-      version: 7,
+      version: 8,
       onCreate: (db, version) async {
         await db.execute('''
         CREATE TABLE trips(
@@ -130,6 +132,7 @@ class TradeDatabase {
         await _createSavedFiltersTable(db);
         await _createAuditLogsTable(db);
         await _createCloudLinksTable(db);
+        await _createCloudSyncConflictsTable(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -161,6 +164,9 @@ class TradeDatabase {
         if (oldVersion < 7) {
           await db.execute(
               "ALTER TABLE cloud_links ADD COLUMN content_hash TEXT NOT NULL DEFAULT ''");
+        }
+        if (oldVersion < 8) {
+          await _createCloudSyncConflictsTable(db);
         }
       },
     );
@@ -208,6 +214,56 @@ class TradeDatabase {
         UNIQUE(record_type, record_id)
       )
     ''');
+  }
+
+  Future<void> _createCloudSyncConflictsTable(DatabaseExecutor db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS cloud_sync_conflicts(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        team_id TEXT NOT NULL,
+        record_type TEXT NOT NULL,
+        local_id INTEGER NOT NULL,
+        record_id TEXT NOT NULL,
+        local_payload TEXT NOT NULL,
+        remote_payload TEXT NOT NULL,
+        remote_version INTEGER NOT NULL,
+        created_at TEXT NOT NULL,
+        UNIQUE(team_id, record_type, record_id)
+      )
+    ''');
+  }
+
+  Future<void> saveCloudSyncConflict({
+    required String teamId,
+    required String recordType,
+    required int localId,
+    required String recordId,
+    required Map<String, Object?> localPayload,
+    required Map<String, Object?> remotePayload,
+    required int remoteVersion,
+  }) async {
+    final db = await database;
+    await db.insert(
+        'cloud_sync_conflicts',
+        {
+          'team_id': teamId,
+          'record_type': recordType,
+          'local_id': localId,
+          'record_id': recordId,
+          'local_payload': jsonEncode(localPayload),
+          'remote_payload': jsonEncode(remotePayload),
+          'remote_version': remoteVersion,
+          'created_at': DateTime.now().toIso8601String(),
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<List<Map<String, dynamic>>> getCloudSyncConflicts() =>
+      queryAll('cloud_sync_conflicts', orderBy: 'created_at DESC');
+
+  Future<void> deleteCloudSyncConflict(int id) async {
+    final db = await database;
+    await db.delete('cloud_sync_conflicts', where: 'id = ?', whereArgs: [id]);
   }
 
   Future<int> insert(String table, Map<String, Object?> values) async {

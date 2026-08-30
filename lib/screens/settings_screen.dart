@@ -9,9 +9,11 @@ import '../data/app_lock_service.dart';
 import '../data/language_service.dart';
 import '../data/team_workspace_service.dart';
 import '../data/cloud_sync_service.dart';
+import '../data/sync_status_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/enterprise_widgets.dart';
 import 'team_setup_screen.dart';
+import 'sync_status_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   final Future<void> Function()? onAppLockChanged;
@@ -204,11 +206,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
     setState(() => _syncing = true);
     try {
       final result = await _sync.syncTeamWorkspace();
+      await SyncStatusService().recordSuccess(
+        uploaded: result.uploaded,
+        downloaded: result.downloaded,
+        conflicts: result.conflicts,
+      );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text('Cloud data synced: ${result.uploaded} uploaded, '
               '${result.downloaded} downloaded, ${result.conflicts} conflicts.')));
     } catch (error) {
+      await SyncStatusService().recordFailure(error);
       if (!mounted) return;
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text('Cloud sync failed: $error')));
@@ -369,8 +377,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 title: 'Sync cloud data',
                 subtitle: _teamName == null
                     ? 'Choose a cloud team before syncing'
-                    : 'Sync shared trips, suppliers, contacts, and products '
-                        'for $_teamName',
+                    : 'Sync shared records and attachments for $_teamName',
                 trailing: _syncing
                     ? const SizedBox(
                         width: 22,
@@ -378,6 +385,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         child: CircularProgressIndicator(strokeWidth: 2))
                     : const Icon(Icons.chevron_right),
                 onTap: _syncing || _teamName == null ? null : _syncCloudData,
+              ),
+              _settingTile(
+                icon: Icons.sync_problem_outlined,
+                title: 'Sync activity',
+                subtitle: 'Review the latest cloud sync, errors, and conflicts',
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => const SyncStatusScreen())),
               ),
               _settingTile(
                 icon: Icons.system_update,
