@@ -198,7 +198,11 @@ class _CantonFairAppState extends State<CantonFairApp>
         code: _language,
         child: Builder(
           builder: (context) => Scaffold(
-            body: _screens[_index],
+            body: SafeArea(
+              bottom: false,
+              minimum: const EdgeInsets.only(top: 28),
+              child: _screens[_index],
+            ),
             bottomNavigationBar: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
