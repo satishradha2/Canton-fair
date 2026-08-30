@@ -203,10 +203,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _syncCloudData() async {
     setState(() => _syncing = true);
     try {
-      final result = await _sync.syncTripsAndSuppliers();
+      final result = await _sync.syncTeamWorkspace();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Trips synced: ${result.uploaded} uploaded, '
+          content: Text('Cloud data synced: ${result.uploaded} uploaded, '
               '${result.downloaded} downloaded, ${result.conflicts} conflicts.')));
     } catch (error) {
       if (!mounted) return;
@@ -369,7 +369,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 title: 'Sync cloud data',
                 subtitle: _teamName == null
                     ? 'Choose a cloud team before syncing'
-                    : 'Sync shared trips and suppliers for $_teamName',
+                    : 'Sync shared trips, suppliers, contacts, and products '
+                        'for $_teamName',
                 trailing: _syncing
                     ? const SizedBox(
                         width: 22,

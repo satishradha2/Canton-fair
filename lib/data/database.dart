@@ -20,7 +20,7 @@ class TradeDatabase {
     final path = join(dbPath, 'canton_fair_crm.db');
     return openDatabase(
       path,
-      version: 6,
+      version: 7,
       onCreate: (db, version) async {
         await db.execute('''
         CREATE TABLE trips(
@@ -158,6 +158,10 @@ class TradeDatabase {
         if (oldVersion < 6) {
           await _createCloudLinksTable(db);
         }
+        if (oldVersion < 7) {
+          await db.execute(
+              "ALTER TABLE cloud_links ADD COLUMN content_hash TEXT NOT NULL DEFAULT ''");
+        }
       },
     );
   }
@@ -199,6 +203,7 @@ class TradeDatabase {
         local_id INTEGER NOT NULL,
         record_id TEXT NOT NULL,
         version INTEGER NOT NULL DEFAULT 0,
+        content_hash TEXT NOT NULL DEFAULT '',
         PRIMARY KEY(record_type, local_id),
         UNIQUE(record_type, record_id)
       )
@@ -239,7 +244,12 @@ class TradeDatabase {
   }
 
   Future<void> saveCloudLink(
-      String recordType, int localId, String recordId, int version) async {
+    String recordType,
+    int localId,
+    String recordId,
+    int version, {
+    String contentHash = '',
+  }) async {
     final db = await database;
     await db.insert(
         'cloud_links',
@@ -248,6 +258,7 @@ class TradeDatabase {
           'local_id': localId,
           'record_id': recordId,
           'version': version,
+          'content_hash': contentHash,
         },
         conflictAlgorithm: ConflictAlgorithm.replace);
   }
