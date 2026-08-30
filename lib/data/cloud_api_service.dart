@@ -1,6 +1,4 @@
-import 'dart:convert';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:http/http.dart' as http;
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class CloudTeam {
   final String id, name, role;
@@ -10,33 +8,34 @@ class CloudTeam {
 }
 
 class CloudApiService {
-  static const baseUrl = String.fromEnvironment('API_BASE_URL');
-  Future<Map<String, String>> _headers() async {
-    final token = await FirebaseAuth.instance.currentUser?.getIdToken();
-    if (token == null) throw StateError('Sign in is required.');
-    return {
-      'Authorization': 'Bearer $token',
-      'Content-Type': 'application/json'
-    };
-  }
+  final _client = Supabase.instance.client;
 
   Future<List<CloudTeam>> teams() async {
-    if (baseUrl.isEmpty) throw StateError('Cloud API is not configured.');
-    final response = await http.get(Uri.parse('$baseUrl/v1/teams'),
-        headers: await _headers());
-    if (response.statusCode != 200)
-      throw StateError('Could not load teams (${response.statusCode}).');
-    final payload = jsonDecode(response.body) as Map<String, dynamic>;
-    return (payload['teams'] as List)
-        .map((item) => CloudTeam.fromJson(item))
-        .toList();
+    final records = await _client
+        .from('team_members')
+        .select('role, teams(id, name)')
+        .eq('user_id', _client.auth.currentUser!.id);
+    return records.map((record) {
+      final team = record['teams'] as Map<String, dynamic>;
+      return CloudTeam(
+        id: team['id'] as String,
+        name: team['name'] as String,
+        role: record['role'] as String,
+      );
+    }).toList();
   }
 
   Future<CloudTeam> createTeam(String name) async {
-    final response = await http.post(Uri.parse('$baseUrl/v1/teams'),
-        headers: await _headers(), body: jsonEncode({'name': name}));
-    if (response.statusCode != 201)
-      throw StateError('Could not create team (${response.statusCode}).');
-    return CloudTeam.fromJson(jsonDecode(response.body));
+    final record =
+        await _client.rpc('create_team', params: {'team_name': name});
+    return CloudTeam.fromJson(Map<String, dynamic>.from(record as Map));
+  }
+
+  Future<void> inviteMember(CloudTeam team, String email, String role) async {
+    await _client.rpc('invite_team_member', params: {
+      'target_team': team.id,
+      'member_email': email.trim(),
+      'member_role': role,
+    });
   }
 }

@@ -7,6 +7,8 @@ import '../data/backup_service.dart';
 import '../data/database.dart';
 import '../data/app_lock_service.dart';
 import '../data/language_service.dart';
+import '../data/team_workspace_service.dart';
+import '../data/cloud_sync_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/enterprise_widgets.dart';
 import 'team_setup_screen.dart';
@@ -27,11 +29,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final _backup = BackupService();
   final _database = TradeDatabase.instance;
   final _appLock = AppLockService();
+  final _sync = CloudSyncService();
   bool _checking = false;
   bool _creatingBackup = false;
   bool _restoringBackup = false;
   bool _appLockEnabled = false;
+  bool _syncing = false;
   String _language = 'en';
+  String? _teamName;
 
   Future<void> _createBackup() async {
     setState(() => _creatingBackup = true);
@@ -52,6 +57,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     super.initState();
     _loadAppLock();
     _loadLanguage();
+    _loadTeamWorkspace();
+  }
+
+  Future<void> _loadTeamWorkspace() async {
+    final workspace = await TeamWorkspaceService().load();
+    if (mounted) setState(() => _teamName = workspace?.name);
   }
 
   Future<void> _loadLanguage() async {
@@ -186,6 +197,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
       );
     } finally {
       if (mounted) setState(() => _checking = false);
+    }
+  }
+
+  Future<void> _syncCloudData() async {
+    setState(() => _syncing = true);
+    try {
+      final result = await _sync.syncTripsAndSuppliers();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Trips synced: ${result.uploaded} uploaded, '
+              '${result.downloaded} downloaded, ${result.conflicts} conflicts.')));
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Cloud sync failed: $error')));
+    } finally {
+      if (mounted) setState(() => _syncing = false);
     }
   }
 
@@ -324,10 +352,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
               _settingTile(
                 icon: Icons.groups,
                 title: 'Cloud team',
-                subtitle: 'Choose the shared team workspace for sync',
+                subtitle: _teamName == null
+                    ? 'Choose the shared team workspace for sync'
+                    : 'Workspace: $_teamName',
                 trailing: const Icon(Icons.chevron_right),
-                onTap: () => Navigator.push(context,
-                    MaterialPageRoute(builder: (_) => const TeamSetupScreen())),
+                onTap: () async {
+                  await Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => const TeamSetupScreen()));
+                  await _loadTeamWorkspace();
+                },
+              ),
+              _settingTile(
+                icon: Icons.sync,
+                title: 'Sync cloud data',
+                subtitle: _teamName == null
+                    ? 'Choose a cloud team before syncing'
+                    : 'Sync shared trips and suppliers for $_teamName',
+                trailing: _syncing
+                    ? const SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Icon(Icons.chevron_right),
+                onTap: _syncing || _teamName == null ? null : _syncCloudData,
               ),
               _settingTile(
                 icon: Icons.system_update,

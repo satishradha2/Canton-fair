@@ -51,10 +51,10 @@ class BackupService {
 
   Future<void> createAndShareBackup() async {
     final file = await createBackup();
-    await Share.shareXFiles(
-      [XFile(file.path)],
+    await SharePlus.instance.share(ShareParams(
+      files: [XFile(file.path)],
       text: 'Canton Fair CRM local data backup',
-    );
+    ));
   }
 
   Future<BackupPreview?> selectBackup() async {

@@ -30,7 +30,7 @@ val hasReleaseSigning = listOf(
 
 android {
     namespace = "com.example.canton_fair_crm"
-    compileSdk = flutter.compileSdkVersion
+    compileSdk = 37
     ndkVersion = flutter.ndkVersion
 
     compileOptions {

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../data/cloud_api_service.dart';
+import '../data/team_workspace_service.dart';
 
 class TeamSetupScreen extends StatefulWidget {
   const TeamSetupScreen({super.key});
@@ -9,6 +10,7 @@ class TeamSetupScreen extends StatefulWidget {
 
 class _TeamSetupScreenState extends State<TeamSetupScreen> {
   final _api = CloudApiService();
+  final _workspace = TeamWorkspaceService();
   late Future<List<CloudTeam>> _teams = _api.teams();
   Future<void> _create() async {
     final controller = TextEditingController();
@@ -29,8 +31,67 @@ class _TeamSetupScreenState extends State<TeamSetupScreen> {
                       child: const Text('Create'))
                 ]));
     if (name?.trim().isEmpty ?? true) return;
-    await _api.createTeam(name!.trim());
-    if (mounted) setState(() => _teams = _api.teams());
+    final team = await _api.createTeam(name!.trim());
+    await _select(team);
+  }
+
+  Future<void> _select(CloudTeam team) async {
+    await _workspace.save(TeamWorkspace(id: team.id, name: team.name));
+    if (mounted) Navigator.pop(context, team);
+  }
+
+  Future<void> _invite(CloudTeam team) async {
+    final email = TextEditingController();
+    var role = 'member';
+    final result = await showDialog<Map<String, String>>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text('Add member to ${team.name}'),
+          content: Column(mainAxisSize: MainAxisSize.min, children: [
+            TextField(
+              controller: email,
+              keyboardType: TextInputType.emailAddress,
+              decoration: const InputDecoration(labelText: 'Registered email'),
+            ),
+            DropdownButtonFormField<String>(
+              initialValue: role,
+              decoration: const InputDecoration(labelText: 'Role'),
+              items: const [
+                DropdownMenuItem(value: 'member', child: Text('Member')),
+                DropdownMenuItem(value: 'viewer', child: Text('Viewer')),
+                DropdownMenuItem(value: 'admin', child: Text('Admin')),
+              ],
+              onChanged: (value) => setDialogState(() => role = value!),
+            ),
+          ]),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel')),
+            ElevatedButton(
+              onPressed: () =>
+                  Navigator.pop(context, {'email': email.text, 'role': role}),
+              child: const Text('Add member'),
+            ),
+          ],
+        ),
+      ),
+    );
+    email.dispose();
+    if (result == null || result['email']!.trim().isEmpty) return;
+    try {
+      await _api.inviteMember(team, result['email']!, result['role']!);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('${result['email']} added to ${team.name}.')));
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Could not add member: $error')));
+      }
+    }
   }
 
   @override
@@ -46,7 +107,7 @@ class _TeamSetupScreenState extends State<TeamSetupScreen> {
                   child: Padding(
                       padding: const EdgeInsets.all(24),
                       child: Text(
-                          '${snapshot.error}\n\nBuild with --dart-define=API_BASE_URL=https://your-api.example.com')));
+                          '${snapshot.error}\n\nCheck your Supabase connection and team setup.')));
             final teams = snapshot.data!;
             return ListView(padding: const EdgeInsets.all(16), children: [
               const Text(
@@ -56,7 +117,14 @@ class _TeamSetupScreenState extends State<TeamSetupScreen> {
                   title: Text(team.name),
                   subtitle: Text(team.role),
                   leading: const Icon(Icons.groups),
-                  onTap: () => Navigator.pop(context, team))),
+                  onTap: () => _select(team),
+                  trailing: team.role == 'admin'
+                      ? IconButton(
+                          icon: const Icon(Icons.person_add_alt_1),
+                          tooltip: 'Add team member',
+                          onPressed: () => _invite(team),
+                        )
+                      : null)),
               OutlinedButton.icon(
                   onPressed: _create,
                   icon: const Icon(Icons.add),

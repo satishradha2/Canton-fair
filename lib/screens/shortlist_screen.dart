@@ -331,11 +331,11 @@ class _ShortlistScreenState extends State<ShortlistScreen> {
         rows,
         'canton_fair_shortlist_${DateTime.now().millisecondsSinceEpoch}.csv',
       );
-      await Share.shareXFiles(
-        [XFile(path)],
+      await SharePlus.instance.share(ShareParams(
+        files: [XFile(path)],
         text:
             'Canton Fair shortlist export (filter: $filter, sort: ${_sortFieldLabel()} $direction)',
-      );
+      ));
       _showExportSnack('Shortlist CSV exported.');
     } catch (error) {
       _showExportSnack('Export failed: $error');
@@ -430,10 +430,10 @@ class _ShortlistScreenState extends State<ShortlistScreen> {
       final out = File(
           '${(await getTemporaryDirectory()).path}/canton_fair_shortlist_${DateTime.now().millisecondsSinceEpoch}.pdf');
       await out.writeAsBytes(await doc.save());
-      await Share.shareXFiles(
-        [XFile(out.path)],
+      await SharePlus.instance.share(ShareParams(
+        files: [XFile(out.path)],
         text: 'Canton Fair shortlist PDF (${products.length} products)',
-      );
+      ));
       _showExportSnack('Shortlist PDF exported.');
     } catch (error) {
       _showExportSnack('Export failed: $error');

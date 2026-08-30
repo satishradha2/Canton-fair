@@ -63,12 +63,36 @@ class UpdateService {
   }
 
   bool _isRemoteNewer(String current, String latest) {
+    final versionComparison = _compareVersionNames(current, latest);
+    if (versionComparison != 0) return versionComparison < 0;
+
     final currentBuild = _buildNumber(current);
     final latestBuild = _buildNumber(latest);
     if (currentBuild != null && latestBuild != null) {
       return latestBuild > currentBuild;
     }
     return latest.isNotEmpty && latest != current;
+  }
+
+  int _compareVersionNames(String current, String latest) {
+    final currentParts = current.split('+').first.split('.');
+    final latestParts = latest.split('+').first.split('.');
+    if (currentParts.any((part) => int.tryParse(part) == null) ||
+        latestParts.any((part) => int.tryParse(part) == null)) {
+      return 0;
+    }
+
+    final length = currentParts.length > latestParts.length
+        ? currentParts.length
+        : latestParts.length;
+    for (var index = 0; index < length; index++) {
+      final currentPart =
+          index < currentParts.length ? int.parse(currentParts[index]) : 0;
+      final latestPart =
+          index < latestParts.length ? int.parse(latestParts[index]) : 0;
+      if (currentPart != latestPart) return currentPart.compareTo(latestPart);
+    }
+    return 0;
   }
 
   int? _buildNumber(String version) {

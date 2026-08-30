@@ -20,7 +20,7 @@ class TradeDatabase {
     final path = join(dbPath, 'canton_fair_crm.db');
     return openDatabase(
       path,
-      version: 5,
+      version: 6,
       onCreate: (db, version) async {
         await db.execute('''
         CREATE TABLE trips(
@@ -129,6 +129,7 @@ class TradeDatabase {
             'CREATE INDEX idx_attachment_owner ON attachments(owner_type, owner_id);');
         await _createSavedFiltersTable(db);
         await _createAuditLogsTable(db);
+        await _createCloudLinksTable(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -153,6 +154,9 @@ class TradeDatabase {
         }
         if (oldVersion < 5) {
           await _createAuditLogsTable(db);
+        }
+        if (oldVersion < 6) {
+          await _createCloudLinksTable(db);
         }
       },
     );
@@ -188,6 +192,19 @@ class TradeDatabase {
     ''');
   }
 
+  Future<void> _createCloudLinksTable(DatabaseExecutor db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS cloud_links(
+        record_type TEXT NOT NULL,
+        local_id INTEGER NOT NULL,
+        record_id TEXT NOT NULL,
+        version INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY(record_type, local_id),
+        UNIQUE(record_type, record_id)
+      )
+    ''');
+  }
+
   Future<int> insert(String table, Map<String, Object?> values) async {
     final db = await database;
     return db.insert(table, values);
@@ -201,6 +218,38 @@ class TradeDatabase {
   Future<int> delete(String table, int id) async {
     final db = await database;
     return db.delete(table, where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<Map<String, dynamic>?> getCloudLink(
+      String recordType, int localId) async {
+    final db = await database;
+    final rows = await db.query('cloud_links',
+        where: 'record_type = ? AND local_id = ?',
+        whereArgs: [recordType, localId]);
+    return rows.isEmpty ? null : rows.first;
+  }
+
+  Future<Map<String, dynamic>?> getCloudLinkByRecordId(
+      String recordType, String recordId) async {
+    final db = await database;
+    final rows = await db.query('cloud_links',
+        where: 'record_type = ? AND record_id = ?',
+        whereArgs: [recordType, recordId]);
+    return rows.isEmpty ? null : rows.first;
+  }
+
+  Future<void> saveCloudLink(
+      String recordType, int localId, String recordId, int version) async {
+    final db = await database;
+    await db.insert(
+        'cloud_links',
+        {
+          'record_type': recordType,
+          'local_id': localId,
+          'record_id': recordId,
+          'version': version,
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   Future<int> updateWhere(
