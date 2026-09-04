@@ -77,18 +77,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
       context: context,
       builder: (context) => SimpleDialog(
         title: Text(tr(context, 'chooseLanguage')),
-        children: ['en', 'zh', 'hi']
-            .map((code) => RadioListTile<String>(
-                  value: code,
-                  groupValue: _language,
-                  title: Text({
-                    'en': tr(context, 'english'),
-                    'zh': tr(context, 'chinese'),
-                    'hi': tr(context, 'hindi')
-                  }[code]!),
-                  onChanged: (value) => Navigator.pop(context, value),
-                ))
-            .toList(),
+        children: [
+          RadioGroup<String>(
+            groupValue: _language,
+            onChanged: (value) => Navigator.pop(context, value),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: ['en', 'zh', 'hi']
+                  .map((code) => RadioListTile<String>(
+                        value: code,
+                        title: Text({
+                          'en': tr(context, 'english'),
+                          'zh': tr(context, 'chinese'),
+                          'hi': tr(context, 'hindi')
+                        }[code]!),
+                      ))
+                  .toList(),
+            ),
+          ),
+        ],
       ),
     );
     if (selected == null) return;

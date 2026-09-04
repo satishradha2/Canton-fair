@@ -36,24 +36,27 @@ class _VoiceNoteFieldState extends State<VoiceNoteField> {
         }
       },
       onError: (error) {
-        if (mounted)
+        if (mounted) {
           setState(() {
             _listening = false;
             _error = error.errorMsg;
           });
+        }
       },
     );
     if (!available) {
-      if (mounted)
+      if (mounted) {
         setState(
             () => _error = 'Speech recognition is unavailable on this device.');
+      }
       return;
     }
-    if (mounted)
+    if (mounted) {
       setState(() {
         _listening = true;
         _error = '';
       });
+    }
     await _speech.listen(
       onResult: (result) {
         final recognized = result.recognizedWords.trim();
@@ -67,8 +70,11 @@ class _VoiceNoteFieldState extends State<VoiceNoteField> {
                   : current.length + recognized.length + 1),
         );
       },
-      listenFor: const Duration(minutes: 1),
-      pauseFor: const Duration(seconds: 5),
+      listenOptions: stt.SpeechListenOptions(
+        listenFor: const Duration(minutes: 1),
+        pauseFor: const Duration(seconds: 5),
+        listenMode: stt.ListenMode.dictation,
+      ),
     );
   }
 

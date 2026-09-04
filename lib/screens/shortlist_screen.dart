@@ -9,6 +9,8 @@ import 'package:share_plus/share_plus.dart';
 import '../data/database.dart';
 import '../data/language_service.dart';
 import '../models/models.dart';
+import 'quote_approval_screen.dart';
+import 'supplier_comparison_screen.dart';
 import '../theme/app_theme.dart';
 import '../widgets/enterprise_widgets.dart';
 
@@ -32,6 +34,7 @@ class _ShortlistScreenState extends State<ShortlistScreen> {
   _ProductSortField _sortField = _ProductSortField.score;
   bool _sortAscending = false;
   bool _tripDayOnly = false;
+  final Set<int> _selectedSupplierIds = <int>{};
 
   @override
   void initState() {
@@ -98,8 +101,9 @@ class _ShortlistScreenState extends State<ShortlistScreen> {
     final activeTripIds = <int>{};
 
     for (final trip in trips) {
-      if (trip.id == null || trip.startDate == null || trip.endDate == null)
+      if (trip.id == null || trip.startDate == null || trip.endDate == null) {
         continue;
+      }
       final start = DateTime(
           trip.startDate!.year, trip.startDate!.month, trip.startDate!.day);
       final end =
@@ -212,6 +216,24 @@ class _ShortlistScreenState extends State<ShortlistScreen> {
         .update('exhibitors', e.id!, {'shortlisted': e.shortlisted ? 0 : 1});
     _load();
     setState(() {});
+  }
+
+  void _openSupplierComparison(List<Exhibitor> suppliers) {
+    final selected = suppliers
+        .where((supplier) => _selectedSupplierIds.contains(supplier.id))
+        .toList();
+    if (selected.length < 2) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('Select at least two suppliers to compare.')),
+      );
+      return;
+    }
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+          builder: (_) => SupplierComparisonScreen(suppliers: selected)),
+    );
   }
 
   Future<void> _toggleProductShortlist(Product p) async {
@@ -398,7 +420,7 @@ class _ShortlistScreenState extends State<ShortlistScreen> {
             }
 
             widgets.add(
-              pw.Table.fromTextArray(
+              pw.TableHelper.fromTextArray(
                 headers: const [
                   'Product',
                   'Supplier',
@@ -494,7 +516,7 @@ class _ShortlistScreenState extends State<ShortlistScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.15),
+        color: color.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Text(
@@ -517,6 +539,14 @@ class _ShortlistScreenState extends State<ShortlistScreen> {
         subtitle:
             'Compare suppliers and products using score, quote, MOQ, lead time, and trip timing.',
         actions: [
+          OutlinedButton.icon(
+              onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => const QuoteApprovalScreen()),
+                  ),
+              icon: const Icon(Icons.fact_check_outlined),
+              label: const Text('Quote approvals')),
           ElevatedButton.icon(
               onPressed: _exportShortlistCsv,
               icon: const Icon(Icons.table_view),
@@ -675,6 +705,7 @@ class _ShortlistScreenState extends State<ShortlistScreen> {
           const SizedBox(height: 16),
           SectionPanel(
             title: 'Shortlisted suppliers',
+            subtitle: 'Choose two to four suppliers for a focused comparison.',
             child: FutureBuilder<List<Exhibitor>>(
               future: _shortlistExhibitors,
               builder: (context, snap) {
@@ -687,21 +718,53 @@ class _ShortlistScreenState extends State<ShortlistScreen> {
                         : 'Star suppliers from Captures to build this list.',
                   );
                 }
+                final suppliers = snap.data!;
+                _selectedSupplierIds.removeWhere(
+                    (id) => !suppliers.any((supplier) => supplier.id == id));
                 return Column(
-                  children: snap.data!.map((e) {
-                    return ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: Text(e.name,
-                          maxLines: 1, overflow: TextOverflow.ellipsis),
-                      subtitle: Text(
-                          'Booth ${e.booth.isEmpty ? "-" : e.booth}  |  Decision score ${e.decisionScore.toStringAsFixed(0)} / 100'),
-                      trailing: IconButton(
-                        icon: const Icon(Icons.star_border),
-                        tooltip: 'Remove from shortlist',
-                        onPressed: () => _toggleExhibitorShortlist(e),
+                  children: [
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: FilledButton.icon(
+                        onPressed: _selectedSupplierIds.length >= 2
+                            ? () => _openSupplierComparison(suppliers)
+                            : null,
+                        icon: const Icon(Icons.compare_arrows_outlined),
+                        label: Text(
+                            'Compare selected (${_selectedSupplierIds.length})'),
                       ),
-                    );
-                  }).toList(),
+                    ),
+                    const SizedBox(height: 8),
+                    ...suppliers.map((e) {
+                      return ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: Checkbox(
+                          value: _selectedSupplierIds.contains(e.id),
+                          onChanged: (selected) {
+                            if (e.id == null) return;
+                            setState(() {
+                              if (selected ?? false) {
+                                if (_selectedSupplierIds.length < 4) {
+                                  _selectedSupplierIds.add(e.id!);
+                                }
+                              } else {
+                                _selectedSupplierIds.remove(e.id);
+                              }
+                            });
+                          },
+                        ),
+                        title: Text(e.name,
+                            maxLines: 1, overflow: TextOverflow.ellipsis),
+                        subtitle: Text(
+                            'Booth ${e.booth.isEmpty ? "-" : e.booth}  |  Decision score ${e.decisionScore.toStringAsFixed(0)} / 100'),
+                        trailing: IconButton(
+                          icon: const Icon(Icons.star_border),
+                          tooltip: 'Remove from shortlist',
+                          onPressed: () => _toggleExhibitorShortlist(e),
+                        ),
+                      );
+                    }),
+                  ],
                 );
               },
             ),

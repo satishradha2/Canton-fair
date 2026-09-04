@@ -99,12 +99,15 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
           .any((product) => quoteProductIds.contains(product.id))) {
         risks.add('No quote');
       }
-      if (supplier.decisionScore > 0 && supplier.decisionScore < 40)
+      if (supplier.decisionScore > 0 && supplier.decisionScore < 40) {
         risks.add('Low score');
-      if (overdueSupplierIds.contains(supplier.id))
+      }
+      if (overdueSupplierIds.contains(supplier.id)) {
         risks.add('Follow-up overdue');
-      if (risks.isNotEmpty)
+      }
+      if (risks.isNotEmpty) {
         riskSuppliers.add({'name': supplier.name, 'risk': risks.join(' | ')});
+      }
     }
 
     return _AnalyticsSnapshot(
@@ -169,8 +172,9 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
       child: FutureBuilder<_AnalyticsSnapshot>(
         future: _analytics,
         builder: (context, snapshot) {
-          if (!snapshot.hasData)
+          if (!snapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
+          }
           final data = snapshot.data!;
           return EnterprisePage(
             title: tr(context, 'businessIntelligence'),

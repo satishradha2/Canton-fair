@@ -210,7 +210,7 @@ class _CapturesScreenState extends State<CapturesScreen> {
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<int>(
-                  value: _minRating,
+                  initialValue: _minRating,
                   decoration:
                       const InputDecoration(labelText: 'Minimum rating'),
                   items: List.generate(
@@ -434,7 +434,7 @@ class _CapturesScreenState extends State<CapturesScreen> {
                 expiringQuotesOnly: _expiringQuotesOnly,
               ));
               _load();
-              if (!mounted) return;
+              if (!ctx.mounted) return;
               Navigator.pop(ctx);
             },
             child: const Text('Save'),
@@ -619,6 +619,7 @@ class _CapturesScreenState extends State<CapturesScreen> {
   Future<void> _openCloseTripSheet(int tripId) async {
     final trip = await db.getTripById(tripId);
     if (trip == null) return;
+    if (!mounted) return;
     final noteController = TextEditingController();
     await showDialog(
       context: context,
@@ -639,7 +640,7 @@ class _CapturesScreenState extends State<CapturesScreen> {
             child: const Text('Mark closed'),
             onPressed: () async {
               await db.closeTrip(tripId, note: noteController.text.trim());
-              if (!mounted) return;
+              if (!ctx.mounted || !mounted) return;
               Navigator.pop(ctx);
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
@@ -725,7 +726,7 @@ class _CapturesScreenState extends State<CapturesScreen> {
               );
               await db.insertTrip(trip);
               _trips = db.getTrips();
-              if (!mounted) return;
+              if (!ctx.mounted) return;
               Navigator.pop(ctx);
               _load();
             },
@@ -759,6 +760,7 @@ class _CapturesScreenState extends State<CapturesScreen> {
     bool shortlisted = false;
     final trips = await _trips;
     final defaults = await CaptureDefaultsService().load();
+    if (!mounted) return;
     if (country.isEmpty) country = defaults.country;
     int selectedTrip = trips.any((trip) => trip.id == defaults.tripId)
         ? defaults.tripId!
@@ -783,7 +785,7 @@ class _CapturesScreenState extends State<CapturesScreen> {
                   const Text('Create a trip first to attach exhibitor records.')
                 else
                   DropdownButtonFormField<int>(
-                    value: selectedTrip,
+                    initialValue: selectedTrip,
                     items: trips
                         .where((t) => t.id != null)
                         .map(
@@ -825,7 +827,7 @@ class _CapturesScreenState extends State<CapturesScreen> {
                     style: TextStyle(fontWeight: FontWeight.w800)),
                 const SizedBox(height: 8),
                 DropdownButtonFormField<int>(
-                  value: rating,
+                  initialValue: rating,
                   items: List.generate(
                     6,
                     (i) => DropdownMenuItem(value: i, child: Text('Rating $i')),
@@ -873,7 +875,7 @@ class _CapturesScreenState extends State<CapturesScreen> {
                 country: country,
               );
               _load();
-              if (!mounted) return;
+              if (!ctx.mounted || !mounted) return;
               Navigator.pop(ctx);
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
@@ -894,6 +896,7 @@ class _CapturesScreenState extends State<CapturesScreen> {
   Future<void> _openDeleteTripDialog(int tripId) async {
     final trip = await db.getTripById(tripId);
     if (trip == null) return;
+    if (!mounted) return;
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -933,6 +936,7 @@ class _CapturesScreenState extends State<CapturesScreen> {
     int rating = e.rating;
     bool shortlisted = e.shortlisted;
     final trips = await _trips;
+    if (!mounted) return;
     int selectedTrip = e.tripId;
 
     await showDialog(
@@ -945,7 +949,7 @@ class _CapturesScreenState extends State<CapturesScreen> {
             child: Column(
               children: [
                 DropdownButtonFormField<int>(
-                  value: selectedTrip,
+                  initialValue: selectedTrip,
                   items: trips
                       .where((t) => t.id != null)
                       .map(
@@ -989,7 +993,7 @@ class _CapturesScreenState extends State<CapturesScreen> {
                   onSaved: (v) => notes = v?.trim() ?? '',
                 ),
                 DropdownButtonFormField<int>(
-                  value: rating,
+                  initialValue: rating,
                   items: List.generate(
                     6,
                     (i) => DropdownMenuItem(value: i, child: Text('Rating $i')),
@@ -1037,7 +1041,7 @@ class _CapturesScreenState extends State<CapturesScreen> {
                   ..remove('id'),
               );
               _load();
-              if (!mounted) return;
+              if (!ctx.mounted) return;
               Navigator.pop(ctx);
             },
           ),
@@ -1048,6 +1052,7 @@ class _CapturesScreenState extends State<CapturesScreen> {
 
   Future<void> _openMergeDuplicateDialog(Exhibitor source) async {
     final candidates = await _getDuplicateCandidates(source);
+    if (!mounted) return;
     final deduped = candidates.where((it) => it.id != source.id).toList();
     if (deduped.isEmpty) {
       if (!mounted) return;
@@ -1079,6 +1084,7 @@ class _CapturesScreenState extends State<CapturesScreen> {
         ),
       ),
     );
+    if (!mounted) return;
     if (targetId == null || targetId == source.id || source.id == null) return;
 
     final confirm = await showDialog<bool>(
@@ -1097,6 +1103,7 @@ class _CapturesScreenState extends State<CapturesScreen> {
         ],
       ),
     );
+    if (!mounted) return;
     if (confirm != true) return;
 
     await db.mergeExhibitorRecords(targetId, source.id!);
@@ -1128,6 +1135,7 @@ class _CapturesScreenState extends State<CapturesScreen> {
     if (confirm != true) return;
     await db.deleteExhibitorCascade(e.id!);
     _load();
+    if (!mounted) return;
     ScaffoldMessenger.of(context)
         .showSnackBar(SnackBar(content: Text('Supplier "${e.name}" deleted')));
   }
@@ -1201,7 +1209,7 @@ class _CapturesScreenState extends State<CapturesScreen> {
                   ..remove('id'),
               );
               _load();
-              if (!mounted) return;
+              if (!ctx.mounted) return;
               Navigator.pop(ctx);
             },
           ),
@@ -1279,7 +1287,7 @@ class _CapturesScreenState extends State<CapturesScreen> {
                           const InputDecoration(labelText: 'Payment terms'),
                       onSaved: (v) => terms = v?.trim() ?? ''),
                   DropdownButtonFormField<int>(
-                    value: rating,
+                    initialValue: rating,
                     items: List.generate(
                         6,
                         (i) => DropdownMenuItem(
@@ -1336,7 +1344,7 @@ class _CapturesScreenState extends State<CapturesScreen> {
                     ..remove('id'),
                 );
                 _load();
-                if (!mounted) return;
+                if (!ctx.mounted) return;
                 Navigator.pop(ctx);
               },
             ),
@@ -1417,7 +1425,7 @@ class _CapturesScreenState extends State<CapturesScreen> {
                     wechat: wechat,
                   ).toMap());
               _load();
-              if (!mounted) return;
+              if (!ctx.mounted) return;
               Navigator.pop(ctx);
             },
             child: const Text('Save'),
@@ -1489,7 +1497,7 @@ class _CapturesScreenState extends State<CapturesScreen> {
                           const InputDecoration(labelText: 'Payment terms'),
                       onSaved: (v) => terms = v?.trim() ?? ''),
                   DropdownButtonFormField<int>(
-                    value: rating,
+                    initialValue: rating,
                     items: List.generate(
                       6,
                       (i) =>
@@ -1544,7 +1552,7 @@ class _CapturesScreenState extends State<CapturesScreen> {
                   ).toMap(),
                 );
                 _load();
-                if (!mounted) return;
+                if (!ctx.mounted) return;
                 Navigator.pop(ctx);
               },
               child: const Text('Save'),
@@ -1589,8 +1597,9 @@ class _CapturesScreenState extends State<CapturesScreen> {
                   OutlinedButton.icon(
                     onPressed: () async {
                       final selected = await _pickDateTime(context, meeting);
-                      if (selected != null)
+                      if (selected != null) {
                         setDialogState(() => meeting = selected);
+                      }
                     },
                     icon: const Icon(Icons.event_outlined),
                     label: Text('Meeting: ${_dateTimeLabel(meeting)}'),
@@ -1600,8 +1609,9 @@ class _CapturesScreenState extends State<CapturesScreen> {
                     onPressed: () async {
                       final selected =
                           await _pickDateTime(context, followUp ?? meeting);
-                      if (selected != null)
+                      if (selected != null) {
                         setDialogState(() => followUp = selected);
+                      }
                     },
                     icon: const Icon(Icons.event_available_outlined),
                     label: Text(
@@ -1609,7 +1619,7 @@ class _CapturesScreenState extends State<CapturesScreen> {
                   ),
                   const SizedBox(height: 10),
                   DropdownButtonFormField<String>(
-                    value: assigneeEmail,
+                    initialValue: assigneeEmail,
                     decoration: const InputDecoration(labelText: 'Assign to'),
                     items: [
                       const DropdownMenuItem(
@@ -1629,7 +1639,7 @@ class _CapturesScreenState extends State<CapturesScreen> {
                     ),
                   const SizedBox(height: 10),
                   DropdownButtonFormField<String>(
-                    value: priority,
+                    initialValue: priority,
                     decoration: const InputDecoration(labelText: 'Priority'),
                     items: const [
                       DropdownMenuItem(value: 'High', child: Text('High')),
@@ -1712,7 +1722,7 @@ class _CapturesScreenState extends State<CapturesScreen> {
                   );
                 }
                 _load();
-                if (!mounted) return;
+                if (!ctx.mounted) return;
                 Navigator.pop(ctx);
               },
               child: const Text('Create task'),
@@ -1911,7 +1921,7 @@ class _CapturesScreenState extends State<CapturesScreen> {
               title: const Text('Copy message'),
               onTap: () async {
                 await _copyText(message);
-                if (!mounted) return;
+                if (!ctx.mounted) return;
                 Navigator.pop(ctx);
               },
             ),
@@ -2228,7 +2238,7 @@ class _CapturesScreenState extends State<CapturesScreen> {
                     'reliability_score': reliability,
                   });
                   _load();
-                  if (!mounted) return;
+                  if (!ctx.mounted) return;
                   Navigator.pop(ctx);
                 },
                 child: const Text('Save scorecard'),
@@ -2317,7 +2327,7 @@ class _CapturesScreenState extends State<CapturesScreen> {
                     'planned_visit_at': null,
                   });
                   _load();
-                  if (!mounted) return;
+                  if (!ctx.mounted) return;
                   Navigator.pop(ctx);
                 },
                 child: const Text('Clear schedule'),
@@ -2332,7 +2342,7 @@ class _CapturesScreenState extends State<CapturesScreen> {
                   'visited_at': null,
                 });
                 _load();
-                if (!mounted) return;
+                if (!ctx.mounted) return;
                 Navigator.pop(ctx);
               },
               child: const Text('Save visit'),
@@ -2369,7 +2379,7 @@ class _CapturesScreenState extends State<CapturesScreen> {
                         style: const TextStyle(fontWeight: FontWeight.w700)),
                     const SizedBox(height: 12),
                     DropdownButtonFormField<String>(
-                      value: quoteType,
+                      initialValue: quoteType,
                       decoration:
                           const InputDecoration(labelText: 'Quote type'),
                       items: const [
@@ -2470,7 +2480,7 @@ class _CapturesScreenState extends State<CapturesScreen> {
                   );
                 }
                 _load();
-                if (!mounted) return;
+                if (!ctx.mounted) return;
                 Navigator.pop(ctx);
               },
               child: const Text('Save quote'),
@@ -2536,17 +2546,55 @@ class _CapturesScreenState extends State<CapturesScreen> {
                         : quote.validUntil == null
                             ? 'No expiry'
                             : 'Active';
+                final approval = quote.approvalStatus;
                 return ListTile(
                   contentPadding: EdgeInsets.zero,
                   leading: Icon(Icons.request_quote, color: color),
                   title: Text(
                       '${quote.label} | ${quote.unitPrice ?? '-'} ${quote.currency}'),
                   subtitle: Text(
-                    'MOQ ${quote.moq ?? '-'} | Valid ${quote.validUntil == null ? '-' : quote.validUntil!.toLocal().toString().substring(0, 10)}${quote.note.isEmpty ? '' : ' | ${quote.note}'}',
+                    'MOQ ${quote.moq ?? '-'} | Valid ${quote.validUntil == null ? '-' : quote.validUntil!.toLocal().toString().substring(0, 10)} | $approval${quote.note.isEmpty ? '' : ' | ${quote.note}'}',
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
                   trailing: InfoChip(label: status, color: color),
+                  onTap: () async {
+                    await showDialog<void>(
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        title: Text('${quote.label} quote'),
+                        content: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Approval: $approval',
+                                style: TextStyle(
+                                    color: approval == 'Approved'
+                                        ? AppColors.teal
+                                        : approval == 'Rejected'
+                                            ? AppColors.danger
+                                            : AppColors.primary,
+                                    fontWeight: FontWeight.w800)),
+                            if (quote.approvalComment.isNotEmpty) ...[
+                              const SizedBox(height: 12),
+                              Text(quote.approvalComment),
+                            ],
+                            if (quote.approvedBy.isNotEmpty) ...[
+                              const SizedBox(height: 12),
+                              Text('Reviewed by ${quote.approvedBy}',
+                                  style:
+                                      const TextStyle(color: AppColors.muted)),
+                            ],
+                          ],
+                        ),
+                        actions: [
+                          TextButton(
+                              onPressed: () => Navigator.pop(context),
+                              child: const Text('Close')),
+                        ],
+                      ),
+                    );
+                  },
                 );
               }),
             ],
@@ -2850,7 +2898,7 @@ class _CapturesScreenState extends State<CapturesScreen> {
                           builder: (_, snap) {
                             if (!snap.hasData) return const SizedBox.shrink();
                             return DropdownButtonFormField<int?>(
-                              value: _tripFilter,
+                              initialValue: _tripFilter,
                               decoration:
                                   const InputDecoration(labelText: 'Trip'),
                               isExpanded: true,
@@ -3157,8 +3205,9 @@ class _CapturesScreenState extends State<CapturesScreen> {
             FutureBuilder<List<Contact>>(
               future: db.getContacts(e.id!),
               builder: (ctx, cSnap) {
-                if (!cSnap.hasData || cSnap.data!.isEmpty)
+                if (!cSnap.hasData || cSnap.data!.isEmpty) {
                   return const Text('No contacts yet');
+                }
                 return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children:
@@ -3169,8 +3218,9 @@ class _CapturesScreenState extends State<CapturesScreen> {
             FutureBuilder<List<Product>>(
               future: db.getProducts(e.id!),
               builder: (ctx, pSnap) {
-                if (!pSnap.hasData || pSnap.data!.isEmpty)
+                if (!pSnap.hasData || pSnap.data!.isEmpty) {
                   return const Text('No products yet');
+                }
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: pSnap.data!.expand((p) {

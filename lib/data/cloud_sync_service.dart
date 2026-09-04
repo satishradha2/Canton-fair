@@ -625,8 +625,9 @@ class CloudSyncService {
         final tripLink = tripRecordId == null
             ? null
             : await _db.getCloudLinkByRecordId('trip', tripRecordId);
-        if (tripLink == null)
+        if (tripLink == null) {
           throw StateError('Cloud trip is not available locally.');
+        }
         payload['trip_id'] = tripLink['local_id'] as int;
         table = 'exhibitors';
         break;
@@ -637,8 +638,9 @@ class CloudSyncService {
         final supplierLink = supplierRecordId == null
             ? null
             : await _db.getCloudLinkByRecordId('supplier', supplierRecordId);
-        if (supplierLink == null)
+        if (supplierLink == null) {
           throw StateError('Cloud supplier is not available locally.');
+        }
         payload['exhibitor_id'] = supplierLink['local_id'] as int;
         table = conflict.recordType == 'contact' ? 'contacts' : 'products';
         break;
@@ -647,8 +649,9 @@ class CloudSyncService {
         final productLink = productRecordId == null
             ? null
             : await _db.getCloudLinkByRecordId('product', productRecordId);
-        if (productLink == null)
+        if (productLink == null) {
           throw StateError('Cloud product is not available locally.');
+        }
         payload['product_id'] = productLink['local_id'] as int;
         table = 'quotes';
         break;

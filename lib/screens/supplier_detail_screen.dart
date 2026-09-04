@@ -90,7 +90,7 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
       if (supplier.contactCompanyNotes.isNotEmpty)
         'Notes: ${supplier.contactCompanyNotes}',
     ];
-    await Share.share(lines.join('\n'));
+    await SharePlus.instance.share(ShareParams(text: lines.join('\n')));
   }
 
   Future<void> _openPhone(String phone, {bool whatsapp = false}) async {
@@ -272,13 +272,15 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
         future: _contacts,
         builder: (context, snapshot) {
           final contacts = snapshot.data ?? const <Contact>[];
-          if (snapshot.connectionState != ConnectionState.done)
+          if (snapshot.connectionState != ConnectionState.done) {
             return const Center(child: CircularProgressIndicator());
-          if (contacts.isEmpty)
+          }
+          if (contacts.isEmpty) {
             return _empty(
                 'No contacts',
                 'Add a contact from the supplier capture screen.',
                 Icons.person_add_alt_1_outlined);
+          }
           return ListView.separated(
             padding: const EdgeInsets.all(16),
             itemCount: contacts.length,
@@ -328,13 +330,15 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
         future: _products,
         builder: (context, snapshot) {
           final products = snapshot.data ?? const <Product>[];
-          if (snapshot.connectionState != ConnectionState.done)
+          if (snapshot.connectionState != ConnectionState.done) {
             return const Center(child: CircularProgressIndicator());
-          if (products.isEmpty)
+          }
+          if (products.isEmpty) {
             return _empty(
                 'No products',
                 'Add products from the supplier capture screen.',
                 Icons.inventory_2_outlined);
+          }
           return ListView.separated(
             padding: const EdgeInsets.all(16),
             itemCount: products.length,
@@ -359,13 +363,15 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
         future: _meetings,
         builder: (context, snapshot) {
           final meetings = snapshot.data ?? const <Meeting>[];
-          if (snapshot.connectionState != ConnectionState.done)
+          if (snapshot.connectionState != ConnectionState.done) {
             return const Center(child: CircularProgressIndicator());
-          if (meetings.isEmpty)
+          }
+          if (meetings.isEmpty) {
             return _empty(
                 'No follow-ups',
                 'Create a follow-up from the supplier capture screen.',
                 Icons.event_note_outlined);
+          }
           return ListView.separated(
             padding: const EdgeInsets.all(16),
             itemCount: meetings.length,
@@ -398,13 +404,15 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
         future: _files,
         builder: (context, snapshot) {
           final files = snapshot.data ?? const <Attachment>[];
-          if (snapshot.connectionState != ConnectionState.done)
+          if (snapshot.connectionState != ConnectionState.done) {
             return const Center(child: CircularProgressIndicator());
-          if (files.isEmpty)
+          }
+          if (files.isEmpty) {
             return _empty(
                 'No files',
                 'Add a photo or document from the supplier capture screen.',
                 Icons.attach_file_outlined);
+          }
           return ListView.separated(
             padding: const EdgeInsets.all(16),
             itemCount: files.length,

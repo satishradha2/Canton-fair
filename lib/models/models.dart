@@ -326,6 +326,10 @@ class Quote {
   final String note;
   final DateTime? validUntil;
   final bool isSampleQuote;
+  final String approvalStatus;
+  final String approvalComment;
+  final String approvedBy;
+  final DateTime? approvedAt;
 
   Quote({
     this.id,
@@ -337,6 +341,10 @@ class Quote {
     this.note = '',
     this.validUntil,
     this.isSampleQuote = false,
+    this.approvalStatus = 'Draft',
+    this.approvalComment = '',
+    this.approvedBy = '',
+    this.approvedAt,
   });
 
   Map<String, Object?> toMap() => {
@@ -349,6 +357,10 @@ class Quote {
         'note': note,
         'valid_until': validUntil?.toIso8601String(),
         'is_sample_quote': isSampleQuote ? 1 : 0,
+        'approval_status': approvalStatus,
+        'approval_comment': approvalComment,
+        'approved_by': approvedBy,
+        'approved_at': approvedAt?.toIso8601String(),
       };
 
   factory Quote.fromMap(Map<String, dynamic> map) => Quote(
@@ -365,6 +377,12 @@ class Quote {
             ? DateTime.parse(map['valid_until'])
             : null,
         isSampleQuote: (map['is_sample_quote'] as int) == 1,
+        approvalStatus: map['approval_status'] as String? ?? 'Draft',
+        approvalComment: map['approval_comment'] as String? ?? '',
+        approvedBy: map['approved_by'] as String? ?? '',
+        approvedAt: map['approved_at'] != null
+            ? DateTime.parse(map['approved_at'] as String)
+            : null,
       );
 }
 

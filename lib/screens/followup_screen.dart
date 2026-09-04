@@ -85,7 +85,7 @@ class _FollowUpScreenState extends State<FollowUpScreen> {
         builder: (context, setDialogState) => AlertDialog(
           title: const Text('Assign follow-up'),
           content: DropdownButtonFormField<String>(
-            value: selectedEmail,
+            initialValue: selectedEmail,
             decoration: const InputDecoration(labelText: 'Team member'),
             items: [
               const DropdownMenuItem(value: '', child: Text('Unassigned')),
@@ -185,7 +185,7 @@ class _FollowUpScreenState extends State<FollowUpScreen> {
                             decoration: BoxDecoration(
                               color:
                                   (overdue ? AppColors.danger : AppColors.teal)
-                                      .withOpacity(0.1),
+                                      .withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: Icon(
@@ -236,8 +236,9 @@ class _FollowUpScreenState extends State<FollowUpScreen> {
                                   builder: (context, supplierSnapshot) {
                                     final booth =
                                         supplierSnapshot.data?.booth ?? '';
-                                    if (booth.isEmpty)
+                                    if (booth.isEmpty) {
                                       return const SizedBox.shrink();
+                                    }
                                     return Text('Booth $booth');
                                   },
                                 ),

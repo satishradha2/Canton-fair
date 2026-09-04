@@ -292,7 +292,7 @@ class _ExportScreenState extends State<ExportScreen> {
                 .cast<List<String>>();
 
             children.add(
-              pw.Table.fromTextArray(
+              pw.TableHelper.fromTextArray(
                 headers: const [
                   'Rank',
                   'Product',
@@ -470,7 +470,7 @@ class _ExportScreenState extends State<ExportScreen> {
           width: 40,
           height: 40,
           decoration: BoxDecoration(
-            color: AppColors.primary.withOpacity(0.1),
+            color: AppColors.primary.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(8),
           ),
           child: Icon(icon, color: AppColors.primary),

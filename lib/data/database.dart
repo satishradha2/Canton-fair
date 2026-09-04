@@ -22,7 +22,7 @@ class TradeDatabase {
     final path = join(dbPath, 'canton_fair_crm.db');
     return openDatabase(
       path,
-      version: 10,
+      version: 11,
       onCreate: (db, version) async {
         await db.execute('''
         CREATE TABLE trips(
@@ -114,6 +114,10 @@ class TradeDatabase {
           note TEXT NOT NULL DEFAULT '',
           valid_until TEXT,
           is_sample_quote INTEGER NOT NULL DEFAULT 0,
+          approval_status TEXT NOT NULL DEFAULT 'Draft',
+          approval_comment TEXT NOT NULL DEFAULT '',
+          approved_by TEXT NOT NULL DEFAULT '',
+          approved_at TEXT,
           created_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
         ''');
@@ -180,6 +184,15 @@ class TradeDatabase {
               "ALTER TABLE exhibitors ADD COLUMN decision TEXT NOT NULL DEFAULT 'Maybe'");
           await db.execute(
               "ALTER TABLE exhibitors ADD COLUMN decision_reason TEXT NOT NULL DEFAULT ''");
+        }
+        if (oldVersion < 11) {
+          await db.execute(
+              "ALTER TABLE quotes ADD COLUMN approval_status TEXT NOT NULL DEFAULT 'Draft'");
+          await db.execute(
+              "ALTER TABLE quotes ADD COLUMN approval_comment TEXT NOT NULL DEFAULT ''");
+          await db.execute(
+              "ALTER TABLE quotes ADD COLUMN approved_by TEXT NOT NULL DEFAULT ''");
+          await db.execute('ALTER TABLE quotes ADD COLUMN approved_at TEXT');
         }
       },
     );
@@ -496,6 +509,22 @@ class TradeDatabase {
       orderBy: 'created_at DESC',
     );
     return rows.map((e) => Quote.fromMap(e)).toList();
+  }
+
+  Future<List<Map<String, dynamic>>> getQuotesForApproval() async {
+    final db = await database;
+    return db.rawQuery('''
+      SELECT
+        q.*,
+        p.name AS product_name,
+        p.model_code AS product_model_code,
+        e.name AS supplier_name,
+        e.booth AS supplier_booth
+      FROM quotes q
+      LEFT JOIN products p ON p.id = q.product_id
+      LEFT JOIN exhibitors e ON e.id = p.exhibitor_id
+      ORDER BY q.created_at DESC
+    ''');
   }
 
   Future<List<Attachment>> getAttachments(String ownerType, int ownerId) async {

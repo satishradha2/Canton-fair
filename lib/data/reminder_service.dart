@@ -63,7 +63,7 @@ class ReminderService {
         ),
         iOS: DarwinNotificationDetails(presentSound: true, presentAlert: true),
       ),
-      androidAllowWhileIdle: true,
+      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
       matchDateTimeComponents: null,
       uiLocalNotificationDateInterpretation:
           UILocalNotificationDateInterpretation.absoluteTime,
