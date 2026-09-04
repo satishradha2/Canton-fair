@@ -33,6 +33,8 @@ class _QuoteApprovalScreenState extends State<QuoteApprovalScreen> {
         return AppColors.teal;
       case 'Rejected':
         return AppColors.danger;
+      case 'Changes requested':
+        return AppColors.amber;
       case 'Pending approval':
         return AppColors.amber;
       default:
@@ -62,6 +64,9 @@ class _QuoteApprovalScreenState extends State<QuoteApprovalScreen> {
                       child: Text('Pending approval')),
                   DropdownMenuItem(value: 'Approved', child: Text('Approved')),
                   DropdownMenuItem(value: 'Rejected', child: Text('Rejected')),
+                  DropdownMenuItem(
+                      value: 'Changes requested',
+                      child: Text('Changes requested')),
                 ],
                 onChanged: (value) =>
                     setDialogState(() => status = value ?? status),
@@ -205,6 +210,8 @@ class _QuoteApprovalScreenState extends State<QuoteApprovalScreen> {
         ? 'Price not recorded'
         : '${quote['unit_price']} ${quote['currency'] ?? 'USD'}';
     final note = quote['approval_comment'] as String? ?? '';
+    final revision = quote['revision_number']?.toString() ?? '1';
+    final revisionCount = quote['revision_count']?.toString() ?? '1';
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
       child: ListTile(
@@ -214,7 +221,7 @@ class _QuoteApprovalScreenState extends State<QuoteApprovalScreen> {
         title: Text(
             '${quote['supplier_name'] ?? 'Supplier'} - ${quote['product_name'] ?? 'Product'}'),
         subtitle: Text(
-          '${quote['label'] ?? 'Quote'} | $price | MOQ ${quote['moq'] ?? '-'}\n$expiry${note.isEmpty ? '' : '\n$note'}',
+          '${quote['label'] ?? 'Quote'} | Revision $revision of $revisionCount | $price | MOQ ${quote['moq'] ?? '-'}\n$expiry${note.isEmpty ? '' : '\n$note'}',
           maxLines: 4,
           overflow: TextOverflow.ellipsis,
         ),

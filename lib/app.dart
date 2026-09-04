@@ -13,6 +13,7 @@ import 'screens/export_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/activity_feed_screen.dart';
 import 'screens/sourcing_briefs_screen.dart';
+import 'screens/procurement_workspace_screen.dart';
 import 'widgets/app_lock_screen.dart';
 
 class CantonFairApp extends StatefulWidget {
@@ -188,6 +189,16 @@ class _CantonFairAppState extends State<CantonFairApp>
             title: const Text('Sourcing briefs'),
             subtitle: const Text('Buying needs and supplier match scores'),
             onTap: () => Navigator.pop(context, 8),
+          ),
+          ListTile(
+            leading: const Icon(Icons.account_tree_outlined),
+            title: const Text('Procurement workspace'),
+            subtitle: const Text('Approvals, costing, documents, and reports'),
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => const ProcurementWorkspaceScreen()));
+            },
           ),
           ListTile(
             leading: const Icon(Icons.settings_outlined),

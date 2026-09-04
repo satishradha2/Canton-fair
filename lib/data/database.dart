@@ -624,6 +624,11 @@ class TradeDatabase {
     return db.rawQuery('''
       SELECT
         q.*,
+        ROW_NUMBER() OVER (
+          PARTITION BY q.product_id
+          ORDER BY q.created_at ASC, q.id ASC
+        ) AS revision_number,
+        COUNT(*) OVER (PARTITION BY q.product_id) AS revision_count,
         p.name AS product_name,
         p.model_code AS product_model_code,
         e.name AS supplier_name,
@@ -633,6 +638,28 @@ class TradeDatabase {
       LEFT JOIN exhibitors e ON e.id = p.exhibitor_id
       ORDER BY q.created_at DESC
     ''');
+  }
+
+  Future<List<Map<String, dynamic>>> searchAttachments(String query) async {
+    final db = await database;
+    final term = '%${query.trim().toLowerCase()}%';
+    return db.rawQuery('''
+      SELECT
+        a.*,
+        COALESCE(e.name, product_supplier.name, 'Unlinked record')
+          AS supplier_name,
+        p.name AS product_name
+      FROM attachments a
+      LEFT JOIN exhibitors e
+        ON a.owner_type = 'exhibitor' AND a.owner_id = e.id
+      LEFT JOIN products p
+        ON a.owner_type = 'product' AND a.owner_id = p.id
+      LEFT JOIN exhibitors product_supplier
+        ON p.exhibitor_id = product_supplier.id
+      WHERE LOWER(a.note) LIKE ? OR LOWER(a.path) LIKE ? OR LOWER(a.kind) LIKE ?
+      ORDER BY a.created_at DESC
+      LIMIT 100
+    ''', [term, term, term]);
   }
 
   Future<List<Attachment>> getAttachments(String ownerType, int ownerId) async {
