@@ -92,7 +92,6 @@ class _FieldCaptureChecklistDialogState
   var _companyType = 'Not recorded';
   var _oemOdm = 'Not recorded';
   var _auditStatus = 'Not reviewed';
-  var _certificateReview = 'Not reviewed';
   var _nextAction = 'Follow up';
   DateTime? _followUpDate;
   final _checked = <String>{};
@@ -265,19 +264,7 @@ class _FieldCaptureChecklistDialogState
           'factory_size': _factorySize.text.trim(),
           'oem_odm': _oemOdm,
           'audit_status': _auditStatus,
-          'certifications': _certifications.text.trim(),
-          'certificates': _certifications.text.trim().isEmpty
-              ? const []
-              : _certifications.text
-                  .split(',')
-                  .map((type) => {
-                        'type': type.trim(),
-                        'review_status': _certificateReview,
-                        'verified': _certificateReview == 'Verified',
-                      })
-                  .where((certificate) =>
-                      (certificate['type'] as String).isNotEmpty)
-                  .toList(),
+          'certifications_observed': _certifications.text.trim(),
           'checklist': checklist,
           'captured_at': DateTime.now().toIso8601String(),
         },
@@ -380,11 +367,20 @@ class _FieldCaptureChecklistDialogState
           ),
           DropdownButtonFormField<String>(
             initialValue: _auditStatus,
-            decoration: const InputDecoration(labelText: 'Factory audit status'),
-            items: const ['Not reviewed', 'Requested', 'Completed', 'Passed', 'Failed']
-                .map((value) => DropdownMenuItem(value: value, child: Text(value)))
+            decoration:
+                const InputDecoration(labelText: 'Factory audit status'),
+            items: const [
+              'Not reviewed',
+              'Requested',
+              'Completed',
+              'Passed',
+              'Failed'
+            ]
+                .map((value) =>
+                    DropdownMenuItem(value: value, child: Text(value)))
                 .toList(),
-            onChanged: (value) => setState(() => _auditStatus = value ?? _auditStatus),
+            onChanged: (value) =>
+                setState(() => _auditStatus = value ?? _auditStatus),
           ),
         ],
       );
@@ -400,7 +396,8 @@ class _FieldCaptureChecklistDialogState
               decoration: const InputDecoration(labelText: 'Person met')),
           TextFormField(
               controller: _contactRole,
-              decoration: const InputDecoration(labelText: 'Role / designation')),
+              decoration:
+                  const InputDecoration(labelText: 'Role / designation')),
           TextFormField(
               controller: _phone,
               keyboardType: TextInputType.phone,
@@ -439,20 +436,24 @@ class _FieldCaptureChecklistDialogState
               decoration: const InputDecoration(labelText: 'Dimensions')),
           TextFormField(
               controller: _colours,
-              decoration: const InputDecoration(labelText: 'Colours / finishes')),
+              decoration:
+                  const InputDecoration(labelText: 'Colours / finishes')),
           TextFormField(
               controller: _packaging,
               decoration: const InputDecoration(labelText: 'Packaging')),
           TextFormField(
               controller: _cartonDimensions,
-              decoration: const InputDecoration(labelText: 'Carton dimensions')),
+              decoration:
+                  const InputDecoration(labelText: 'Carton dimensions')),
           TextFormField(
               controller: _toolingCost,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
               decoration: const InputDecoration(labelText: 'Tooling cost')),
           TextFormField(
               controller: _customisation,
-              decoration: const InputDecoration(labelText: 'Customisation / logo options')),
+              decoration: const InputDecoration(
+                  labelText: 'Customisation / logo options')),
           SwitchListTile.adaptive(
             contentPadding: EdgeInsets.zero,
             value: _bestSeller,
@@ -467,11 +468,14 @@ class _FieldCaptureChecklistDialogState
           ),
           TextFormField(
               controller: _price,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(labelText: 'Quoted price')),
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(
+                  labelText: 'Indicative booth price (not an official quote)')),
           TextFormField(
               controller: _moq,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
               decoration: const InputDecoration(labelText: 'MOQ')),
           TextFormField(
               controller: _leadTime,
@@ -485,22 +489,17 @@ class _FieldCaptureChecklistDialogState
   Widget _certificateStep() => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Certificates and compliance',
+          const Text('Certificates observed at the booth',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 10),
+          const Text(
+              'This is a quick observation. Add certificate numbers, expiry dates, proof, and verification in the supplier Certificate register after saving.',
+              style: TextStyle(color: AppColors.muted)),
           const SizedBox(height: 10),
           TextFormField(
               controller: _certifications,
-              decoration:
-                  const InputDecoration(labelText: 'Certificate types (comma separated)')),
-          DropdownButtonFormField<String>(
-            initialValue: _certificateReview,
-            decoration: const InputDecoration(labelText: 'Certificate review status'),
-            items: const ['Not reviewed', 'Requested', 'In review', 'Verified', 'Rejected']
-                .map((value) => DropdownMenuItem(value: value, child: Text(value)))
-                .toList(),
-            onChanged: (value) => setState(() =>
-                _certificateReview = value ?? _certificateReview),
-          ),
+              decoration: const InputDecoration(
+                  labelText: 'Certificate types seen (comma separated)')),
         ],
       );
 
@@ -510,11 +509,20 @@ class _FieldCaptureChecklistDialogState
           const Text('Meeting outcome and commitments',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
           const SizedBox(height: 10),
-          const Text('Discussed at booth', style: TextStyle(fontWeight: FontWeight.w700)),
+          const Text('Discussed at booth',
+              style: TextStyle(fontWeight: FontWeight.w700)),
           Wrap(
             spacing: 8,
             runSpacing: 4,
-            children: const ['Price', 'MOQ', 'Payment', 'Lead time', 'Samples', 'Certificates', 'Factory audit']
+            children: const [
+              'Price',
+              'MOQ',
+              'Payment',
+              'Lead time',
+              'Samples',
+              'Certificates',
+              'Factory audit'
+            ]
                 .map((label) => FilterChip(
                       label: Text(label),
                       selected: _checked.contains(label),
@@ -530,7 +538,8 @@ class _FieldCaptureChecklistDialogState
           ),
           TextFormField(
               controller: _supplierCommitment,
-              decoration: const InputDecoration(labelText: 'Supplier commitment')),
+              decoration:
+                  const InputDecoration(labelText: 'Supplier commitment')),
           TextFormField(
               controller: _ourCommitment,
               decoration: const InputDecoration(labelText: 'Our commitment')),

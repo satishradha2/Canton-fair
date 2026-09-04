@@ -119,7 +119,11 @@ class _FollowUpScreenState extends State<FollowUpScreen> {
   bool _hasCertificates(String fieldCaptureJson) {
     try {
       final data = jsonDecode(fieldCaptureJson) as Map<String, dynamic>;
-      return (data['certifications'] as String? ?? '').trim().isNotEmpty;
+      return (data['certifications_observed'] as String? ??
+              data['certifications'] as String? ??
+              '')
+          .trim()
+          .isNotEmpty;
     } catch (_) {
       return false;
     }
@@ -343,7 +347,7 @@ class _FollowUpScreenState extends State<FollowUpScreen> {
           return EnterprisePage(
             title: tr(context, 'followUpQueue'),
             subtitle:
-                'Prioritized supplier follow-ups and reminders that still need action.',
+                'Complete team task queue. Use Dashboard for today and supplier Meetings for one supplier only.',
             children: [
               _followUpPackSection(),
               const SizedBox(height: 16),

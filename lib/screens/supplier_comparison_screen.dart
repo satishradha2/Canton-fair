@@ -57,7 +57,7 @@ class _SupplierComparisonScreenState extends State<SupplierComparisonScreen> {
         padding: const EdgeInsets.all(16),
         children: [
           const Text(
-            'Compare the sourcing details that matter before making a decision.',
+            'Compare selected suppliers side by side. Start with a Sourcing brief when you need to define buying requirements first.',
             style: TextStyle(color: AppColors.muted),
           ),
           const SizedBox(height: 16),

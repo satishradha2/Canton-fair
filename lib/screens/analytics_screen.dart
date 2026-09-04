@@ -447,7 +447,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                 ],
                 if (report.teamActivity.isNotEmpty) ...[
                   const SizedBox(height: 12),
-                  const Text('Team activity',
+                  const Text('Daily activity summary',
                       style: TextStyle(fontWeight: FontWeight.w800)),
                   const SizedBox(height: 4),
                   Wrap(

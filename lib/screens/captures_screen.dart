@@ -836,7 +836,6 @@ class _CapturesScreenState extends State<CapturesScreen> {
       fieldCaptureJson: jsonEncode(capture.fieldCapture),
       verificationJson: jsonEncode({
         'status': 'Unverified',
-        'certificates': capture.fieldCapture['certificates'] ?? const [],
       }),
     );
     final allow = await _showDuplicateCheck(candidate);
@@ -1408,19 +1407,29 @@ class _CapturesScreenState extends State<CapturesScreen> {
                     decoration: const InputDecoration(labelText: 'WeChat'),
                     onSaved: (v) => wechat = v?.trim() ?? ''),
                 TextFormField(
-                    decoration: const InputDecoration(labelText: 'Preferred language'),
+                    decoration:
+                        const InputDecoration(labelText: 'Preferred language'),
                     onSaved: (v) => language = v?.trim() ?? ''),
                 DropdownButtonFormField<String>(
                   initialValue: influence,
-                  decoration: const InputDecoration(labelText: 'Decision influence'),
+                  decoration:
+                      const InputDecoration(labelText: 'Decision influence'),
                   items: const [
-                    'Not recorded', 'Decision-maker', 'Influencer',
-                    'Pricing contact', 'Technical contact', 'Coordinator'
-                  ].map((value) => DropdownMenuItem(value: value, child: Text(value))).toList(),
+                    'Not recorded',
+                    'Decision-maker',
+                    'Influencer',
+                    'Pricing contact',
+                    'Technical contact',
+                    'Coordinator'
+                  ]
+                      .map((value) =>
+                          DropdownMenuItem(value: value, child: Text(value)))
+                      .toList(),
                   onChanged: (value) => influence = value ?? influence,
                 ),
                 TextFormField(
-                    decoration: const InputDecoration(labelText: 'Relationship note'),
+                    decoration:
+                        const InputDecoration(labelText: 'Relationship note'),
                     maxLines: 2,
                     onSaved: (v) => relationshipNote = v?.trim() ?? ''),
               ],
@@ -2116,9 +2125,8 @@ class _CapturesScreenState extends State<CapturesScreen> {
                         : attachment.note,
                   ),
                   onPressed: () => _openAttachment(attachment.path),
-                  onDeleted: isImage
-                      ? () => _openPhotoAnnotations(attachment)
-                      : null,
+                  onDeleted:
+                      isImage ? () => _openPhotoAnnotations(attachment) : null,
                   deleteIcon: isImage
                       ? const Icon(Icons.edit_location_alt_outlined)
                       : null,
@@ -2144,7 +2152,8 @@ class _CapturesScreenState extends State<CapturesScreen> {
     } catch (_) {
       // A malformed old value should not block the photo workflow.
     }
-    final updated = await Navigator.of(context).push<List<Map<String, dynamic>>>(
+    final updated =
+        await Navigator.of(context).push<List<Map<String, dynamic>>>(
       MaterialPageRoute(
         builder: (_) => PhotoAnnotationScreen(
           imagePath: attachment.path,

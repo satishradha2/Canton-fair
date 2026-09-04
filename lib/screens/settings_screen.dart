@@ -299,11 +299,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Audit history',
+                Text('Device diagnostic history',
                     style: Theme.of(context).textTheme.titleLarge?.copyWith(
                         fontWeight: FontWeight.w800, color: AppColors.ink)),
                 const SizedBox(height: 4),
-                const Text('Recent actions performed on this device.',
+                const Text(
+                    'Technical local history. Use Team activity for the shared field feed.',
                     style: TextStyle(color: AppColors.muted)),
                 const SizedBox(height: 12),
                 Expanded(
@@ -464,8 +465,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
               _settingTile(
                 icon: Icons.history,
-                title: 'Audit history',
-                subtitle: 'Review recent backup and data-management activity',
+                title: 'Device diagnostic history',
+                subtitle: 'Review local backup and data-management activity',
                 trailing: const Icon(Icons.chevron_right),
                 onTap: _showAuditHistory,
               ),

@@ -1,6 +1,9 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -112,6 +115,84 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
         SnackBar(content: Text('Could not open $phone')),
       );
     }
+  }
+
+  Future<void> _captureBusinessCard(Contact contact) async {
+    if (contact.id == null) return;
+    final picked = await ImagePicker().pickImage(
+      source: ImageSource.camera,
+      imageQuality: 75,
+    );
+    if (picked == null) return;
+    if (!mounted) return;
+    final root = await getApplicationDocumentsDirectory();
+    final directory =
+        Directory('${root.path}/attachments/contact/${contact.id}');
+    await directory.create(recursive: true);
+    final extension = picked.path.contains('.')
+        ? picked.path.substring(picked.path.lastIndexOf('.'))
+        : '.jpg';
+    final target = File(
+        '${directory.path}/business_card_${DateTime.now().millisecondsSinceEpoch}$extension');
+    await File(picked.path).copy(target.path);
+    await _db.addAttachment(Attachment(
+      ownerType: 'contact',
+      ownerId: contact.id!,
+      kind: 'image',
+      path: target.path,
+      note: 'Business card',
+      createdAt: DateTime.now(),
+    ));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Business card saved with this contact.')));
+  }
+
+  Future<void> _scheduleFactoryVisit() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: DateTime.now().add(const Duration(days: 1)),
+      firstDate: DateTime.now(),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+    );
+    if (picked == null || !mounted) return;
+    final notes = TextEditingController();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Schedule factory visit'),
+        content: TextField(
+          controller: notes,
+          minLines: 2,
+          maxLines: 4,
+          decoration: const InputDecoration(
+              labelText: 'Agenda, transport, audit focus, or attendees'),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel')),
+          FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Schedule')),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      await _db.insert('meetings', {
+        'exhibitor_id': widget.supplier.id,
+        'meeting_date': picked.toIso8601String(),
+        'follow_up_date': picked.toIso8601String(),
+        'outcome': 'Factory visit',
+        'priority': 'High',
+        'notes': notes.text.trim(),
+        'assignee_email': '',
+        'commitments_json': '{}',
+        'completed': 0,
+      });
+      if (mounted) setState(_reload);
+    }
+    notes.dispose();
   }
 
   Future<void> _complete(Meeting meeting) async {
@@ -578,8 +659,6 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
         text: data['availability_notes'] as String? ?? '');
     final exclusivity = TextEditingController(
         text: data['exclusivity_discussion'] as String? ?? '');
-    final factoryVisit = TextEditingController(
-        text: data['factory_visit_request'] as String? ?? '');
     final compliance =
         TextEditingController(text: data['market_compliance'] as String? ?? '');
     final redFlagEvidence =
@@ -603,6 +682,10 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
     var qrScanned = data['qr_scanned'] == true;
     var wechatAdded = data['wechat_added'] == true;
     var revisitNeeded = data['revisit_needed'] == true;
+    var quoteRequestedAt =
+        DateTime.tryParse(data['quote_requested_at'] as String? ?? '');
+    var quoteRespondedAt =
+        DateTime.tryParse(data['quote_responded_at'] as String? ?? '');
     final boothEvidence = <String>{..._stringList(data['booth_evidence'])};
     final impressions = <String>{..._stringList(data['impressions'])};
     final result = await showDialog<Map<String, Object?>>(
@@ -736,14 +819,47 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
                     controller: availability,
                     decoration: const InputDecoration(
                         labelText: 'Availability / production window')),
+                const SizedBox(height: 6),
+                const Text('Supplier response time',
+                    style: TextStyle(fontWeight: FontWeight.w800)),
+                OutlinedButton.icon(
+                  icon: const Icon(Icons.send_time_extension_outlined),
+                  label: Text(quoteRequestedAt == null
+                      ? 'Set quote request date'
+                      : 'Quote requested: ${quoteRequestedAt!.toLocal().toString().substring(0, 10)}'),
+                  onPressed: () async {
+                    final picked = await showDatePicker(
+                        context: dialogContext,
+                        initialDate: quoteRequestedAt ?? DateTime.now(),
+                        firstDate: DateTime(2020),
+                        lastDate: DateTime(2035));
+                    if (picked != null) {
+                      setDialogState(() => quoteRequestedAt = picked);
+                    }
+                  },
+                ),
+                OutlinedButton.icon(
+                  icon: const Icon(Icons.mark_email_read_outlined),
+                  label: Text(quoteRespondedAt == null
+                      ? 'Set supplier response date'
+                      : 'Supplier replied: ${quoteRespondedAt!.toLocal().toString().substring(0, 10)}'),
+                  onPressed: () async {
+                    final picked = await showDatePicker(
+                        context: dialogContext,
+                        initialDate: quoteRespondedAt ??
+                            quoteRequestedAt ??
+                            DateTime.now(),
+                        firstDate: DateTime(2020),
+                        lastDate: DateTime(2035));
+                    if (picked != null) {
+                      setDialogState(() => quoteRespondedAt = picked);
+                    }
+                  },
+                ),
                 TextField(
                     controller: exclusivity,
                     decoration: const InputDecoration(
                         labelText: 'Exclusive distributor discussion')),
-                TextField(
-                    controller: factoryVisit,
-                    decoration: const InputDecoration(
-                        labelText: 'Factory visit request / next step')),
                 TextField(
                     controller: compliance,
                     decoration: const InputDecoration(
@@ -836,8 +952,9 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
                 'booth_evidence': boothEvidence.toList(),
                 'live_demo_notes': demoNotes.text.trim(),
                 'availability_notes': availability.text.trim(),
+                'quote_requested_at': quoteRequestedAt?.toIso8601String(),
+                'quote_responded_at': quoteRespondedAt?.toIso8601String(),
                 'exclusivity_discussion': exclusivity.text.trim(),
-                'factory_visit_request': factoryVisit.text.trim(),
                 'market_compliance': compliance.text.trim(),
                 'red_flag_evidence': redFlagEvidence.text.trim(),
                 'product_opportunity_score': opportunityScore,
@@ -864,7 +981,6 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
     demoNotes.dispose();
     availability.dispose();
     exclusivity.dispose();
-    factoryVisit.dispose();
     compliance.dispose();
     redFlagEvidence.dispose();
     voiceSummary.dispose();
@@ -974,9 +1090,14 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
     final result = await showDialog<Map<String, Object?>>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Negotiation: ${product.name}'),
+        title: Text('Negotiation notes: ${product.name}'),
         content: SingleChildScrollView(
           child: Column(children: [
+            const Text(
+              'Use this for discussion context. Save an agreed commercial offer as an official quote in Quote history.',
+              style: TextStyle(color: AppColors.muted),
+            ),
+            const SizedBox(height: 12),
             TextField(
                 controller: firstPrice,
                 keyboardType:
@@ -1037,7 +1158,6 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
   Future<void> _editVerification() async {
     final existing = _verification();
     var companyType = existing['company_type'] as String? ?? 'Not verified';
-    var sampleStatus = existing['sample_status'] as String? ?? 'Not requested';
     var verificationStatus = existing['status'] as String? ?? 'Unverified';
     var certificatesVerified =
         _verificationFlag(existing, 'certificates_verified');
@@ -1117,23 +1237,12 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
                   onChanged: (value) =>
                       setDialogState(() => certificatesVerified = value),
                 ),
-                DropdownButtonFormField<String>(
-                  initialValue: sampleStatus,
-                  decoration: const InputDecoration(labelText: 'Sample status'),
-                  items: const [
-                    DropdownMenuItem(
-                        value: 'Not requested', child: Text('Not requested')),
-                    DropdownMenuItem(
-                        value: 'Requested', child: Text('Requested')),
-                    DropdownMenuItem(
-                        value: 'Received', child: Text('Received')),
-                    DropdownMenuItem(
-                        value: 'Approved', child: Text('Approved')),
-                    DropdownMenuItem(
-                        value: 'Rejected', child: Text('Rejected')),
-                  ],
-                  onChanged: (value) => setDialogState(
-                      () => sampleStatus = value ?? 'Not requested'),
+                const ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(Icons.inventory_2_outlined),
+                  title: Text('Sample progress is managed in Samples'),
+                  subtitle: Text(
+                      'Use the Samples tab for requests, shipping, receipt, testing, and approval.'),
                 ),
                 SwitchListTile.adaptive(
                   contentPadding: EdgeInsets.zero,
@@ -1215,7 +1324,6 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
                 'years_exporting': yearsController.text.trim(),
                 'export_markets': marketsController.text.trim(),
                 'certificates_verified': certificatesVerified,
-                'sample_status': sampleStatus,
                 'factory_audit_required': factoryAuditRequired,
                 'payment_risk': paymentRisk,
                 'communication_risk': communicationRisk,
@@ -1416,7 +1524,12 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
       ('Employees', capture['employee_count'] as String? ?? ''),
       ('Factory size', capture['factory_size'] as String? ?? ''),
       ('Audit', capture['audit_status'] as String? ?? ''),
-      ('Certificates', capture['certifications'] as String? ?? ''),
+      (
+        'Certificates observed',
+        capture['certifications_observed'] as String? ??
+            capture['certifications'] as String? ??
+            ''
+      ),
     ]
         .where((detail) => detail.$2.isNotEmpty && detail.$2 != 'Not recorded')
         .toList();
@@ -1425,7 +1538,8 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
         const SizedBox(height: 16),
         SectionPanel(
           title: 'On-site capture',
-          subtitle: 'Details recorded during the Canton Fair visit.',
+          subtitle:
+              'Structured supplier, company, and product facts captured at the booth.',
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -1474,7 +1588,7 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
   Widget build(BuildContext context) {
     final supplier = widget.supplier;
     return DefaultTabController(
-      length: 9,
+      length: 10,
       child: Scaffold(
         appBar: AppBar(
           title:
@@ -1498,6 +1612,7 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
               Tab(text: 'Samples'),
               Tab(text: 'Purchase'),
               Tab(text: 'Scorecard'),
+              Tab(text: 'Timeline'),
             ],
           ),
         ),
@@ -1512,11 +1627,129 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
             _samplesTab(),
             _purchaseTab(),
             _scorecard(supplier),
+            _timelineTab(),
           ],
         ),
       ),
     );
   }
+
+  Future<List<({DateTime at, String title, String detail, IconData icon})>>
+      _timeline() async {
+    final supplier = widget.supplier;
+    final contacts = await _contacts;
+    final products = await _products;
+    final meetings = await _meetings;
+    final samples = await _samples;
+    final files = await _files;
+    final events =
+        <({DateTime at, String title, String detail, IconData icon})>[];
+    final created = DateTime.tryParse(
+            _fieldCapture(supplier)['created_at'] as String? ?? '') ??
+        supplier.visitedAt;
+    if (created != null) {
+      events.add((
+        at: created,
+        title: 'Supplier captured',
+        detail: supplier.booth,
+        icon: Icons.storefront_outlined
+      ));
+    }
+    for (final contact in contacts) {
+      events.add((
+        at: DateTime.now(),
+        title: 'Contact recorded',
+        detail: contact.name,
+        icon: Icons.person_outline
+      ));
+    }
+    for (final product in products) {
+      events.add((
+        at: supplier.visitedAt ?? DateTime.now(),
+        title: 'Product recorded',
+        detail: product.name,
+        icon: Icons.inventory_2_outlined
+      ));
+    }
+    for (final meeting in meetings) {
+      events.add((
+        at: meeting.meetingDate,
+        title: meeting.outcome,
+        detail: meeting.notes,
+        icon: Icons.event_note_outlined
+      ));
+    }
+    for (final sample in samples) {
+      events.add((
+        at: sample.requestedAt,
+        title: 'Sample ${sample.status}',
+        detail: sample.trackingNumber,
+        icon: Icons.inventory_2_outlined
+      ));
+    }
+    for (final file in files) {
+      events.add((
+        at: file.createdAt,
+        title: 'File added',
+        detail: file.note,
+        icon: Icons.attach_file_outlined
+      ));
+    }
+    final visits = _fieldCapture(supplier)['visit_log'] as List? ?? const [];
+    for (final visit in visits.whereType<Map>()) {
+      final at = DateTime.tryParse(visit['ended_at']?.toString() ?? '');
+      if (at != null) {
+        events.add((
+          at: at,
+          title: 'Booth visit completed',
+          detail: '${visit['minutes'] ?? 0} minutes',
+          icon: Icons.timer_outlined
+        ));
+      }
+    }
+    events.sort((a, b) => b.at.compareTo(a.at));
+    return events;
+  }
+
+  Widget _timelineTab() => FutureBuilder<
+          List<({DateTime at, String title, String detail, IconData icon})>>(
+        future: _timeline(),
+        builder: (context, snapshot) {
+          if (!snapshot.hasData) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          final events = snapshot.data!;
+          if (events.isEmpty) {
+            return _empty(
+                'No history yet',
+                'Capture contacts, products, meetings, visits, or samples to build this supplier timeline.',
+                Icons.history_outlined);
+          }
+          return ListView.separated(
+            padding: const EdgeInsets.all(16),
+            itemCount: events.length + 1,
+            separatorBuilder: (_, index) => index == 0
+                ? const SizedBox(height: 12)
+                : const Divider(height: 1),
+            itemBuilder: (context, index) {
+              if (index == 0) {
+                return const Text(
+                    'This supplier only: visits, contacts, products, meetings, files, and samples. Use Team activity for the whole workspace.',
+                    style: TextStyle(color: AppColors.muted));
+              }
+              final event = events[index - 1];
+              return ListTile(
+                leading: Icon(event.icon, color: AppColors.teal),
+                title: Text(event.title),
+                subtitle: Text([
+                  event.detail,
+                  event.at.toLocal().toString().substring(0, 16)
+                ].where((value) => value.isNotEmpty).join(' | ')),
+              );
+            },
+          );
+        },
+      );
 
   Widget _fairIntelligencePanel() {
     final data = _fieldCapture(widget.supplier);
@@ -1524,10 +1757,15 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
     final boothEvidence = _stringList(data['booth_evidence']);
     final activeVisit =
         DateTime.tryParse(data['active_visit_started_at'] as String? ?? '');
+    final quoteRequested =
+        DateTime.tryParse(data['quote_requested_at'] as String? ?? '');
+    final quoteResponded =
+        DateTime.tryParse(data['quote_responded_at'] as String? ?? '');
     final visits = data['visit_log'] as List? ?? const [];
     return SectionPanel(
       title: 'Fair intelligence',
-      subtitle: 'Capture what you observed, who mattered, and alternatives.',
+      subtitle:
+          'Your judgement, relationship context, competitor observations, and visit evidence.',
       trailing: IconButton(
         tooltip: 'Edit fair intelligence',
         icon: const Icon(Icons.edit_outlined),
@@ -1582,6 +1820,12 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
                     label: 'Revisit needed',
                     icon: Icons.replay_outlined,
                     color: AppColors.amber),
+              if (quoteRequested != null && quoteResponded != null)
+                InfoChip(
+                    label:
+                        'Quote reply: ${quoteResponded.difference(quoteRequested).inDays} day(s)',
+                    icon: Icons.speed_outlined,
+                    color: AppColors.teal),
               ...impressions.map((item) => InfoChip(label: item)),
               ...boothEvidence.map((item) =>
                   InfoChip(label: item, icon: Icons.camera_alt_outlined)),
@@ -1591,7 +1835,6 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
             ('Live demo', data['live_demo_notes']),
             ('Availability', data['availability_notes']),
             ('Exclusivity', data['exclusivity_discussion']),
-            ('Factory visit', data['factory_visit_request']),
             ('Market compliance', data['market_compliance']),
             ('Red-flag evidence', data['red_flag_evidence']),
             ('Voice summary', data['structured_voice_summary']),
@@ -1615,6 +1858,12 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
             label: Text(activeVisit == null
                 ? 'Start booth visit timer'
                 : 'Finish booth visit (${DateTime.now().difference(activeVisit).inMinutes} min)'),
+          ),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            onPressed: _scheduleFactoryVisit,
+            icon: const Icon(Icons.factory_outlined),
+            label: const Text('Schedule factory visit in Meetings'),
           ),
           if (visits.isNotEmpty) ...[
             const SizedBox(height: 8),
@@ -1794,6 +2043,10 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
                                     : contact.whatsapp,
                                 whatsapp: true),
                             icon: const Icon(Icons.chat_outlined)),
+                      IconButton(
+                          tooltip: 'Save business card photo',
+                          onPressed: () => _captureBusinessCard(contact),
+                          icon: const Icon(Icons.badge_outlined)),
                     ],
                   ),
                 ),
@@ -1838,28 +2091,40 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
                 if (details['best_seller'] == true) 'Best seller',
                 if (details['new_product'] == true) 'New product',
                 if (negotiation['negotiated_price'] != null)
-                  'Negotiated: ${negotiation['negotiated_price']} ${product.priceCurrency}',
+                  'Negotiation note: ${negotiation['negotiated_price']} ${product.priceCurrency}',
               ];
-              return Card(
-                  child: ListTile(
-                title: Text(product.name),
-                subtitle: Text([
-                  'MOQ ${product.moq ?? '-'} | ${product.quotedPrice == null ? 'No quote' : '${product.quotedPrice} ${product.priceCurrency}'} | ${product.leadTime.isEmpty ? 'No lead time' : product.leadTime}',
-                  ...detailText,
-                ].join('\n')),
-                isThreeLine: detailText.isNotEmpty,
-                trailing: PopupMenuButton<String>(
-                  tooltip: 'Product actions',
-                  onSelected: (value) {
-                    if (value == 'negotiation') _editNegotiation(product);
-                  },
-                  itemBuilder: (context) => [
-                    const PopupMenuItem(
-                        value: 'negotiation',
-                        child: Text('Record negotiation')),
-                  ],
-                ),
-              ));
+              return FutureBuilder<List<Quote>>(
+                future: _db.getQuotes(product.id!),
+                builder: (context, quoteSnapshot) {
+                  final quotes = quoteSnapshot.data ?? const <Quote>[];
+                  final latestQuote = quotes.isEmpty ? null : quotes.first;
+                  final commercialSummary = latestQuote == null
+                      ? product.quotedPrice == null
+                          ? 'No commercial price captured'
+                          : 'Indicative booth price: ${product.quotedPrice} ${product.priceCurrency}'
+                      : 'Official quote: ${latestQuote.unitPrice ?? '-'} ${latestQuote.currency} | MOQ ${latestQuote.moq ?? '-'} | ${latestQuote.label}';
+                  return Card(
+                      child: ListTile(
+                    title: Text(product.name),
+                    subtitle: Text([
+                      '$commercialSummary | ${product.leadTime.isEmpty ? 'No lead time' : product.leadTime}',
+                      ...detailText,
+                    ].join('\n')),
+                    isThreeLine: detailText.isNotEmpty,
+                    trailing: PopupMenuButton<String>(
+                      tooltip: 'Product actions',
+                      onSelected: (value) {
+                        if (value == 'negotiation') _editNegotiation(product);
+                      },
+                      itemBuilder: (context) => [
+                        const PopupMenuItem(
+                            value: 'negotiation',
+                            child: Text('Record negotiation')),
+                      ],
+                    ),
+                  ));
+                },
+              );
             },
           );
         },
@@ -1874,8 +2139,8 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
           }
           if (meetings.isEmpty) {
             return _empty(
-                'No follow-ups',
-                'Create a follow-up from the supplier capture screen.',
+                'No supplier interactions',
+                'This tab holds meetings, factory visits, and follow-ups for this supplier only.',
                 Icons.event_note_outlined);
           }
           return ListView.separated(
@@ -1999,7 +2264,6 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
       ('Supplier type', data['company_type'] as String? ?? ''),
       ('Years exporting', data['years_exporting'] as String? ?? ''),
       ('Export markets', data['export_markets'] as String? ?? ''),
-      ('Sample', data['sample_status'] as String? ?? ''),
     ]
         .where((detail) =>
             detail.$2.isNotEmpty &&

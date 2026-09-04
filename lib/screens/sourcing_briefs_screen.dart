@@ -209,7 +209,7 @@ class _SourcingBriefsScreenState extends State<SourcingBriefsScreen> {
         builder: (context, snapshot) => EnterprisePage(
           title: 'Sourcing briefs',
           subtitle:
-              'Turn buying needs into a field checklist and ranked supplier matches.',
+              'Define what you need to buy. Use Compare suppliers to evaluate chosen suppliers side by side.',
           actions: [
             IconButton(
                 tooltip: 'Add sourcing brief',

@@ -960,12 +960,14 @@ class CloudSyncService {
   String? _ownerRecordType(String ownerType) => switch (ownerType) {
         'exhibitor' => 'supplier',
         'product' => 'product',
+        'contact' => 'contact',
         _ => null,
       };
 
   String? _localOwnerType(String recordType) => switch (recordType) {
         'supplier' => 'exhibitor',
         'product' => 'product',
+        'contact' => 'contact',
         _ => null,
       };
 

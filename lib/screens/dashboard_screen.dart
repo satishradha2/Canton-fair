@@ -205,7 +205,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           child: OutlinedButton.icon(
                             onPressed: widget.onScanCard,
                             icon: const Icon(Icons.document_scanner_outlined),
-                            label: const Text('Scan card'),
+                            label: const Text('Scan card details'),
                           ),
                         ),
                       ],
@@ -219,8 +219,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
               _sampleAlertsSection(),
               const SizedBox(height: 16),
               SectionPanel(
-                title: 'Today',
-                subtitle: 'Your overdue and due-today follow-ups.',
+                title: 'Today: agenda and due tasks',
+                subtitle:
+                    'A quick view of today only. Open Follow-ups for the complete team queue.',
                 trailing: TextButton(
                   onPressed: widget.onFollowUps,
                   child: const Text('View all'),
