@@ -7,6 +7,7 @@ import 'package:csv/csv.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import '../data/database.dart';
+import '../data/daily_debrief_service.dart';
 import '../data/language_service.dart';
 import '../models/models.dart';
 import '../theme/app_theme.dart';
@@ -455,6 +456,64 @@ class _ExportScreenState extends State<ExportScreen> {
     await SharePlus.instance.share(ShareParams(files: [XFile(path)]));
   }
 
+  Future<void> _exportDailyDebriefPdf() async {
+    final report = await DailyDebriefService().build(DateTime.now());
+    final doc = pw.Document();
+    doc.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(18),
+        build: (context) => [
+          pw.Text('Canton Fair Daily Debrief',
+              style:
+                  pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold)),
+          pw.SizedBox(height: 6),
+          pw.Text('Date: ${report.dateLabel}'),
+          pw.SizedBox(height: 14),
+          pw.Text('Field activity',
+              style:
+                  pw.TextStyle(fontSize: 15, fontWeight: pw.FontWeight.bold)),
+          pw.Bullet(text: 'Suppliers captured: ${report.suppliersCaptured}'),
+          pw.Bullet(text: 'Products captured: ${report.productsCaptured}'),
+          pw.Bullet(text: 'Supplier visits: ${report.suppliersVisited}'),
+          pw.Bullet(text: 'Meetings held: ${report.meetingsHeld}'),
+          pw.Bullet(text: 'Sample requests: ${report.sampleRequests}'),
+          pw.SizedBox(height: 12),
+          pw.Text('Buying pipeline',
+              style:
+                  pw.TextStyle(fontSize: 15, fontWeight: pw.FontWeight.bold)),
+          pw.Bullet(text: 'Shortlisted suppliers: ${report.shortlisted}'),
+          pw.Bullet(text: 'Open follow-ups: ${report.openFollowUps}'),
+          pw.Bullet(text: 'Overdue follow-ups: ${report.overdueFollowUps}'),
+          if (report.priorityUnvisited.isNotEmpty) ...[
+            pw.SizedBox(height: 12),
+            pw.Text('Priority suppliers not yet visited',
+                style:
+                    pw.TextStyle(fontSize: 15, fontWeight: pw.FontWeight.bold)),
+            ...report.priorityUnvisited.map((supplier) => pw.Bullet(
+                text:
+                    '${supplier.name}${supplier.booth.isEmpty ? '' : ' | Booth ${supplier.booth}'}')),
+          ],
+          if (report.teamActivity.isNotEmpty) ...[
+            pw.SizedBox(height: 12),
+            pw.Text('Team activity',
+                style:
+                    pw.TextStyle(fontSize: 15, fontWeight: pw.FontWeight.bold)),
+            ...report.teamActivity.entries.map((entry) =>
+                pw.Bullet(text: '${entry.key}: ${entry.value} meetings')),
+          ],
+        ],
+      ),
+    );
+    final directory = await getTemporaryDirectory();
+    final file = File('${directory.path}/canton_fair_daily_debrief.pdf');
+    await file.writeAsBytes(await doc.save());
+    await SharePlus.instance.share(ShareParams(
+      files: [XFile(file.path)],
+      text: report.toShareText(),
+    ));
+  }
+
   Widget _card(
       String title, String subtitle, IconData icon, VoidCallback onTap) {
     return Container(
@@ -513,6 +572,11 @@ class _ExportScreenState extends State<ExportScreen> {
                   Icons.event_available, _exportFollowUps),
               _card('Shortlist PDF', 'Shareable shortlisted supplier report',
                   Icons.description, _exportShortlistReportPdf),
+              _card(
+                  'Daily debrief PDF',
+                  'Today\'s field activity, supplier priorities, and team progress',
+                  Icons.summarize_outlined,
+                  _exportDailyDebriefPdf),
               _card(
                   'Trip closeout CSV',
                   'Trip counts, shortlist status, and close notes',

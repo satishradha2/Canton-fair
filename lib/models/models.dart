@@ -64,6 +64,8 @@ class Exhibitor {
   final DateTime? visitedAt;
   final String decision;
   final String decisionReason;
+  final String fieldCaptureJson;
+  final String verificationJson;
 
   Exhibitor({
     this.id,
@@ -86,6 +88,8 @@ class Exhibitor {
     this.visitedAt,
     this.decision = 'Maybe',
     this.decisionReason = '',
+    this.fieldCaptureJson = '{}',
+    this.verificationJson = '{}',
   });
 
   double get decisionScore =>
@@ -126,6 +130,8 @@ class Exhibitor {
         'visited_at': visitedAt?.toIso8601String(),
         'decision': decision,
         'decision_reason': decisionReason,
+        'field_capture_json': fieldCaptureJson,
+        'verification_json': verificationJson,
       };
 
   factory Exhibitor.fromMap(Map<String, dynamic> map) => Exhibitor(
@@ -153,6 +159,58 @@ class Exhibitor {
             : null,
         decision: map['decision'] as String? ?? 'Maybe',
         decisionReason: map['decision_reason'] as String? ?? '',
+        fieldCaptureJson: map['field_capture_json'] as String? ?? '{}',
+        verificationJson: map['verification_json'] as String? ?? '{}',
+      );
+}
+
+class SourcingBrief {
+  final int? id;
+  final int? tripId;
+  final String name;
+  final String category;
+  final double? targetPrice;
+  final double? targetMoq;
+  final String requiredCertifications;
+  final String notes;
+  final DateTime? createdAt;
+
+  const SourcingBrief({
+    this.id,
+    this.tripId,
+    required this.name,
+    this.category = '',
+    this.targetPrice,
+    this.targetMoq,
+    this.requiredCertifications = '',
+    this.notes = '',
+    this.createdAt,
+  });
+
+  Map<String, Object?> toMap() => {
+        'id': id,
+        'trip_id': tripId,
+        'name': name,
+        'category': category,
+        'target_price': targetPrice,
+        'target_moq': targetMoq,
+        'required_certifications': requiredCertifications,
+        'notes': notes,
+        'created_at': createdAt?.toIso8601String(),
+      };
+
+  factory SourcingBrief.fromMap(Map<String, dynamic> map) => SourcingBrief(
+        id: map['id'] as int?,
+        tripId: map['trip_id'] as int?,
+        name: map['name'] as String,
+        category: map['category'] as String? ?? '',
+        targetPrice: (map['target_price'] as num?)?.toDouble(),
+        targetMoq: (map['target_moq'] as num?)?.toDouble(),
+        requiredCertifications: map['required_certifications'] as String? ?? '',
+        notes: map['notes'] as String? ?? '',
+        createdAt: map['created_at'] == null
+            ? null
+            : DateTime.tryParse(map['created_at'] as String),
       );
 }
 
@@ -165,6 +223,7 @@ class Contact {
   final String email;
   final String whatsapp;
   final String wechat;
+  final String profileJson;
 
   Contact({
     this.id,
@@ -175,6 +234,7 @@ class Contact {
     this.email = '',
     this.whatsapp = '',
     this.wechat = '',
+    this.profileJson = '{}',
   });
 
   Map<String, Object?> toMap() => {
@@ -186,6 +246,7 @@ class Contact {
         'email': email,
         'whatsapp': whatsapp,
         'wechat': wechat,
+        'profile_json': profileJson,
       };
 
   factory Contact.fromMap(Map<String, dynamic> map) => Contact(
@@ -197,6 +258,7 @@ class Contact {
         email: map['email'] as String? ?? '',
         whatsapp: map['whatsapp'] as String? ?? '',
         wechat: map['wechat'] as String? ?? '',
+        profileJson: map['profile_json'] as String? ?? '{}',
       );
 }
 
@@ -213,6 +275,8 @@ class Product {
   final String paymentTerms;
   final bool shortlisted;
   final int rating;
+  final String purchaseReadinessJson;
+  final String detailsJson;
 
   Product({
     this.id,
@@ -227,6 +291,8 @@ class Product {
     this.paymentTerms = '',
     this.shortlisted = false,
     this.rating = 0,
+    this.purchaseReadinessJson = '{}',
+    this.detailsJson = '{}',
   });
 
   Map<String, Object?> toMap() => {
@@ -242,6 +308,8 @@ class Product {
         'payment_terms': paymentTerms,
         'shortlisted': shortlisted ? 1 : 0,
         'rating': rating,
+        'purchase_readiness_json': purchaseReadinessJson,
+        'details_json': detailsJson,
       };
 
   factory Product.fromMap(Map<String, dynamic> map) => Product(
@@ -259,6 +327,9 @@ class Product {
         paymentTerms: map['payment_terms'] as String? ?? '',
         shortlisted: (map['shortlisted'] as int) == 1,
         rating: map['rating'] as int? ?? 0,
+        purchaseReadinessJson:
+            map['purchase_readiness_json'] as String? ?? '{}',
+        detailsJson: map['details_json'] as String? ?? '{}',
       );
 }
 
@@ -272,6 +343,7 @@ class Meeting {
   final String priority;
   final String notes;
   final String assigneeEmail;
+  final String commitmentsJson;
   final bool completed;
 
   Meeting({
@@ -284,6 +356,7 @@ class Meeting {
     this.priority = 'Medium',
     this.notes = '',
     this.assigneeEmail = '',
+    this.commitmentsJson = '{}',
     this.completed = false,
   });
 
@@ -297,6 +370,7 @@ class Meeting {
         'priority': priority,
         'notes': notes,
         'assignee_email': assigneeEmail,
+        'commitments_json': commitmentsJson,
         'completed': completed ? 1 : 0,
       };
 
@@ -312,6 +386,7 @@ class Meeting {
         priority: map['priority'] as String? ?? 'Medium',
         notes: map['notes'] as String? ?? '',
         assigneeEmail: map['assignee_email'] as String? ?? '',
+        commitmentsJson: map['commitments_json'] as String? ?? '{}',
         completed: (map['completed'] as int) == 1,
       );
 }
@@ -386,6 +461,78 @@ class Quote {
       );
 }
 
+class Sample {
+  final int? id;
+  final int exhibitorId;
+  final int? productId;
+  final DateTime requestedAt;
+  final DateTime? expectedAt;
+  final DateTime? receivedAt;
+  final String status;
+  final String courier;
+  final String trackingNumber;
+  final double? sampleCost;
+  final double? shippingCost;
+  final String assigneeEmail;
+  final String testNotes;
+
+  const Sample({
+    this.id,
+    required this.exhibitorId,
+    this.productId,
+    required this.requestedAt,
+    this.expectedAt,
+    this.receivedAt,
+    this.status = 'Requested',
+    this.courier = '',
+    this.trackingNumber = '',
+    this.sampleCost,
+    this.shippingCost,
+    this.assigneeEmail = '',
+    this.testNotes = '',
+  });
+
+  Map<String, Object?> toMap() => {
+        'id': id,
+        'exhibitor_id': exhibitorId,
+        'product_id': productId,
+        'requested_at': requestedAt.toIso8601String(),
+        'expected_at': expectedAt?.toIso8601String(),
+        'received_at': receivedAt?.toIso8601String(),
+        'status': status,
+        'courier': courier,
+        'tracking_number': trackingNumber,
+        'sample_cost': sampleCost,
+        'shipping_cost': shippingCost,
+        'assignee_email': assigneeEmail,
+        'test_notes': testNotes,
+      };
+
+  factory Sample.fromMap(Map<String, dynamic> map) => Sample(
+        id: map['id'] as int?,
+        exhibitorId: map['exhibitor_id'] as int,
+        productId: map['product_id'] as int?,
+        requestedAt: DateTime.parse(map['requested_at'] as String),
+        expectedAt: map['expected_at'] == null
+            ? null
+            : DateTime.parse(map['expected_at'] as String),
+        receivedAt: map['received_at'] == null
+            ? null
+            : DateTime.parse(map['received_at'] as String),
+        status: map['status'] as String? ?? 'Requested',
+        courier: map['courier'] as String? ?? '',
+        trackingNumber: map['tracking_number'] as String? ?? '',
+        sampleCost: map['sample_cost'] == null
+            ? null
+            : (map['sample_cost'] as num).toDouble(),
+        shippingCost: map['shipping_cost'] == null
+            ? null
+            : (map['shipping_cost'] as num).toDouble(),
+        assigneeEmail: map['assignee_email'] as String? ?? '',
+        testNotes: map['test_notes'] as String? ?? '',
+      );
+}
+
 class Attachment {
   final int? id;
   final String ownerType;
@@ -393,6 +540,7 @@ class Attachment {
   final String kind;
   final String path;
   final String note;
+  final String annotationsJson;
   final DateTime createdAt;
 
   Attachment({
@@ -402,6 +550,7 @@ class Attachment {
     required this.kind,
     required this.path,
     required this.note,
+    this.annotationsJson = '[]',
     required this.createdAt,
   });
 
@@ -412,6 +561,7 @@ class Attachment {
         'kind': kind,
         'path': path,
         'note': note,
+        'annotations_json': annotationsJson,
         'created_at': createdAt.toIso8601String(),
       };
 
@@ -422,6 +572,7 @@ class Attachment {
         kind: map['kind'] as String? ?? 'image',
         path: map['path'] as String,
         note: map['note'] as String? ?? '',
+        annotationsJson: map['annotations_json'] as String? ?? '[]',
         createdAt: DateTime.parse(map['created_at']),
       );
 }

@@ -1,5 +1,7 @@
-import 'package:flutter/material.dart';
 import 'dart:io';
+import 'dart:convert';
+
+import 'package:flutter/material.dart';
 
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
@@ -16,10 +18,13 @@ import '../data/reminder_service.dart';
 import '../models/models.dart';
 import '../theme/app_theme.dart';
 import '../widgets/enterprise_widgets.dart';
+import '../widgets/field_capture_checklist.dart';
 import '../widgets/voice_note_field.dart';
 import 'scanner_screen.dart';
 import 'ocr_screen.dart';
 import 'supplier_detail_screen.dart';
+import 'photo_annotation_screen.dart';
+import 'hall_route_screen.dart';
 
 enum CaptureQuickAction { manual, qr, card }
 
@@ -37,6 +42,18 @@ class _VisitQueues {
   final List<Exhibitor> visitedToday;
 
   const _VisitQueues({required this.needToVisit, required this.visitedToday});
+}
+
+class _HallItinerary {
+  final Map<String, List<Exhibitor>> scheduledByHall;
+  final Map<String, List<Exhibitor>> nearbyPriorityByHall;
+
+  const _HallItinerary({
+    required this.scheduledByHall,
+    required this.nearbyPriorityByHall,
+  });
+
+  bool get isEmpty => scheduledByHall.isEmpty;
 }
 
 class _CapturesScreenState extends State<CapturesScreen> {
@@ -58,7 +75,7 @@ class _CapturesScreenState extends State<CapturesScreen> {
   late Future<List<Exhibitor>> _recentSuppliers;
   late Future<List<SavedSupplierFilter>> _savedFilters;
   late Future<_VisitQueues> _visitQueues;
-  late Future<List<Exhibitor>> _itinerary;
+  late Future<_HallItinerary> _itinerary;
   late DateTime _itineraryDate;
 
   @override
@@ -460,19 +477,59 @@ class _CapturesScreenState extends State<CapturesScreen> {
     _load();
   }
 
-  Future<List<Exhibitor>> _loadItinerary() async {
+  Future<_HallItinerary> _loadItinerary() async {
     final suppliers = await db.getExhibitors(_tripFilter);
     final day =
         DateTime(_itineraryDate.year, _itineraryDate.month, _itineraryDate.day);
-    final itinerary = suppliers.where((supplier) {
+    final scheduled = suppliers.where((supplier) {
       final planned = supplier.plannedVisitAt?.toLocal();
       return planned != null &&
           planned.year == day.year &&
           planned.month == day.month &&
           planned.day == day.day;
-    }).toList()
-      ..sort((a, b) => a.plannedVisitAt!.compareTo(b.plannedVisitAt!));
-    return itinerary;
+    }).toList();
+    final scheduledByHall = <String, List<Exhibitor>>{};
+    for (final supplier in scheduled) {
+      final hall = _hallLabel(supplier);
+      scheduledByHall.putIfAbsent(hall, () => []).add(supplier);
+    }
+    for (final group in scheduledByHall.values) {
+      group.sort(_compareBoothThenTime);
+    }
+
+    final nearbyPriorityByHall = <String, List<Exhibitor>>{};
+    for (final supplier in suppliers) {
+      final hall = _hallLabel(supplier);
+      if (supplier.visitedAt != null ||
+          scheduled.contains(supplier) ||
+          !scheduledByHall.containsKey(hall) ||
+          (!supplier.shortlisted && supplier.rating < 4)) {
+        continue;
+      }
+      nearbyPriorityByHall.putIfAbsent(hall, () => []).add(supplier);
+    }
+    for (final group in nearbyPriorityByHall.values) {
+      group.sort(_compareBoothThenTime);
+    }
+
+    return _HallItinerary(
+      scheduledByHall: Map.fromEntries(
+        scheduledByHall.entries.toList()
+          ..sort((a, b) => a.key.compareTo(b.key)),
+      ),
+      nearbyPriorityByHall: nearbyPriorityByHall,
+    );
+  }
+
+  String _hallLabel(Exhibitor supplier) =>
+      supplier.hall.trim().isEmpty ? 'Hall not recorded' : supplier.hall.trim();
+
+  int _compareBoothThenTime(Exhibitor left, Exhibitor right) {
+    final booth = left.booth.toLowerCase().compareTo(right.booth.toLowerCase());
+    if (booth != 0) return booth;
+    final leftTime = left.plannedVisitAt ?? DateTime(9999);
+    final rightTime = right.plannedVisitAt ?? DateTime(9999);
+    return leftTime.compareTo(rightTime);
   }
 
   Future<_VisitQueues> _loadVisitQueues() async {
@@ -746,149 +803,106 @@ class _CapturesScreenState extends State<CapturesScreen> {
   }
 
   Future<void> _openAddExhibitorSheet({Map<String, String>? prefill}) async {
-    final formKey = GlobalKey<FormState>();
     final seed = prefill ?? {};
-    String name = seed['name']?.isNotEmpty == true ? seed['name']! : 'Supplier';
-    String booth = seed['booth']?.isNotEmpty == true ? seed['booth']! : '';
-    String hall = seed['hall']?.isNotEmpty == true ? seed['hall']! : '';
-    String category =
-        seed['category']?.isNotEmpty == true ? seed['category']! : '';
-    String country =
-        seed['country']?.isNotEmpty == true ? seed['country']! : '';
-    String notes = '';
-    int rating = 0;
-    bool shortlisted = false;
     final trips = await _trips;
     final defaults = await CaptureDefaultsService().load();
     if (!mounted) return;
-    if (country.isEmpty) country = defaults.country;
     int selectedTrip = trips.any((trip) => trip.id == defaults.tripId)
         ? defaults.tripId!
         : trips.isNotEmpty
             ? trips.first.id!
             : 0;
-
-    await showDialog(
+    final capture = await showDialog<FieldCaptureResult>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Capture supplier'),
-        content: Form(
-          key: formKey,
-          child: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('1. Basics',
-                    style: TextStyle(fontWeight: FontWeight.w800)),
-                const SizedBox(height: 8),
-                if (trips.isEmpty)
-                  const Text('Create a trip first to attach exhibitor records.')
-                else
-                  DropdownButtonFormField<int>(
-                    initialValue: selectedTrip,
-                    items: trips
-                        .where((t) => t.id != null)
-                        .map(
-                          (t) => DropdownMenuItem(
-                            value: t.id,
-                            child: Text(t.name),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: (v) => selectedTrip = v ?? selectedTrip,
-                  ),
-                TextFormField(
-                    initialValue: name,
-                    decoration:
-                        const InputDecoration(labelText: 'Supplier Name'),
-                    onSaved: (v) => name = v?.trim() ?? name),
-                TextFormField(
-                    initialValue: booth,
-                    decoration: const InputDecoration(labelText: 'Booth'),
-                    onSaved: (v) => booth = v?.trim() ?? ''),
-                TextFormField(
-                    initialValue: hall,
-                    decoration: const InputDecoration(labelText: 'Hall'),
-                    onSaved: (v) => hall = v?.trim() ?? ''),
-                TextFormField(
-                    initialValue: category,
-                    decoration: const InputDecoration(labelText: 'Category'),
-                    onSaved: (v) => category = v?.trim() ?? ''),
-                TextFormField(
-                    initialValue: country,
-                    decoration: const InputDecoration(labelText: 'Country'),
-                    onSaved: (v) => country = v?.trim() ?? ''),
-                TextFormField(
-                    decoration:
-                        const InputDecoration(labelText: 'Company notes'),
-                    onSaved: (v) => notes = v?.trim() ?? ''),
-                const SizedBox(height: 8),
-                const Text('2. Score and next action',
-                    style: TextStyle(fontWeight: FontWeight.w800)),
-                const SizedBox(height: 8),
-                DropdownButtonFormField<int>(
-                  initialValue: rating,
-                  items: List.generate(
-                    6,
-                    (i) => DropdownMenuItem(value: i, child: Text('Rating $i')),
-                  ),
-                  onChanged: (v) => rating = v ?? 0,
-                  decoration:
-                      const InputDecoration(labelText: 'Initial rating'),
-                ),
-                CheckboxListTile(
-                  value: shortlisted,
-                  title: const Text('Add to shortlist'),
-                  onChanged: (v) => shortlisted = v ?? false,
-                  controlAffinity: ListTileControlAffinity.leading,
-                ),
-              ],
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: Text(tr(context, 'cancel'))),
-          ElevatedButton(
-            child: Text(tr(context, 'save')),
-            onPressed: () async {
-              formKey.currentState?.save();
-              final candidate = Exhibitor(
-                tripId: selectedTrip,
-                name: name,
-                booth: booth,
-                hall: hall,
-                category: category,
-                country: country,
-                contactCompanyNotes: notes,
-                shortlisted: shortlisted,
-                rating: rating,
-              );
-              final allow = await _showDuplicateCheck(candidate);
-              if (!allow) {
-                return;
-              }
-              await db.upsertExhibitor(candidate);
-              await CaptureDefaultsService().save(
-                tripId: selectedTrip,
-                country: country,
-              );
-              _load();
-              if (!ctx.mounted || !mounted) return;
-              Navigator.pop(ctx);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: const Text('Supplier saved locally.'),
-                  action: SnackBarAction(
-                    label: 'Sync now',
-                    onPressed: _syncAfterSave,
-                  ),
-                ),
-              );
-            },
-          ),
-        ],
+      builder: (_) => FieldCaptureChecklistDialog(
+        trips: trips,
+        selectedTripId: selectedTrip,
+        defaultCountry: defaults.country,
+        prefill: seed,
+      ),
+    );
+    if (capture == null || !mounted) return;
+    final candidate = Exhibitor(
+      tripId: capture.tripId,
+      name: capture.name,
+      booth: capture.booth,
+      hall: capture.hall,
+      category: capture.category,
+      country: capture.country,
+      contactCompanyNotes: capture.notes,
+      shortlisted: capture.shortlisted,
+      rating: capture.rating,
+      decision: capture.shortlisted ? 'Shortlist' : 'Maybe',
+      fieldCaptureJson: jsonEncode(capture.fieldCapture),
+      verificationJson: jsonEncode({
+        'status': 'Unverified',
+        'certificates': capture.fieldCapture['certificates'] ?? const [],
+      }),
+    );
+    final allow = await _showDuplicateCheck(candidate);
+    if (!allow || !mounted) return;
+    final exhibitorId = await db.insertExhibitor(candidate);
+    if (capture.contactName.isNotEmpty) {
+      await db.insert(
+        'contacts',
+        Contact(
+          exhibitorId: exhibitorId,
+          name: capture.contactName,
+          designation: capture.contactRole,
+          phone: capture.phone,
+          email: capture.email,
+          whatsapp: capture.whatsapp,
+          wechat: capture.wechat,
+        ).toMap()
+          ..remove('id'),
+      );
+    }
+    if (capture.productName.isNotEmpty) {
+      await db.insert(
+        'products',
+        Product(
+          exhibitorId: exhibitorId,
+          name: capture.productName,
+          modelCode: capture.model,
+          moq: capture.moq,
+          quotedPrice: capture.price,
+          leadTime: capture.leadTime,
+          paymentTerms: capture.paymentTerms,
+          shortlisted: capture.shortlisted,
+          rating: capture.rating,
+          detailsJson: jsonEncode(capture.productDetails),
+        ).toMap()
+          ..remove('id'),
+      );
+    }
+    if (capture.nextAction != 'No action') {
+      await db.insert(
+        'meetings',
+        Meeting(
+          exhibitorId: exhibitorId,
+          meetingDate: DateTime.now(),
+          followUpDate: capture.followUpDate,
+          outcome: capture.nextAction,
+          priority: capture.shortlisted ? 'High' : 'Medium',
+          notes: capture.meetingNotes,
+          commitmentsJson: jsonEncode(capture.meetingCommitments),
+        ).toMap()
+          ..remove('id'),
+      );
+    }
+    await CaptureDefaultsService().save(
+      tripId: capture.tripId,
+      country: capture.country,
+    );
+    await db.logAudit(
+        'Canton Fair field capture', '${capture.name} | ${capture.nextAction}');
+    _load();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text(
+            'Supplier, field checklist, and related records saved locally.'),
+        action: SnackBarAction(label: 'Sync now', onPressed: _syncAfterSave),
       ),
     );
   }
@@ -1362,6 +1376,9 @@ class _CapturesScreenState extends State<CapturesScreen> {
     String email = '';
     String whatsapp = '';
     String wechat = '';
+    String language = '';
+    String influence = 'Not recorded';
+    String relationshipNote = '';
     await showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -1390,6 +1407,22 @@ class _CapturesScreenState extends State<CapturesScreen> {
                 TextFormField(
                     decoration: const InputDecoration(labelText: 'WeChat'),
                     onSaved: (v) => wechat = v?.trim() ?? ''),
+                TextFormField(
+                    decoration: const InputDecoration(labelText: 'Preferred language'),
+                    onSaved: (v) => language = v?.trim() ?? ''),
+                DropdownButtonFormField<String>(
+                  initialValue: influence,
+                  decoration: const InputDecoration(labelText: 'Decision influence'),
+                  items: const [
+                    'Not recorded', 'Decision-maker', 'Influencer',
+                    'Pricing contact', 'Technical contact', 'Coordinator'
+                  ].map((value) => DropdownMenuItem(value: value, child: Text(value))).toList(),
+                  onChanged: (value) => influence = value ?? influence,
+                ),
+                TextFormField(
+                    decoration: const InputDecoration(labelText: 'Relationship note'),
+                    maxLines: 2,
+                    onSaved: (v) => relationshipNote = v?.trim() ?? ''),
               ],
             ),
           ),
@@ -1423,6 +1456,11 @@ class _CapturesScreenState extends State<CapturesScreen> {
                     email: email,
                     whatsapp: whatsapp,
                     wechat: wechat,
+                    profileJson: jsonEncode({
+                      'language': language,
+                      'influence': influence,
+                      'relationship_note': relationshipNote,
+                    }),
                   ).toMap());
               _load();
               if (!ctx.mounted) return;
@@ -1571,6 +1609,8 @@ class _CapturesScreenState extends State<CapturesScreen> {
     String priority = 'Medium';
     String notes = '';
     final notesController = TextEditingController();
+    final supplierCommitmentController = TextEditingController();
+    final ourCommitmentController = TextEditingController();
     String assigneeEmail = '';
     bool reminderEnabled = true;
     Duration reminderOffset = const Duration(minutes: 15);
@@ -1652,6 +1692,16 @@ class _CapturesScreenState extends State<CapturesScreen> {
                     decoration: const InputDecoration(labelText: 'Outcome'),
                     onSaved: (value) => outcome = value?.trim() ?? 'Interested',
                   ),
+                  TextFormField(
+                    controller: supplierCommitmentController,
+                    decoration:
+                        const InputDecoration(labelText: 'Supplier commitment'),
+                  ),
+                  TextFormField(
+                    controller: ourCommitmentController,
+                    decoration:
+                        const InputDecoration(labelText: 'Our commitment'),
+                  ),
                   VoiceNoteField(
                     controller: notesController,
                     label: 'Notes',
@@ -1711,6 +1761,10 @@ class _CapturesScreenState extends State<CapturesScreen> {
                     priority: priority,
                     notes: notes,
                     assigneeEmail: assigneeEmail,
+                    commitmentsJson: jsonEncode({
+                      'supplier': supplierCommitmentController.text.trim(),
+                      'ours': ourCommitmentController.text.trim(),
+                    }),
                   ).toMap(),
                 );
                 if (reminderEnabled && followUp != null) {
@@ -1732,6 +1786,8 @@ class _CapturesScreenState extends State<CapturesScreen> {
       ),
     );
     notesController.dispose();
+    supplierCommitmentController.dispose();
+    ourCommitmentController.dispose();
   }
 
   Future<void> _toggleProductShortlist(Product p) async {
@@ -1758,9 +1814,13 @@ class _CapturesScreenState extends State<CapturesScreen> {
 
   static const _messageTemplates = [
     'Hi {name}, nice meeting you at Canton Fair. Thank you for sharing product details.',
-    'Hi {name}, can you please send the latest official quotation and sample photos for {company}?',
-    'Hi {name}, could you share MOQ, lead time, and payment terms for {product} please?',
-    'Hi {name}, we are finalizing suppliers and would like to schedule sample shipment discussion.',
+    'Hi {name}, please send the latest official quotation and sample photos for {company}.',
+    'Hi {name}, could you share MOQ, lead time, payment terms, and Incoterm for the products we discussed?',
+    'Hi {name}, please share your catalog, price list, and best-seller recommendations.',
+    'Hi {name}, please send the relevant certificates and compliance documents for review.',
+    'Hi {name}, we would like to discuss a sample shipment, including courier options and cost.',
+    'Hi {name}, we are reviewing suppliers and would like to discuss factory audit availability and next steps.',
+    'Hi {name}, could you confirm whether there is room to improve the quoted price for our target quantity?',
   ];
 
   Future<void> _openAttachmentPicker({
@@ -1784,6 +1844,16 @@ class _CapturesScreenState extends State<CapturesScreen> {
               onTap: () => Navigator.pop(ctx, 'gallery'),
             ),
             ListTile(
+              leading: const Icon(Icons.videocam_outlined),
+              title: const Text('Record Video'),
+              onTap: () => Navigator.pop(ctx, 'videoCamera'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.video_library_outlined),
+              title: const Text('Choose Video'),
+              onTap: () => Navigator.pop(ctx, 'videoGallery'),
+            ),
+            ListTile(
               leading: const Icon(Icons.description_outlined),
               title: const Text('Choose Document'),
               subtitle: const Text('PDF, certificate, catalog, or spreadsheet'),
@@ -1801,6 +1871,34 @@ class _CapturesScreenState extends State<CapturesScreen> {
     }
 
     final picker = ImagePicker();
+    final isVideo = source == 'videoCamera' || source == 'videoGallery';
+    if (isVideo) {
+      final picked = await picker.pickVideo(
+        source:
+            source == 'videoCamera' ? ImageSource.camera : ImageSource.gallery,
+        maxDuration: const Duration(minutes: 2),
+      );
+      if (picked == null || !mounted) return;
+      final root = await getApplicationDocumentsDirectory();
+      final targetDir =
+          Directory('${root.path}/attachments/$ownerType/$ownerId');
+      await targetDir.create(recursive: true);
+      final extensionIndex = picked.path.lastIndexOf('.');
+      final extension =
+          extensionIndex >= 0 ? picked.path.substring(extensionIndex) : '.mp4';
+      final saved = await File(picked.path).copy(
+          '${targetDir.path}/video_${DateTime.now().millisecondsSinceEpoch}$extension');
+      await db.addAttachment(Attachment(
+        ownerType: ownerType,
+        ownerId: ownerId,
+        kind: 'video',
+        path: saved.path,
+        note: 'Video',
+        createdAt: DateTime.now(),
+      ));
+      _load();
+      return;
+    }
     final picked = await picker.pickImage(
       source: source == 'camera' ? ImageSource.camera : ImageSource.gallery,
       imageQuality: 70,
@@ -1996,18 +2094,34 @@ class _CapturesScreenState extends State<CapturesScreen> {
             return Wrap(
               spacing: 8,
               children: snap.data!.map((attachment) {
-                return ActionChip(
+                final isImage = attachment.kind == 'image';
+                return InputChip(
                   avatar: Icon(
                     attachment.kind == 'pdf'
                         ? Icons.picture_as_pdf
-                        : attachment.kind == 'image'
-                            ? Icons.image_outlined
-                            : Icons.description_outlined,
+                        : attachment.kind == 'video'
+                            ? Icons.videocam_outlined
+                            : isImage
+                                ? Icons.image_outlined
+                                : Icons.description_outlined,
                     size: 16,
                   ),
                   label: Text(
-                      attachment.note.isEmpty ? 'Attachment' : attachment.note),
+                    attachment.note.isEmpty
+                        ? isImage
+                            ? 'Photo'
+                            : attachment.kind == 'video'
+                                ? 'Video'
+                                : 'Attachment'
+                        : attachment.note,
+                  ),
                   onPressed: () => _openAttachment(attachment.path),
+                  onDeleted: isImage
+                      ? () => _openPhotoAnnotations(attachment)
+                      : null,
+                  deleteIcon: isImage
+                      ? const Icon(Icons.edit_location_alt_outlined)
+                      : null,
                 );
               }).toList(),
             );
@@ -2015,6 +2129,34 @@ class _CapturesScreenState extends State<CapturesScreen> {
         ),
       ],
     );
+  }
+
+  Future<void> _openPhotoAnnotations(Attachment attachment) async {
+    List<Map<String, dynamic>> initial = [];
+    try {
+      final decoded = jsonDecode(attachment.annotationsJson);
+      if (decoded is List) {
+        initial = decoded
+            .whereType<Map>()
+            .map((item) => Map<String, dynamic>.from(item))
+            .toList();
+      }
+    } catch (_) {
+      // A malformed old value should not block the photo workflow.
+    }
+    final updated = await Navigator.of(context).push<List<Map<String, dynamic>>>(
+      MaterialPageRoute(
+        builder: (_) => PhotoAnnotationScreen(
+          imagePath: attachment.path,
+          initialAnnotations: initial,
+        ),
+      ),
+    );
+    if (updated == null) return;
+    await db.update('attachments', attachment.id!, {
+      'annotations_json': jsonEncode(updated),
+    });
+    if (mounted) setState(() {});
   }
 
   Future<void> _launchAction(Uri uri) async {
@@ -2744,7 +2886,7 @@ class _CapturesScreenState extends State<CapturesScreen> {
         '${_itineraryDate.year.toString().padLeft(4, '0')}-${_itineraryDate.month.toString().padLeft(2, '0')}-${_itineraryDate.day.toString().padLeft(2, '0')}';
     return SectionPanel(
       title: 'Day itinerary',
-      subtitle: 'Scheduled supplier visits for the selected day.',
+      subtitle: 'Walking order by hall and booth for the selected day.',
       child: Column(
         children: [
           Row(
@@ -2773,7 +2915,7 @@ class _CapturesScreenState extends State<CapturesScreen> {
               ),
             ],
           ),
-          FutureBuilder<List<Exhibitor>>(
+          FutureBuilder<_HallItinerary>(
             future: _itinerary,
             builder: (context, snapshot) {
               if (!snapshot.hasData) {
@@ -2782,7 +2924,8 @@ class _CapturesScreenState extends State<CapturesScreen> {
                   child: CircularProgressIndicator(),
                 );
               }
-              if (snapshot.data!.isEmpty) {
+              final itinerary = snapshot.data!;
+              if (itinerary.isEmpty) {
                 return const Padding(
                   padding: EdgeInsets.only(top: 8),
                   child: Text('No supplier visits are scheduled for this day.',
@@ -2790,24 +2933,41 @@ class _CapturesScreenState extends State<CapturesScreen> {
                 );
               }
               return Column(
-                children: snapshot.data!.map((supplier) {
-                  final scheduled = supplier.plannedVisitAt!.toLocal();
-                  return ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: Text(
-                      '${scheduled.hour.toString().padLeft(2, '0')}:${scheduled.minute.toString().padLeft(2, '0')}',
-                      style: const TextStyle(fontWeight: FontWeight.w800),
+                children: itinerary.scheduledByHall.entries.expand((entry) {
+                  final nearby = itinerary.nearbyPriorityByHall[entry.key] ??
+                      const <Exhibitor>[];
+                  return [
+                    const Divider(height: 22),
+                    Row(
+                      children: [
+                        const Icon(Icons.map_outlined,
+                            size: 18, color: AppColors.primary),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(entry.key,
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.w800)),
+                        ),
+                        InfoChip(
+                          label: '${entry.value.length} visits',
+                          icon: Icons.route_outlined,
+                        ),
+                      ],
                     ),
-                    title: Text(supplier.name,
-                        maxLines: 1, overflow: TextOverflow.ellipsis),
-                    subtitle: Text(
-                        'Booth ${supplier.booth.isEmpty ? '-' : supplier.booth}${supplier.hall.isEmpty ? '' : ' | ${supplier.hall}'}'),
-                    trailing: IconButton(
-                      tooltip: 'Reschedule',
-                      icon: const Icon(Icons.edit_calendar),
-                      onPressed: () => _openScheduleVisitDialog(supplier),
-                    ),
-                  );
+                    const SizedBox(height: 4),
+                    ...entry.value.map(_scheduledVisitTile),
+                    if (nearby.isNotEmpty) ...[
+                      const Padding(
+                        padding: EdgeInsets.only(top: 8, bottom: 2),
+                        child: Text('Nearby priority suppliers',
+                            style: TextStyle(
+                                color: AppColors.muted,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700)),
+                      ),
+                      ...nearby.map(_nearbyPriorityTile),
+                    ],
+                  ];
                 }).toList(),
               );
             },
@@ -2816,6 +2976,38 @@ class _CapturesScreenState extends State<CapturesScreen> {
       ),
     );
   }
+
+  Widget _scheduledVisitTile(Exhibitor supplier) {
+    final scheduled = supplier.plannedVisitAt!.toLocal();
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: Text(
+        '${scheduled.hour.toString().padLeft(2, '0')}:${scheduled.minute.toString().padLeft(2, '0')}',
+        style: const TextStyle(fontWeight: FontWeight.w800),
+      ),
+      title: Text(supplier.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+      subtitle: Text('Booth ${supplier.booth.isEmpty ? '-' : supplier.booth}'),
+      trailing: IconButton(
+        tooltip: 'Reschedule',
+        icon: const Icon(Icons.edit_calendar),
+        onPressed: () => _openScheduleVisitDialog(supplier),
+      ),
+    );
+  }
+
+  Widget _nearbyPriorityTile(Exhibitor supplier) => ListTile(
+        dense: true,
+        contentPadding: EdgeInsets.zero,
+        leading: const Icon(Icons.star_outline, color: AppColors.amber),
+        title:
+            Text(supplier.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+        subtitle: Text(
+            'Booth ${supplier.booth.isEmpty ? '-' : supplier.booth} | ${supplier.shortlisted ? 'Shortlisted' : 'Rated ${supplier.rating}/5'}'),
+        trailing: TextButton(
+          onPressed: () => _openScheduleVisitDialog(supplier),
+          child: const Text('Add'),
+        ),
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -2847,6 +3039,13 @@ class _CapturesScreenState extends State<CapturesScreen> {
                       onPressed: _openOcrCapture,
                       icon: const Icon(Icons.document_scanner),
                       label: const Text('OCR')),
+                  TextButton.icon(
+                      onPressed: () => Navigator.of(context).push(
+                            MaterialPageRoute(
+                                builder: (_) => const HallRouteScreen()),
+                          ),
+                      icon: const Icon(Icons.route_outlined),
+                      label: const Text('Route')),
                 ],
                 children: [
                   _visitQueueSection(),

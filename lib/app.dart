@@ -11,6 +11,8 @@ import 'screens/followup_screen.dart';
 import 'screens/analytics_screen.dart';
 import 'screens/export_screen.dart';
 import 'screens/settings_screen.dart';
+import 'screens/activity_feed_screen.dart';
+import 'screens/sourcing_briefs_screen.dart';
 import 'widgets/app_lock_screen.dart';
 
 class CantonFairApp extends StatefulWidget {
@@ -50,6 +52,8 @@ class _CantonFairAppState extends State<CantonFairApp>
       onAppLockChanged: _refreshAppLock,
       onLanguageChanged: _changeLanguage,
     ),
+    const ActivityFeedScreen(),
+    const SourcingBriefsScreen(),
   ];
 
   @override
@@ -172,6 +176,18 @@ class _CantonFairAppState extends State<CantonFairApp>
             title: const Text('Export reports'),
             subtitle: const Text('CSV and PDF reports'),
             onTap: () => Navigator.pop(context, 5),
+          ),
+          ListTile(
+            leading: const Icon(Icons.groups_outlined),
+            title: const Text('Team activity'),
+            subtitle: const Text('Who changed what, and when'),
+            onTap: () => Navigator.pop(context, 7),
+          ),
+          ListTile(
+            leading: const Icon(Icons.assignment_outlined),
+            title: const Text('Sourcing briefs'),
+            subtitle: const Text('Buying needs and supplier match scores'),
+            onTap: () => Navigator.pop(context, 8),
           ),
           ListTile(
             leading: const Icon(Icons.settings_outlined),

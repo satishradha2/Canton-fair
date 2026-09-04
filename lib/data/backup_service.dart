@@ -16,6 +16,7 @@ class BackupService {
     'products',
     'meetings',
     'quotes',
+    'samples',
     'attachments',
     'saved_supplier_filters',
   ];

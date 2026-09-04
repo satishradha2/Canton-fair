@@ -22,7 +22,7 @@ class TradeDatabase {
     final path = join(dbPath, 'canton_fair_crm.db');
     return openDatabase(
       path,
-      version: 11,
+      version: 21,
       onCreate: (db, version) async {
         await db.execute('''
         CREATE TABLE trips(
@@ -56,6 +56,8 @@ class TradeDatabase {
           visited_at TEXT,
           decision TEXT NOT NULL DEFAULT 'Maybe',
           decision_reason TEXT NOT NULL DEFAULT '',
+          field_capture_json TEXT NOT NULL DEFAULT '{}',
+          verification_json TEXT NOT NULL DEFAULT '{}',
           created_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
         ''');
@@ -69,6 +71,7 @@ class TradeDatabase {
           email TEXT NOT NULL DEFAULT '',
           whatsapp TEXT NOT NULL DEFAULT '',
           wechat TEXT NOT NULL DEFAULT '',
+          profile_json TEXT NOT NULL DEFAULT '{}',
           created_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
         ''');
@@ -86,6 +89,8 @@ class TradeDatabase {
           payment_terms TEXT NOT NULL DEFAULT '',
           shortlisted INTEGER NOT NULL DEFAULT 0,
           rating INTEGER NOT NULL DEFAULT 0,
+          purchase_readiness_json TEXT NOT NULL DEFAULT '{}',
+          details_json TEXT NOT NULL DEFAULT '{}',
           created_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
         ''');
@@ -100,6 +105,7 @@ class TradeDatabase {
           priority TEXT NOT NULL DEFAULT 'Medium',
           notes TEXT NOT NULL DEFAULT '',
           assignee_email TEXT NOT NULL DEFAULT '',
+          commitments_json TEXT NOT NULL DEFAULT '{}',
           completed INTEGER NOT NULL DEFAULT 0
         );
         ''');
@@ -121,6 +127,24 @@ class TradeDatabase {
           created_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
         ''');
+        await db.execute('''
+        CREATE TABLE samples(
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          exhibitor_id INTEGER NOT NULL,
+          product_id INTEGER,
+          requested_at TEXT NOT NULL,
+          expected_at TEXT,
+          received_at TEXT,
+          status TEXT NOT NULL DEFAULT 'Requested',
+          courier TEXT NOT NULL DEFAULT '',
+          tracking_number TEXT NOT NULL DEFAULT '',
+          sample_cost REAL,
+          shipping_cost REAL,
+          assignee_email TEXT NOT NULL DEFAULT '',
+          test_notes TEXT NOT NULL DEFAULT '',
+          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        ''');
         await db
             .execute('CREATE INDEX idx_exhibitor_trip ON exhibitors(trip_id);');
         await db.execute('''
@@ -131,6 +155,7 @@ class TradeDatabase {
           kind TEXT NOT NULL DEFAULT 'image',
           path TEXT NOT NULL,
           note TEXT NOT NULL DEFAULT '',
+          annotations_json TEXT NOT NULL DEFAULT '[]',
           created_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
         ''');
@@ -140,6 +165,7 @@ class TradeDatabase {
         await _createAuditLogsTable(db);
         await _createCloudLinksTable(db);
         await _createCloudSyncConflictsTable(db);
+        await _createSourcingBriefsTable(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -194,8 +220,79 @@ class TradeDatabase {
               "ALTER TABLE quotes ADD COLUMN approved_by TEXT NOT NULL DEFAULT ''");
           await db.execute('ALTER TABLE quotes ADD COLUMN approved_at TEXT');
         }
+        if (oldVersion < 12) {
+          await db.execute(
+              "ALTER TABLE exhibitors ADD COLUMN field_capture_json TEXT NOT NULL DEFAULT '{}'");
+        }
+        if (oldVersion < 13) {
+          await db.execute(
+              "ALTER TABLE exhibitors ADD COLUMN verification_json TEXT NOT NULL DEFAULT '{}'");
+        }
+        if (oldVersion < 14) {
+          await db.execute('''
+            CREATE TABLE samples(
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              exhibitor_id INTEGER NOT NULL,
+              product_id INTEGER,
+              requested_at TEXT NOT NULL,
+              expected_at TEXT,
+              received_at TEXT,
+              status TEXT NOT NULL DEFAULT 'Requested',
+              courier TEXT NOT NULL DEFAULT '',
+              tracking_number TEXT NOT NULL DEFAULT '',
+              sample_cost REAL,
+              shipping_cost REAL,
+              assignee_email TEXT NOT NULL DEFAULT '',
+              test_notes TEXT NOT NULL DEFAULT '',
+              created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            )
+          ''');
+        }
+        if (oldVersion < 15) {
+          await db.execute(
+              "ALTER TABLE products ADD COLUMN purchase_readiness_json TEXT NOT NULL DEFAULT '{}'");
+        }
+        if (oldVersion < 16) {
+          await db.execute(
+              "ALTER TABLE meetings ADD COLUMN commitments_json TEXT NOT NULL DEFAULT '{}'");
+        }
+        if (oldVersion < 17) {
+          await db.execute(
+              "ALTER TABLE attachments ADD COLUMN annotations_json TEXT NOT NULL DEFAULT '[]'");
+        }
+        if (oldVersion < 18) {
+          await db.execute(
+              "ALTER TABLE audit_logs ADD COLUMN actor_email TEXT NOT NULL DEFAULT ''");
+        }
+        if (oldVersion < 19) {
+          await db.execute(
+              "ALTER TABLE products ADD COLUMN details_json TEXT NOT NULL DEFAULT '{}'");
+        }
+        if (oldVersion < 20) {
+          await db.execute(
+              "ALTER TABLE contacts ADD COLUMN profile_json TEXT NOT NULL DEFAULT '{}'");
+        }
+        if (oldVersion < 21) {
+          await _createSourcingBriefsTable(db);
+        }
       },
     );
+  }
+
+  Future<void> _createSourcingBriefsTable(DatabaseExecutor db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS sourcing_briefs(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        trip_id INTEGER,
+        name TEXT NOT NULL,
+        category TEXT NOT NULL DEFAULT '',
+        target_price REAL,
+        target_moq REAL,
+        required_certifications TEXT NOT NULL DEFAULT '',
+        notes TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      )
+    ''');
   }
 
   Future<void> _createSavedFiltersTable(DatabaseExecutor db) async {
@@ -223,6 +320,7 @@ class TradeDatabase {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         action TEXT NOT NULL,
         details TEXT NOT NULL DEFAULT '',
+        actor_email TEXT NOT NULL DEFAULT '',
         created_at TEXT NOT NULL
       )
     ''');
@@ -511,6 +609,16 @@ class TradeDatabase {
     return rows.map((e) => Quote.fromMap(e)).toList();
   }
 
+  Future<List<Sample>> getSamples({int? exhibitorId}) async {
+    final rows = await queryAll(
+      'samples',
+      where: exhibitorId == null ? null : 'exhibitor_id = ?',
+      whereArgs: exhibitorId == null ? null : [exhibitorId],
+      orderBy: 'COALESCE(expected_at, requested_at) ASC',
+    );
+    return rows.map(Sample.fromMap).toList();
+  }
+
   Future<List<Map<String, dynamic>>> getQuotesForApproval() async {
     final db = await database;
     return db.rawQuery('''
@@ -795,6 +903,11 @@ class TradeDatabase {
         where: 'exhibitor_id IN ($placeholders)',
         whereArgs: exhibitorIds,
       );
+      await txn.delete(
+        'samples',
+        where: 'exhibitor_id IN ($placeholders)',
+        whereArgs: exhibitorIds,
+      );
 
       await txn.delete(
         'attachments',
@@ -828,6 +941,19 @@ class TradeDatabase {
   Future<int> deleteAttachment(int id) async {
     return delete('attachments', id);
   }
+
+  Future<List<SourcingBrief>> getSourcingBriefs() async {
+    final rows = await queryAll('sourcing_briefs', orderBy: 'created_at DESC');
+    return rows.map(SourcingBrief.fromMap).toList();
+  }
+
+  Future<int> saveSourcingBrief(SourcingBrief brief) =>
+      insert('sourcing_briefs', brief.toMap()..remove('id'));
+
+  Future<void> updateSourcingBrief(SourcingBrief brief) =>
+      update('sourcing_briefs', brief.id!, brief.toMap()..remove('id'));
+
+  Future<int> deleteSourcingBrief(int id) => delete('sourcing_briefs', id);
 
   Future<List<Exhibitor>> searchExhibitors(String query) async {
     final q = '%${query.toLowerCase()}%';
@@ -868,10 +994,12 @@ class TradeDatabase {
   Future<int> deleteSavedSupplierFilter(int id) =>
       delete('saved_supplier_filters', id);
 
-  Future<void> logAudit(String action, String details) async {
+  Future<void> logAudit(String action, String details,
+      {String actorEmail = ''}) async {
     await insert('audit_logs', {
       'action': action,
       'details': details,
+      'actor_email': actorEmail,
       'created_at': DateTime.now().toIso8601String(),
     });
   }
@@ -893,6 +1021,7 @@ class TradeDatabase {
       'exhibitors',
       'trips',
       'saved_supplier_filters',
+      'sourcing_briefs',
     ];
     const insertOrder = [
       'trips',
@@ -903,6 +1032,7 @@ class TradeDatabase {
       'quotes',
       'attachments',
       'saved_supplier_filters',
+      'sourcing_briefs',
     ];
 
     var restored = 0;

@@ -32,6 +32,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   late Future<List<Map<String, dynamic>>> _futureStats;
   late Future<List<Map<String, dynamic>>> _futureCloseouts;
   late Future<List<Product>> _futureTopShortlist;
+  late Future<List<_TodayAtFairItem>> _futureTodayAtFair;
+  late Future<List<Sample>> _futureSampleAlerts;
 
   @override
   void initState() {
@@ -43,6 +45,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _futureStats = db.getStats();
     _futureCloseouts = db.getTripCloseoutSummaries();
     _futureTopShortlist = _loadTopShortlist();
+    _futureTodayAtFair = _loadTodayAtFair();
+    _futureSampleAlerts = _loadSampleAlerts();
   }
 
   void _reload() => setState(_reloadFutures);
@@ -51,6 +55,72 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final products = await db.getShortlistedProducts();
     products.sort((a, b) => _shortlistScore(b).compareTo(_shortlistScore(a)));
     return products.take(20).toList();
+  }
+
+  Future<List<_TodayAtFairItem>> _loadTodayAtFair() async {
+    final now = DateTime.now();
+    final endOfToday = DateTime(now.year, now.month, now.day, 23, 59, 59);
+    final suppliers = await db.getExhibitors(null);
+    final meetings = await db.getMeetings();
+    final items = <_TodayAtFairItem>[];
+    final scheduledSupplierIds = <int>{};
+
+    for (final supplier in suppliers) {
+      final scheduled = supplier.plannedVisitAt?.toLocal();
+      if (scheduled != null && DateUtils.isSameDay(scheduled, now)) {
+        scheduledSupplierIds.add(supplier.id!);
+        items.add(_TodayAtFairItem.visit(supplier, scheduled));
+      }
+    }
+
+    for (final meeting in meetings) {
+      final supplier =
+          suppliers.where((item) => item.id == meeting.exhibitorId);
+      final name =
+          supplier.isEmpty ? 'Supplier follow-up' : supplier.first.name;
+      final due = meeting.followUpDate?.toLocal();
+      if (!meeting.completed && due != null && !due.isAfter(endOfToday)) {
+        items.add(_TodayAtFairItem.followUp(meeting, name, due, now));
+      } else if (DateUtils.isSameDay(meeting.meetingDate.toLocal(), now)) {
+        items.add(_TodayAtFairItem.meeting(meeting, name));
+      }
+    }
+
+    final prioritySuppliers = suppliers
+        .where((supplier) =>
+            supplier.visitedAt == null &&
+            !scheduledSupplierIds.contains(supplier.id) &&
+            (supplier.shortlisted || supplier.rating >= 4))
+        .toList()
+      ..sort((a, b) {
+        final shortlist =
+            (b.shortlisted ? 1 : 0).compareTo(a.shortlisted ? 1 : 0);
+        return shortlist != 0 ? shortlist : b.rating.compareTo(a.rating);
+      });
+    items.addAll(prioritySuppliers.take(2).map(_TodayAtFairItem.priority));
+
+    items.sort((a, b) {
+      final left = a.when ?? DateTime(now.year, now.month, now.day, 23, 58);
+      final right = b.when ?? DateTime(now.year, now.month, now.day, 23, 58);
+      return left.compareTo(right);
+    });
+    return items;
+  }
+
+  Future<List<Sample>> _loadSampleAlerts() async {
+    final now = DateTime.now();
+    final terminal = {'Approved', 'Rejected'};
+    final samples = await db.getSamples();
+    return samples
+        .where((sample) =>
+            !terminal.contains(sample.status) &&
+            (sample.expectedAt == null || !sample.expectedAt!.isAfter(now)))
+        .toList()
+      ..sort((left, right) {
+        final leftDate = left.expectedAt ?? left.requestedAt;
+        final rightDate = right.expectedAt ?? right.requestedAt;
+        return leftDate.compareTo(rightDate);
+      });
   }
 
   double _shortlistScore(Product p) {
@@ -143,6 +213,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   },
                 ),
               ),
+              const SizedBox(height: 16),
+              _todayAtFairSection(),
+              const SizedBox(height: 16),
+              _sampleAlertsSection(),
               const SizedBox(height: 16),
               SectionPanel(
                 title: 'Today',
@@ -430,6 +504,214 @@ class _DashboardScreenState extends State<DashboardScreen> {
           );
         },
       ),
+    );
+  }
+
+  Widget _todayAtFairSection() {
+    return SectionPanel(
+      title: 'Today at the Fair',
+      subtitle:
+          'Visits, meetings, urgent follow-ups, and priority suppliers in one place.',
+      trailing: TextButton(
+        onPressed: widget.onCapture,
+        child: const Text('Open visits'),
+      ),
+      child: FutureBuilder<List<_TodayAtFairItem>>(
+        future: _futureTodayAtFair,
+        builder: (context, snapshot) {
+          if (!snapshot.hasData) {
+            return const LinearProgressIndicator();
+          }
+          final items = snapshot.data!;
+          if (items.isEmpty) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('No visits or urgent follow-ups planned today.'),
+                const SizedBox(height: 8),
+                TextButton.icon(
+                  onPressed: widget.onCapture,
+                  icon: const Icon(Icons.add_location_alt_outlined),
+                  label: const Text('Schedule a supplier visit'),
+                ),
+              ],
+            );
+          }
+          return Column(
+            children: [
+              ...items.take(7).map((item) => _TodayAtFairTile(
+                    item: item,
+                    onTap: item.kind == _TodayItemKind.followUp
+                        ? widget.onFollowUps
+                        : widget.onCapture,
+                  )),
+              if (items.length > 7)
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton(
+                    onPressed: widget.onCapture,
+                    child: Text('View ${items.length - 7} more in visits'),
+                  ),
+                ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _sampleAlertsSection() => SectionPanel(
+        title: 'Sample watch',
+        subtitle: 'Samples that need receipt or testing attention.',
+        child: FutureBuilder<List<Sample>>(
+          future: _futureSampleAlerts,
+          builder: (context, snapshot) {
+            if (!snapshot.hasData) return const LinearProgressIndicator();
+            final samples = snapshot.data!;
+            if (samples.isEmpty) {
+              return const Row(
+                children: [
+                  Icon(Icons.inventory_2_outlined, color: AppColors.teal),
+                  SizedBox(width: 10),
+                  Expanded(child: Text('No samples currently need attention.')),
+                ],
+              );
+            }
+            return Column(
+              children: samples.take(3).map((sample) {
+                final late = sample.expectedAt != null &&
+                    sample.expectedAt!.isBefore(DateTime.now());
+                return ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(
+                      late
+                          ? Icons.warning_amber_outlined
+                          : Icons.inventory_2_outlined,
+                      color: late ? AppColors.danger : AppColors.amber),
+                  title: Text(sample.status),
+                  subtitle: Text(
+                      '${sample.expectedAt == null ? 'Expected arrival not set' : 'Expected ${sample.expectedAt!.toLocal().toString().substring(0, 10)}'}${sample.trackingNumber.isEmpty ? '' : ' | ${sample.trackingNumber}'}'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: widget.onCapture,
+                );
+              }).toList(),
+            );
+          },
+        ),
+      );
+}
+
+enum _TodayItemKind { visit, meeting, followUp, priority }
+
+class _TodayAtFairItem {
+  final _TodayItemKind kind;
+  final String title;
+  final String detail;
+  final DateTime? when;
+  final bool overdue;
+  final String? priority;
+
+  const _TodayAtFairItem({
+    required this.kind,
+    required this.title,
+    required this.detail,
+    this.when,
+    this.overdue = false,
+    this.priority,
+  });
+
+  factory _TodayAtFairItem.visit(Exhibitor supplier, DateTime scheduled) =>
+      _TodayAtFairItem(
+        kind: _TodayItemKind.visit,
+        title: supplier.name,
+        detail:
+            'Booth ${supplier.booth.isEmpty ? '-' : supplier.booth}${supplier.hall.isEmpty ? '' : ' | ${supplier.hall}'}',
+        when: scheduled,
+      );
+
+  factory _TodayAtFairItem.meeting(Meeting meeting, String supplierName) =>
+      _TodayAtFairItem(
+        kind: _TodayItemKind.meeting,
+        title: supplierName,
+        detail: meeting.outcome.isEmpty ? 'Supplier meeting' : meeting.outcome,
+        when: meeting.meetingDate.toLocal(),
+        priority: meeting.priority,
+      );
+
+  factory _TodayAtFairItem.followUp(
+          Meeting meeting, String supplierName, DateTime due, DateTime now) =>
+      _TodayAtFairItem(
+        kind: _TodayItemKind.followUp,
+        title: supplierName,
+        detail: meeting.assigneeEmail.isEmpty
+            ? '${meeting.priority} priority follow-up'
+            : '${meeting.priority} priority | ${meeting.assigneeEmail}',
+        when: due,
+        overdue: due.isBefore(now),
+        priority: meeting.priority,
+      );
+
+  factory _TodayAtFairItem.priority(Exhibitor supplier) => _TodayAtFairItem(
+        kind: _TodayItemKind.priority,
+        title: supplier.name,
+        detail:
+            '${supplier.shortlisted ? 'Shortlisted' : 'Rated ${supplier.rating}/5'}${supplier.booth.isEmpty ? '' : ' | Booth ${supplier.booth}'}',
+        priority: 'Priority',
+      );
+}
+
+class _TodayAtFairTile extends StatelessWidget {
+  final _TodayAtFairItem item;
+  final VoidCallback? onTap;
+
+  const _TodayAtFairTile({required this.item, this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final (icon, color, label) = switch (item.kind) {
+      _TodayItemKind.visit => (
+          Icons.location_on_outlined,
+          AppColors.primary,
+          'Visit'
+        ),
+      _TodayItemKind.meeting => (
+          Icons.groups_2_outlined,
+          const Color(0xFF6B4E9B),
+          'Meeting'
+        ),
+      _TodayItemKind.followUp => (
+          item.overdue ? Icons.warning_amber_outlined : Icons.task_alt,
+          item.overdue ? AppColors.danger : AppColors.amber,
+          item.overdue ? 'Overdue' : 'Follow-up',
+        ),
+      _TodayItemKind.priority => (
+          Icons.star_outline,
+          AppColors.teal,
+          'Priority'
+        ),
+    };
+    final time = item.when == null
+        ? 'Next'
+        : '${item.when!.hour.toString().padLeft(2, '0')}:${item.when!.minute.toString().padLeft(2, '0')}';
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      onTap: onTap,
+      leading: SizedBox(
+        width: 48,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(time, style: const TextStyle(fontWeight: FontWeight.w800)),
+            Text(label,
+                style: TextStyle(
+                    color: color, fontSize: 12, fontWeight: FontWeight.w700)),
+          ],
+        ),
+      ),
+      title: Text(item.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+      subtitle: Text(item.detail, maxLines: 1, overflow: TextOverflow.ellipsis),
+      trailing: Icon(icon, color: color),
     );
   }
 }
