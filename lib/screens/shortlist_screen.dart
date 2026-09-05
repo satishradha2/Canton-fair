@@ -584,21 +584,24 @@ class _ShortlistScreenState extends State<ShortlistScreen> {
                   ],
                 ),
                 const SizedBox(height: 10),
-                Row(
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    SizedBox(
-                      width: 112,
+                    const Text('Minimum score (0-100)'),
+                    const SizedBox(height: 8),
+                    Semantics(
+                      label: 'Minimum score (0-100)',
                       child: TextField(
                         controller: _minScoreController,
                         keyboardType: const TextInputType.numberWithOptions(
                             decimal: true),
                         decoration:
-                            const InputDecoration(labelText: 'Min score (0-100)', helperText: 'Rating x 20'),
+                            const InputDecoration(helperText: 'Rating x 20', helperMaxLines: 2),
                         onChanged: _applyMinScoreFilter,
                       ),
                     ),
-                    const SizedBox(width: 10),
-                    Expanded(
+                    const SizedBox(height: 16),
+                    SizedBox(
                       child: Wrap(
                         spacing: 8,
                         runSpacing: 8,
