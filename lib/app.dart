@@ -15,6 +15,8 @@ import 'screens/activity_feed_screen.dart';
 import 'screens/sourcing_briefs_screen.dart';
 import 'screens/procurement_workspace_screen.dart';
 import 'widgets/app_lock_screen.dart';
+import 'widgets/enterprise_widgets.dart';
+import 'theme/app_theme.dart';
 
 class CantonFairApp extends StatefulWidget {
   const CantonFairApp({super.key});
@@ -25,7 +27,7 @@ class CantonFairApp extends StatefulWidget {
 
 class _CantonFairAppState extends State<CantonFairApp>
     with WidgetsBindingObserver {
-  int _index = 1;
+  int _index = 0;
   final _updates = UpdateService();
   bool _checkedStartupUpdate = false;
   final _appLock = AppLockService();
@@ -86,7 +88,9 @@ class _CantonFairAppState extends State<CantonFairApp>
 
   void _openCapture(CaptureQuickAction action) {
     setState(() => _index = 1);
-    _captureQuickAction.value = action;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _captureQuickAction.value = action;
+    });
   }
 
   @override
@@ -154,64 +158,104 @@ class _CantonFairAppState extends State<CantonFairApp>
     }
   }
 
-  Future<void> _openMore(BuildContext context) async {
-    final destination = await showModalBottomSheet<int>(
-      context: context,
-      showDragHandle: true,
-      builder: (context) => SafeArea(
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          ListTile(
-            leading: const Icon(Icons.event_available_outlined),
-            title: const Text('Follow-ups'),
-            subtitle: const Text('Tasks, reminders, and due meetings'),
-            onTap: () => Navigator.pop(context, 3),
-          ),
-          ListTile(
-            leading: const Icon(Icons.insights_outlined),
-            title: const Text('Analytics'),
-            subtitle: const Text('Performance and sourcing trends'),
-            onTap: () => Navigator.pop(context, 4),
-          ),
-          ListTile(
-            leading: const Icon(Icons.ios_share_outlined),
-            title: const Text('Export reports'),
-            subtitle: const Text('CSV and PDF reports'),
-            onTap: () => Navigator.pop(context, 5),
-          ),
-          ListTile(
-            leading: const Icon(Icons.groups_outlined),
-            title: const Text('Team activity'),
-            subtitle: const Text('Who changed what, and when'),
-            onTap: () => Navigator.pop(context, 7),
-          ),
-          ListTile(
-            leading: const Icon(Icons.assignment_outlined),
-            title: const Text('Sourcing briefs'),
-            subtitle: const Text('Buying needs and supplier match scores'),
-            onTap: () => Navigator.pop(context, 8),
-          ),
-          ListTile(
-            leading: const Icon(Icons.account_tree_outlined),
-            title: const Text('Procurement workspace'),
-            subtitle: const Text('Approvals, costing, documents, and reports'),
-            onTap: () {
-              Navigator.pop(context);
-              Navigator.of(context).push(MaterialPageRoute(
-                  builder: (_) => const ProcurementWorkspaceScreen()));
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.settings_outlined),
-            title: const Text('Settings'),
-            subtitle: const Text('Team, sync, backup, and app controls'),
-            onTap: () => Navigator.pop(context, 6),
-          ),
-          const SizedBox(height: 8),
-        ]),
-      ),
-    );
-    if (destination != null && mounted) setState(() => _index = destination);
-  }
+  static const _destinations = [0, 1, 2, 3, 9];
+  static const _labels = ['Today', 'Suppliers', 'Shortlist', 'Tasks', 'Workspace'];
+  static const _icons = [
+    Icons.dashboard_outlined, Icons.storefront_outlined, Icons.star_border_rounded,
+    Icons.checklist_rounded, Icons.grid_view_rounded,
+  ];
+  static const _selectedIcons = [
+    Icons.dashboard_rounded, Icons.storefront_rounded, Icons.star_rounded,
+    Icons.checklist_rounded, Icons.grid_view_rounded,
+  ];
+
+  int get _navigationIndex => _index <= 3 ? _index : 4;
+  void _selectDestination(int index) => setState(() => _index = _destinations[index]);
+
+  Widget _workspaceHub() => EnterprisePage(
+    title: 'Workspace',
+    subtitle: 'Your sourcing tools, team records, and workspace controls. Choose a task to continue.',
+    children: [
+      _toolGroup('SOURCE & FOLLOW UP', [
+        ('Suppliers', 'Contacts, products, files and booth visits', Icons.storefront_outlined, () => setState(() => _index = 1)),
+        ('Sourcing briefs', 'Define requirements for your next purchase', Icons.assignment_outlined, () => setState(() => _index = 8)),
+        ('Tasks & follow-ups', 'Meetings, reminders and next actions', Icons.checklist_rounded, () => setState(() => _index = 3)),
+        ('Procurement', 'Review quotes, costs and purchase decisions', Icons.account_tree_outlined,
+          () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ProcurementWorkspaceScreen()))),
+      ]),
+      const SizedBox(height: 28),
+      _toolGroup('REPORT & MANAGE', [
+        ('Analytics', 'Track sourcing progress and trip performance', Icons.insights_outlined, () => setState(() => _index = 4)),
+        ('Export reports', 'Share records as CSV or PDF', Icons.ios_share_outlined, () => setState(() => _index = 5)),
+        ('Team activity', 'See the workspace change history', Icons.history_rounded, () => setState(() => _index = 7)),
+        ('Settings & sync', 'Team selection, backups, security and updates', Icons.settings_outlined, () => setState(() => _index = 6)),
+      ]),
+    ],
+  );
+
+  Widget _toolGroup(String title, List<(String, String, IconData, VoidCallback)> tools) =>
+      Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(title, style: const TextStyle(color: AppColors.muted,
+            fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 1.3)),
+        const SizedBox(height: 12),
+        LayoutBuilder(builder: (context, constraints) {
+          final columns = constraints.maxWidth >= 900 ? 3 : constraints.maxWidth >= 560 ? 2 : 1;
+          final width = (constraints.maxWidth - (columns - 1) * 12) / columns;
+          return Wrap(spacing: 12, runSpacing: 12, children: tools.map((tool) =>
+            SizedBox(width: width, child: Card(
+              clipBehavior: Clip.antiAlias,
+              child: InkWell(onTap: tool.$4, child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Container(padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(color: const Color(0xFFECF2F2), borderRadius: BorderRadius.circular(12)),
+                    child: Icon(tool.$3, size: 22, color: AppColors.primary)),
+                  const SizedBox(width: 14),
+                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(tool.$1, style: Theme.of(context).textTheme.titleSmall),
+                    const SizedBox(height: 5),
+                    Text(tool.$2, style: Theme.of(context).textTheme.bodySmall),
+                  ])),
+                  const SizedBox(width: 8),
+                  const Icon(Icons.arrow_forward_ios_rounded, size: 12, color: AppColors.muted),
+                ]),
+              )),
+            )),
+          ).toList());
+        }),
+      ]);
+
+  Widget _syncStrip() => ValueListenableBuilder<int>(
+    valueListenable: SyncStatusService.changes,
+    builder: (context, _, __) => FutureBuilder<SyncStatus>(
+      future: SyncStatusService().load(),
+      builder: (context, snapshot) {
+        final status = snapshot.data ?? const SyncStatus();
+        final syncing = SyncStatusService.isSyncing.value;
+        final attention = snapshot.hasError || status.lastError != null || status.conflicts > 0;
+        final color = attention ? AppColors.danger : AppColors.teal;
+        final label = syncing ? 'Sync in progress'
+            : attention ? 'Sync needs attention'
+            : status.lastSyncedAt == null ? 'Saved on this device' : 'Last sync completed';
+        return Material(color: Colors.white, child: InkWell(
+          onTap: () => setState(() => _index = 6),
+          child: Semantics(button: true, label: '$label. Open sync settings.',
+            excludeSemantics: true, child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+              child: Row(children: [
+                Icon(syncing ? Icons.sync : attention ? Icons.error_outline : Icons.check_circle_outline,
+                    size: 15, color: color),
+                const SizedBox(width: 8),
+                Expanded(child: Text(label, style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.w600))),
+                const Text('Sync settings', style: TextStyle(fontSize: 11, color: AppColors.muted)),
+                const SizedBox(width: 4),
+                const Icon(Icons.chevron_right, size: 16, color: AppColors.muted),
+              ]),
+            )),
+        ));
+      },
+    ),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -222,98 +266,59 @@ class _CantonFairAppState extends State<CantonFairApp>
       return AppLockScreen(onUnlocked: () => setState(() => _locked = false));
     }
     return AppLanguage(
-        code: _language,
-        child: Builder(
-          builder: (context) => Scaffold(
-            body: SafeArea(
-              bottom: false,
-              minimum: const EdgeInsets.only(top: 28),
-              child: _screens[_index],
-            ),
-            bottomNavigationBar: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                ValueListenableBuilder<int>(
-                  valueListenable: SyncStatusService.changes,
-                  builder: (context, _, __) => FutureBuilder<SyncStatus>(
-                    future: SyncStatusService().load(),
-                    builder: (context, snapshot) {
-                      final status = snapshot.data ?? const SyncStatus();
-                      final syncing = SyncStatusService.isSyncing.value;
-                      final needsAttention =
-                          status.lastError != null || status.conflicts > 0;
-                      final label = syncing
-                          ? 'Syncing'
-                          : needsAttention
-                              ? 'Needs attention'
-                              : status.lastSyncedAt == null
-                                  ? 'Saved locally'
-                                  : 'Up to date';
-                      final color = syncing
-                          ? Colors.blue.shade700
-                          : needsAttention
-                              ? Colors.orange.shade800
-                              : status.lastSyncedAt == null
-                                  ? Colors.blueGrey
-                                  : Colors.teal.shade700;
-                      return Material(
-                        color: color.withValues(alpha: 0.08),
-                        child: InkWell(
-                          onTap: () => setState(() => _index = 6),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                                vertical: 6, horizontal: 16),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                    syncing
-                                        ? Icons.sync
-                                        : needsAttention
-                                            ? Icons.cloud_off_outlined
-                                            : Icons.cloud_done_outlined,
-                                    size: 16,
-                                    color: color),
-                                const SizedBox(width: 6),
-                                Text(label,
-                                    style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w700,
-                                        color: color)),
-                              ],
-                            ),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
+      code: _language,
+      child: LayoutBuilder(builder: (context, constraints) {
+        final wide = constraints.maxWidth >= 840;
+        return Scaffold(
+          body: Row(children: [
+            if (wide) ...[
+              SafeArea(child: NavigationRail(
+                selectedIndex: _navigationIndex,
+                onDestinationSelected: _selectDestination,
+                extended: constraints.maxWidth >= 1180,
+                minWidth: 88,
+                minExtendedWidth: 216,
+                labelType: constraints.maxWidth >= 1180
+                    ? NavigationRailLabelType.none : NavigationRailLabelType.all,
+                leading: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 20),
+                  child: constraints.maxWidth >= 1180
+                      ? const Row(mainAxisSize: MainAxisSize.min, children: [
+                          Icon(Icons.business_center_outlined, color: AppColors.teal),
+                          SizedBox(width: 12),
+                          Text('CANTON FAIR', style: TextStyle(
+                              fontSize: 12, letterSpacing: 1.8, fontWeight: FontWeight.w800)),
+                        ])
+                      : const Icon(Icons.business_center_outlined, color: AppColors.teal),
                 ),
-                NavigationBar(
-                  selectedIndex: _index > 2 ? 3 : _index,
-                  onDestinationSelected: (i) {
-                    if (i == 3) {
-                      _openMore(context);
-                    } else {
-                      setState(() => _index = i);
-                    }
-                  },
-                  destinations: [
-                    NavigationDestination(
-                        icon: const Icon(Icons.dashboard),
-                        label: tr(context, 'dashboard')),
-                    NavigationDestination(
-                        icon: const Icon(Icons.record_voice_over),
-                        label: tr(context, 'capture')),
-                    NavigationDestination(
-                        icon: const Icon(Icons.star),
-                        label: tr(context, 'shortlist')),
-                    const NavigationDestination(
-                        icon: Icon(Icons.more_horiz), label: 'More'),
-                  ],
-                ),
-              ],
-            ),
+                destinations: List.generate(_labels.length, (index) => NavigationRailDestination(
+                  icon: Icon(_icons[index]), selectedIcon: Icon(_selectedIcons[index]),
+                  label: Text(_labels[index]),
+                )),
+              )),
+              const VerticalDivider(width: 1),
+            ],
+            Expanded(child: Column(children: [
+              Expanded(child: SafeArea(
+                bottom: false,
+                child: Align(alignment: Alignment.topCenter,
+                  child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 1320),
+                    child: _index == 9 ? _workspaceHub() : _screens[_index])),
+              )),
+              const Divider(),
+              SafeArea(top: false, bottom: wide, child: _syncStrip()),
+            ])),
+          ]),
+          bottomNavigationBar: wide ? null : NavigationBar(
+            selectedIndex: _navigationIndex,
+            onDestinationSelected: _selectDestination,
+            destinations: List.generate(_labels.length, (index) => NavigationDestination(
+              icon: Icon(_icons[index]), selectedIcon: Icon(_selectedIcons[index]),
+              label: _labels[index],
+            )),
           ),
-        ));
+        );
+      }),
+    );
   }
 }

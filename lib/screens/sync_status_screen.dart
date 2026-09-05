@@ -110,7 +110,7 @@ class _SyncStatusScreenState extends State<SyncStatusScreen> {
                               leading: const Icon(Icons.compare_arrows),
                               title: Text('${conflict.recordType} conflict'),
                               subtitle: Text(
-                                  'Cloud version ${conflict.remoteVersion} is newer'),
+                                  'Local and cloud differ (cloud v${conflict.remoteVersion}). Deletions can also conflict.'),
                               trailing: PopupMenuButton<String>(
                                 onSelected: (value) => value == 'local'
                                     ? _keepLocal(conflict)

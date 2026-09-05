@@ -36,8 +36,27 @@ class _TeamSetupScreenState extends State<TeamSetupScreen> {
   }
 
   Future<void> _select(CloudTeam team) async {
-    await _workspace.save(TeamWorkspace(id: team.id, name: team.name));
-    if (mounted) Navigator.pop(context, team);
+    try {
+      await _workspace.save(TeamWorkspace(id: team.id, name: team.name));
+      if (mounted) Navigator.of(context).popUntil((route) => route.isFirst);
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Workspace not changed: $error')));
+      }
+    }
+  }
+
+  Future<void> _personal() async {
+    try {
+      await _workspace.usePersonal();
+      if (mounted) Navigator.of(context).popUntil((route) => route.isFirst);
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Workspace not changed: $error')));
+      }
+    }
   }
 
   Future<void> _invite(CloudTeam team) async {
@@ -102,7 +121,9 @@ class _TeamSetupScreenState extends State<TeamSetupScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-      appBar: AppBar(title: const Text('Cloud team')),
+      appBar: AppBar(title: const Text('Cloud team'), actions: [
+        TextButton(onPressed: _personal, child: const Text('Personal')),
+      ]),
       body: FutureBuilder<List<CloudTeam>>(
           future: _teams,
           builder: (context, snapshot) {
@@ -119,7 +140,7 @@ class _TeamSetupScreenState extends State<TeamSetupScreen> {
             final teams = snapshot.data!;
             return ListView(padding: const EdgeInsets.all(16), children: [
               const Text(
-                  'Choose the team whose shared supplier data you want to use.'),
+                  'Each team has a separate local database. Existing records remain in Personal; they are never automatically uploaded to another team. Use Personal for backup restoration.'),
               const SizedBox(height: 12),
               ...teams.map((team) => ListTile(
                   title: Text(team.name),

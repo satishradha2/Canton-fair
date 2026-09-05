@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'screens/auth_gate.dart';
 import 'data/reminder_service.dart';
+import 'data/team_workspace_service.dart';
 import 'theme/app_theme.dart';
 
 Future<void> main() async {
@@ -30,6 +31,19 @@ Future<void> main() async {
       debugShowCheckedModeBanner: false,
       theme: buildAppTheme(),
       home: const AuthGate(),
+      builder: (context, child) => ValueListenableBuilder<bool>(
+        valueListenable: TeamWorkspaceService.busy,
+        builder: (context, busy, _) => PopScope(
+          canPop: !busy,
+          child: Stack(children: [
+            if (child != null) child,
+            if (busy) ...[
+              const ModalBarrier(dismissible: false, color: Color(0x55000000)),
+              const Center(child: CircularProgressIndicator()),
+            ],
+          ]),
+        ),
+      ),
     ),
   );
 }

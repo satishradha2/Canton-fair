@@ -110,12 +110,7 @@ class _ProcurementWorkspaceScreenState extends State<ProcurementWorkspaceScreen>
     final rate = double.tryParse(_rate.text.trim()) ?? 1;
     final goods = quantity * unitPrice;
     final sourceTotal = goods + freight + other + goods * duty / 100;
-    final details = <String, dynamic>{};
-    try {
-      final decoded = jsonDecode(product.detailsJson);
-      if (decoded is Map) details.addAll(Map<String, dynamic>.from(decoded));
-    } catch (_) {}
-    details['landed_cost'] = {
+    final landedCost = {
       'quote_id': quote['id'],
       'quantity': quantity,
       'freight': freight,
@@ -128,9 +123,19 @@ class _ProcurementWorkspaceScreenState extends State<ProcurementWorkspaceScreen>
       'usd_unit_cost': quantity == 0 ? 0 : sourceTotal * rate / quantity,
       'saved_at': DateTime.now().toIso8601String(),
     };
-    await _db.update('products', productId, {'details_json': jsonEncode(details)});
+    final database = await _db.database;
+    await database.transaction((txn) async {
+      final rows = await txn.query('products', where: 'id = ?', whereArgs: [productId]);
+      if (rows.isEmpty) throw StateError('Product no longer exists.');
+      final details = Map<String, dynamic>.from(
+          jsonDecode(rows.single['details_json'] as String? ?? '{}') as Map);
+      details['landed_cost'] = landedCost;
+      await txn.update('products', {'details_json': jsonEncode(details)},
+          where: 'id = ?', whereArgs: [productId]);
+    });
     await _db.logAudit('Saved landed cost', '${product.name} | quote ${quote['id']}');
     if (!mounted) return;
+    _refresh();
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Landed cost saved to the product decision record.')),
     );

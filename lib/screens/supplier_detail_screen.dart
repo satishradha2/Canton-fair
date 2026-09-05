@@ -1,3 +1,4 @@
+import '../data/team_workspace_service.dart';
 import 'dart:convert';
 import 'dart:io';
 
@@ -127,7 +128,7 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
     if (!mounted) return;
     final root = await getApplicationDocumentsDirectory();
     final directory =
-        Directory('${root.path}/attachments/contact/${contact.id}');
+        Directory('${root.path}/attachments/${await TeamWorkspaceService().scopeKey()}/contact/${contact.id}');
     await directory.create(recursive: true);
     final extension = picked.path.contains('.')
         ? picked.path.substring(picked.path.lastIndexOf('.'))
@@ -391,34 +392,12 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
 
   Future<List<_PurchaseReadinessItem>> _loadPurchaseItems() async {
     final products = await _products;
-    final samples = await _db.getSamples(exhibitorId: widget.supplier.id!);
-    final quotes = (await _db.queryAll('quotes')).map(Quote.fromMap).toList();
-    final verification = _verification();
-    final verificationApproved = verification['status'] == 'Approved';
-    final paymentRisk = _verificationFlag(verification, 'payment_risk');
-    final now = DateTime.now();
-    return products.map((product) {
-      final productSamples = samples
-          .where((sample) =>
-              sample.productId == null || sample.productId == product.id)
-          .toList();
-      final productQuotes =
-          quotes.where((quote) => quote.productId == product.id).toList();
-      final blockers = <String>[
-        if (!productSamples.any((sample) => sample.status == 'Approved'))
-          'Sample not approved',
-        if (!productQuotes.any((quote) =>
-            quote.approvalStatus == 'Approved' &&
-            (quote.validUntil == null || !quote.validUntil!.isBefore(now))))
-          'No active approved quote',
-        if (product.moq == null) 'MOQ missing',
-        if (product.leadTime.trim().isEmpty) 'Lead time missing',
-        if (product.paymentTerms.trim().isEmpty) 'Payment terms missing',
-        if (!verificationApproved) 'Supplier verification not approved',
-        if (paymentRisk) 'Payment risk flagged',
-      ];
-      return _PurchaseReadinessItem(product: product, blockers: blockers);
-    }).toList();
+    final items = <_PurchaseReadinessItem>[];
+    for (final product in products) {
+      items.add(_PurchaseReadinessItem(
+          product: product, blockers: await _db.purchaseBlockers(product.id!)));
+    }
+    return items;
   }
 
   Future<void> _editPurchasePlan(_PurchaseReadinessItem item) async {
@@ -558,7 +537,7 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
                 child: const Text('Cancel')),
             FilledButton(
               onPressed: () {
-                if (status == 'Ready to order' && item.blockers.isNotEmpty) {
+                if ((status == 'Ready to order' || status == 'Approved for order') && item.blockers.isNotEmpty) {
                   setDialogState(() => error =
                       'Resolve all blockers before marking this ready to order.');
                   return;
@@ -587,16 +566,23 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
     notes.dispose();
     poNumber.dispose();
     if (result == null) return;
-    await _db.update('products', item.product.id!,
-        {'purchase_readiness_json': jsonEncode(result)});
-    if (mounted) setState(_reload);
+    try {
+      await _db.update('products', item.product.id!,
+          {'purchase_readiness_json': jsonEncode({...current, ...result})});
+      if (mounted) setState(_reload);
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Handover not saved: $error')));
+      }
+    }
   }
 
   Future<void> _sharePurchaseReady() async {
     final items = await _loadPurchaseItems();
     final ready = items.where((item) {
       final status = _purchasePlan(item.product)['status'];
-      return status == 'Ready to order' || status == 'Approved for order';
+      return item.blockers.isEmpty && (status == 'Ready to order' || status == 'Approved for order');
     }).toList();
     final lines = [
       'Canton Fair purchase handover: ${widget.supplier.name}',

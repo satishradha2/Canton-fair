@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import '../data/product_score.dart';
 
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
@@ -1033,25 +1034,12 @@ class _CapturesScreenState extends State<CapturesScreen> {
               await db.update(
                 'exhibitors',
                 e.id!,
-                Exhibitor(
-                  id: e.id,
-                  tripId: selectedTrip,
-                  name: name,
-                  booth: booth,
-                  hall: hall,
-                  category: category,
-                  country: country,
-                  contactCompanyNotes: notes,
-                  shortlisted: shortlisted,
-                  rating: rating,
-                  tagsJson: e.tagsJson,
-                  qualityScore: e.qualityScore,
-                  responseSpeedScore: e.responseSpeedScore,
-                  trustScore: e.trustScore,
-                  moqFitScore: e.moqFitScore,
-                  reliabilityScore: e.reliabilityScore,
-                ).toMap()
-                  ..remove('id'),
+                {
+                  'trip_id': selectedTrip, 'name': name, 'booth': booth,
+                  'hall': hall, 'category': category, 'country': country,
+                  'notes': notes, 'shortlisted': shortlisted ? 1 : 0,
+                  'rating': rating,
+                },
               );
               _load();
               if (!ctx.mounted) return;
@@ -1209,17 +1197,10 @@ class _CapturesScreenState extends State<CapturesScreen> {
               await db.update(
                 'contacts',
                 c.id!,
-                Contact(
-                  id: c.id,
-                  exhibitorId: c.exhibitorId,
-                  name: name,
-                  designation: designation,
-                  phone: phone,
-                  email: email,
-                  whatsapp: whatsapp,
-                  wechat: wechat,
-                ).toMap()
-                  ..remove('id'),
+                {
+                  'name': name, 'designation': designation, 'phone': phone,
+                  'email': email, 'whatsapp': whatsapp, 'wechat': wechat,
+                },
               );
               _load();
               if (!ctx.mounted) return;
@@ -1340,21 +1321,12 @@ class _CapturesScreenState extends State<CapturesScreen> {
                 await db.update(
                   'products',
                   p.id!,
-                  Product(
-                    id: p.id,
-                    exhibitorId: p.exhibitorId,
-                    name: name,
-                    modelCode: model,
-                    specs: specs,
-                    moq: moq,
-                    quotedPrice: price,
-                    priceCurrency: currency,
-                    leadTime: lead,
-                    paymentTerms: terms,
-                    shortlisted: shortlisted,
-                    rating: rating,
-                  ).toMap()
-                    ..remove('id'),
+                  {
+                    'name': name, 'model_code': model, 'specs': specs,
+                    'moq': moq, 'quoted_price': price, 'price_currency': currency,
+                    'lead_time': lead, 'payment_terms': terms,
+                    'shortlisted': shortlisted ? 1 : 0, 'rating': rating,
+                  },
                 );
                 _load();
                 if (!ctx.mounted) return;
@@ -1809,17 +1781,7 @@ class _CapturesScreenState extends State<CapturesScreen> {
     double? quotedPrice,
     double? moq,
     String leadTime = '',
-  }) {
-    final ratingScore = (rating / 5.0) * 40.0;
-    final priceScore =
-        quotedPrice == null ? 0.0 : 1000.0 / (1.0 + quotedPrice.abs());
-    final moqScore = moq == null ? 0.0 : 30.0 / (1.0 + moq);
-    final leadMatch = RegExp(r'\d+').firstMatch(leadTime);
-    final lead =
-        leadMatch == null ? null : double.tryParse(leadMatch.group(0)!);
-    final leadScore = lead == null ? 0.0 : 15.0 / (1.0 + lead);
-    return ratingScore + priceScore + moqScore + leadScore;
-  }
+  }) => ProductScore.fromRating(rating);
 
   static const _messageTemplates = [
     'Hi {name}, nice meeting you at Canton Fair. Thank you for sharing product details.',
@@ -1890,7 +1852,7 @@ class _CapturesScreenState extends State<CapturesScreen> {
       if (picked == null || !mounted) return;
       final root = await getApplicationDocumentsDirectory();
       final targetDir =
-          Directory('${root.path}/attachments/$ownerType/$ownerId');
+          Directory('${root.path}/attachments/${await TeamWorkspaceService().scopeKey()}/$ownerType/$ownerId');
       await targetDir.create(recursive: true);
       final extensionIndex = picked.path.lastIndexOf('.');
       final extension =
@@ -1915,7 +1877,7 @@ class _CapturesScreenState extends State<CapturesScreen> {
     if (picked == null || !mounted) return;
 
     final root = await getApplicationDocumentsDirectory();
-    final targetDir = Directory('${root.path}/attachments/$ownerType/$ownerId');
+    final targetDir = Directory('${root.path}/attachments/${await TeamWorkspaceService().scopeKey()}/$ownerType/$ownerId');
     if (!await targetDir.exists()) {
       await targetDir.create(recursive: true);
     }
@@ -1947,7 +1909,7 @@ class _CapturesScreenState extends State<CapturesScreen> {
     if (sourcePath == null) return;
     final source = File(sourcePath);
     final root = await getApplicationDocumentsDirectory();
-    final targetDir = Directory('${root.path}/attachments/$ownerType/$ownerId');
+    final targetDir = Directory('${root.path}/attachments/${await TeamWorkspaceService().scopeKey()}/$ownerType/$ownerId');
     await targetDir.create(recursive: true);
     final extension = sourcePath.contains('.')
         ? sourcePath.substring(sourcePath.lastIndexOf('.'))

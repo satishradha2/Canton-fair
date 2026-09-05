@@ -18,9 +18,13 @@ import 'sync_status_screen.dart';
 class SettingsScreen extends StatefulWidget {
   final Future<void> Function()? onAppLockChanged;
   final Future<void> Function(String language)? onLanguageChanged;
+  final Future<TeamWorkspace?> Function()? workspaceLoader;
 
   const SettingsScreen(
-      {super.key, this.onAppLockChanged, this.onLanguageChanged});
+      {super.key,
+      this.onAppLockChanged,
+      this.onLanguageChanged,
+      this.workspaceLoader});
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -63,7 +67,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _loadTeamWorkspace() async {
-    final workspace = await TeamWorkspaceService().load();
+    final workspace = await (widget.workspaceLoader ?? TeamWorkspaceService().load)();
     if (mounted) setState(() => _teamName = workspace?.name);
   }
 
@@ -242,7 +246,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             builder: (context) => AlertDialog(
               title: const Text('Replace local data?'),
               content: Text(
-                'This backup contains ${preview.recordCount} records. Restoring it replaces current trips, suppliers, products, meetings, quotes, attachments, and saved filters on this device. This cannot be undone.',
+                'This backup contains ${preview.recordCount} records. Restore is available in Personal workspace only and replaces its business records, samples, sourcing briefs, closeouts, files and activity history. A pre-restore recovery backup is retained. Shared team data is not replaced.',
               ),
               actions: [
                 TextButton(

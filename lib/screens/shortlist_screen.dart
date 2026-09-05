@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import '../data/product_score.dart';
 import 'package:csv/csv.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
@@ -116,35 +117,21 @@ class _ShortlistScreenState extends State<ShortlistScreen> {
     return activeTripIds;
   }
 
-  double _shortlistScore(Product p) {
-    final ratingScore = (p.rating / 5.0) * 40.0;
-    final priceScore =
-        p.quotedPrice == null ? 0.0 : 1000.0 / (1.0 + p.quotedPrice!.abs());
-    final moqScore = p.moq == null ? 0.0 : 30.0 / (1.0 + p.moq!);
-    final leadMatch = RegExp(r'\d+').firstMatch(p.leadTime);
-    final lead =
-        leadMatch == null ? null : double.tryParse(leadMatch.group(0)!);
-    final leadScore = lead == null ? 0.0 : 15.0 / (1.0 + lead);
-    return ratingScore + priceScore + moqScore + leadScore;
-  }
+  double _shortlistScore(Product p) => ProductScore.fromRating(p.rating);
 
-  double _leadTimeValue(Product p) {
-    final leadMatch = RegExp(r'\d+').firstMatch(p.leadTime);
-    if (leadMatch == null) return double.infinity;
-    return double.tryParse(leadMatch.group(0)!) ?? double.infinity;
-  }
+  double _leadTimeValue(Product p) => ProductScore.leadTimeDays(p.leadTime);
 
   String _shortlistScoreBand(double score) {
-    if (score >= 60) return 'A';
-    if (score >= 45) return 'B';
-    if (score >= 30) return 'C';
+    if (score >= 80) return 'A';
+    if (score >= 60) return 'B';
+    if (score >= 40) return 'C';
     return 'D';
   }
 
   Color _shortlistScoreBandColor(double score) {
-    if (score >= 60) return Colors.green;
-    if (score >= 45) return Colors.orange;
-    if (score >= 30) return Colors.blue;
+    if (score >= 80) return Colors.green;
+    if (score >= 60) return Colors.orange;
+    if (score >= 40) return Colors.blue;
     return Colors.grey;
   }
 
@@ -159,7 +146,8 @@ class _ShortlistScreenState extends State<ShortlistScreen> {
       case _ProductSortField.price:
         final aPrice = a.quotedPrice ?? double.infinity;
         final bPrice = b.quotedPrice ?? double.infinity;
-        cmp = aPrice.compareTo(bPrice);
+        cmp = a.priceCurrency.toUpperCase().compareTo(b.priceCurrency.toUpperCase());
+        if (cmp == 0) cmp = aPrice.compareTo(bPrice);
         break;
       case _ProductSortField.moq:
         final aMoq = a.moq == null ? double.infinity : a.moq!.toDouble();
@@ -470,7 +458,7 @@ class _ShortlistScreenState extends State<ShortlistScreen> {
 
   void _applyMinScoreFilter(String value) {
     final parsed = double.tryParse(value.trim());
-    _minScore = parsed == null || parsed < 0 ? 0.0 : parsed;
+    _minScore = parsed == null || !parsed.isFinite ? 0.0 : parsed.clamp(0.0, 100.0).toDouble();
     _load();
     setState(() {});
   }
@@ -605,7 +593,7 @@ class _ShortlistScreenState extends State<ShortlistScreen> {
                         keyboardType: const TextInputType.numberWithOptions(
                             decimal: true),
                         decoration:
-                            const InputDecoration(labelText: 'Min score'),
+                            const InputDecoration(labelText: 'Min score (0-100)', helperText: 'Rating x 20'),
                         onChanged: _applyMinScoreFilter,
                       ),
                     ),
@@ -622,7 +610,7 @@ class _ShortlistScreenState extends State<ShortlistScreen> {
                               onSelected: (_) =>
                                   _setSortField(_ProductSortField.score)),
                           ChoiceChip(
-                              label: const Text('Price'),
+                              label: const Text('Price by currency'),
                               selected: _sortField == _ProductSortField.price,
                               onSelected: (_) =>
                                   _setSortField(_ProductSortField.price)),

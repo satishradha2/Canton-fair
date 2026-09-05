@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
+import '../data/product_score.dart';
 
 import '../data/database.dart';
-import '../data/language_service.dart';
 import '../models/models.dart';
 import '../theme/app_theme.dart';
 import '../widgets/enterprise_widgets.dart';
@@ -123,17 +123,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       });
   }
 
-  double _shortlistScore(Product p) {
-    final ratingScore = (p.rating / 5.0) * 40.0;
-    final priceScore =
-        p.quotedPrice == null ? 0.0 : 1000.0 / (1.0 + p.quotedPrice!.abs());
-    final moqScore = p.moq == null ? 0.0 : 30.0 / (1.0 + p.moq!);
-    final leadMatch = RegExp(r'\d+').firstMatch(p.leadTime);
-    final lead =
-        leadMatch == null ? null : double.tryParse(leadMatch.group(0)!);
-    final leadScore = lead == null ? 0.0 : 15.0 / (1.0 + lead);
-    return ratingScore + priceScore + moqScore + leadScore;
-  }
+  double _shortlistScore(Product p) => ProductScore.fromRating(p.rating);
 
   @override
   Widget build(BuildContext context) {
@@ -151,8 +141,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
             AppColors.primary,
             AppColors.teal,
             AppColors.amber,
-            const Color(0xFF6B4E9B),
-            const Color(0xFF2F855A),
+            AppColors.primary,
+            AppColors.teal,
           ];
           final icons = [
             Icons.public,
@@ -163,19 +153,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ];
 
           return EnterprisePage(
-            title: tr(context, 'operations'),
+            title: 'Today at the fair',
             subtitle:
-                'Live workspace for supplier capture, shortlisting, meetings, and trip closeout.',
-            actions: [
-              ElevatedButton.icon(
-                onPressed: widget.onCapture,
-                icon: const Icon(Icons.add_business_outlined),
-                label: const Text('Capture supplier'),
-              ),
-            ],
+                'Your priorities, supplier conversations, and follow-ups in one place.',
             children: [
               SectionPanel(
-                title: 'Quick capture',
+                title: 'Record a conversation',
                 subtitle: 'Choose the fastest way to record a supplier.',
                 child: LayoutBuilder(
                   builder: (context, constraints) {
@@ -345,7 +328,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       crossAxisCount: columns,
                       crossAxisSpacing: 10,
                       mainAxisSpacing: 10,
-                      childAspectRatio: width < 420 ? 1.18 : 1.45,
+                      mainAxisExtent: 160 + (MediaQuery.textScalerOf(context).scale(14) - 14).clamp(0, 80).toDouble(),
                     ),
                     itemBuilder: (context, i) {
                       return StatCard(

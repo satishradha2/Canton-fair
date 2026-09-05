@@ -4,25 +4,33 @@ import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 import 'dart:io';
 import '../models/models.dart';
+import 'team_workspace_service.dart';
+import 'approval_policy.dart';
 
 class TradeDatabase {
   static final TradeDatabase instance = TradeDatabase._();
-  static Database? _db;
+  static final Map<String, Future<Database>> _databases = {};
 
   TradeDatabase._();
 
   Future<Database> get database async {
-    if (_db != null) return _db!;
-    _db = await _initDb();
-    return _db!;
+    final name = await TeamWorkspaceService().databaseName();
+    return _databases.putIfAbsent(name, () async {
+      try {
+        return await _initDb(name);
+      } catch (_) {
+        _databases.remove(name);
+        rethrow;
+      }
+    });
   }
 
-  Future<Database> _initDb() async {
+  Future<Database> _initDb(String name) async {
     final dbPath = await getDatabasesPath();
-    final path = join(dbPath, 'canton_fair_crm.db');
+    final path = join(dbPath, name);
     return openDatabase(
       path,
-      version: 21,
+      version: 22,
       onCreate: (db, version) async {
         await db.execute('''
         CREATE TABLE trips(
@@ -31,7 +39,8 @@ class TradeDatabase {
           start_date TEXT,
           end_date TEXT,
           city TEXT NOT NULL DEFAULT '',
-          notes TEXT NOT NULL DEFAULT ''
+          notes TEXT NOT NULL DEFAULT '',
+          assignee_email TEXT NOT NULL DEFAULT ''
         );
         ''');
         await db.execute('''
@@ -166,6 +175,7 @@ class TradeDatabase {
         await _createCloudLinksTable(db);
         await _createCloudSyncConflictsTable(db);
         await _createSourcingBriefsTable(db);
+        await _createSafetyTables(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -275,8 +285,111 @@ class TradeDatabase {
         if (oldVersion < 21) {
           await _createSourcingBriefsTable(db);
         }
+        if (oldVersion < 22) {
+          final columns = await db.rawQuery('PRAGMA table_info(trips)');
+          if (!columns.any((column) => column['name'] == 'assignee_email')) {
+            await db.execute("ALTER TABLE trips ADD COLUMN assignee_email TEXT NOT NULL DEFAULT ''");
+          }
+          await _createSafetyTables(db);
+        }
       },
     );
+  }
+
+
+  static const syncTables = <String, String>{
+    'trip': 'trips', 'sourcing_brief': 'sourcing_briefs',
+    'supplier': 'exhibitors', 'contact': 'contacts', 'product': 'products',
+    'meeting': 'meetings', 'quote': 'quotes', 'sample': 'samples',
+    'attachment': 'attachments', 'activity': 'audit_logs',
+  };
+
+  static const backupTables = [
+    'trips', 'exhibitors', 'contacts', 'products', 'meetings', 'quotes',
+    'samples', 'attachments', 'saved_supplier_filters', 'sourcing_briefs',
+    'trip_closeouts', 'audit_logs',
+  ];
+
+  Future<void> _createSafetyTables(DatabaseExecutor db) async {
+    await _ensureTripCloseoutTable(db);
+    await db.execute('''CREATE TABLE IF NOT EXISTS sync_deletions(
+      record_type TEXT NOT NULL, local_id INTEGER NOT NULL,
+      record_id TEXT NOT NULL, version INTEGER NOT NULL,
+      PRIMARY KEY(record_type, local_id))''');
+    for (final entry in syncTables.entries) {
+      await db.execute("""CREATE TRIGGER IF NOT EXISTS queue_delete_${entry.value}
+        AFTER DELETE ON ${entry.value} BEGIN
+          INSERT OR IGNORE INTO sync_deletions(record_type, local_id, record_id, version)
+          SELECT record_type, local_id, record_id, version FROM cloud_links
+          WHERE record_type = '${entry.key}' AND local_id = OLD.id;
+        END""");
+    }
+    // Cascades also cover raw SQLite callers, not just convenience methods.
+    await db.execute("""CREATE TRIGGER IF NOT EXISTS cascade_trip AFTER DELETE ON trips BEGIN
+      DELETE FROM exhibitors WHERE trip_id = OLD.id;
+      DELETE FROM sourcing_briefs WHERE trip_id = OLD.id;
+      DELETE FROM trip_closeouts WHERE trip_id = OLD.id;
+    END""");
+    await db.execute("""CREATE TRIGGER IF NOT EXISTS cascade_supplier AFTER DELETE ON exhibitors BEGIN
+      DELETE FROM products WHERE exhibitor_id = OLD.id;
+      DELETE FROM contacts WHERE exhibitor_id = OLD.id;
+      DELETE FROM meetings WHERE exhibitor_id = OLD.id;
+      DELETE FROM samples WHERE exhibitor_id = OLD.id;
+      DELETE FROM attachments WHERE owner_type = 'exhibitor' AND owner_id = OLD.id;
+    END""");
+    await db.execute("""CREATE TRIGGER IF NOT EXISTS cascade_product AFTER DELETE ON products BEGIN
+      DELETE FROM quotes WHERE product_id = OLD.id;
+      DELETE FROM samples WHERE product_id = OLD.id;
+      UPDATE meetings SET product_id = NULL WHERE product_id = OLD.id;
+      DELETE FROM attachments WHERE owner_type = 'product' AND owner_id = OLD.id;
+    END""");
+    await db.execute("""CREATE TRIGGER IF NOT EXISTS cascade_contact AFTER DELETE ON contacts BEGIN
+      DELETE FROM attachments WHERE owner_type = 'contact' AND owner_id = OLD.id;
+    END""");
+  }
+
+  Future<Map<String, List<Map<String, dynamic>>>> backupSnapshot() async {
+    final db = await database;
+    return db.transaction((txn) async {
+      final result = <String, List<Map<String, dynamic>>>{};
+      for (final table in backupTables) {
+        result[table] = (await txn.query(table))
+            .map((row) => Map<String, dynamic>.from(row)).toList();
+      }
+      return result;
+    });
+  }
+
+  Future<List<String>> purchaseBlockers(int productId) async {
+    final db = await database;
+    final rows = await db.query('products', where: 'id = ?', whereArgs: [productId]);
+    if (rows.isEmpty) return ['Product no longer exists'];
+    final product = rows.first;
+    final suppliers = await db.query('exhibitors', where: 'id = ?',
+        whereArgs: [product['exhibitor_id']]);
+    final verification = ApprovalPolicy.jsonObject(suppliers.isEmpty
+        ? null : suppliers.first['verification_json']);
+    final samples = await db.query('samples', where: 'product_id = ? AND status = ?',
+        whereArgs: [productId, 'Approved']);
+    final quotes = await db.query('quotes', where: 'product_id = ? AND is_sample_quote = 0',
+        whereArgs: [productId], orderBy: 'created_at DESC, id DESC', limit: 1);
+    final quote = quotes.isEmpty ? null : quotes.first;
+    final expiry = DateTime.tryParse(quote?['valid_until']?.toString() ?? '');
+    return [
+      if (samples.isEmpty) 'Product sample not approved',
+      if (quote == null || quote['approval_status'] != 'Approved' ||
+          (expiry != null && expiry.isBefore(DateTime.now())))
+        'Latest commercial quote is not actively approved',
+      if (product['moq'] is! num || (product['moq'] as num) <= 0) 'Valid MOQ missing',
+      if ((product['lead_time']?.toString() ?? '').trim().isEmpty) 'Lead time missing',
+      if ((product['payment_terms']?.toString() ?? '').trim().isEmpty) 'Payment terms missing',
+      if (verification['status'] != 'Approved') 'Supplier verification not approved',
+      if (verification['payment_risk'] == true ||
+          verification['payment_risk'] == 1 ||
+          (verification['flags'] is Map &&
+           (verification['flags'] as Map)['payment_risk'] == true))
+        'Payment risk flagged',
+    ];
   }
 
   Future<void> _createSourcingBriefsTable(DatabaseExecutor db) async {
@@ -397,7 +510,22 @@ class TradeDatabase {
 
   Future<int> update(String table, int id, Map<String, Object?> values) async {
     final db = await database;
-    return db.update(table, values, where: 'id = ?', whereArgs: [id]);
+    final next = Map<String, Object?>.from(values);
+    if (table == 'quotes') {
+      final rows = await db.query(table, where: 'id = ?', whereArgs: [id]);
+      if (rows.isEmpty) throw StateError('Quote no longer exists.');
+      await ApprovalPolicy.checkQuote(rows.first, next);
+    }
+    if (table == 'products' && next.containsKey('purchase_readiness_json')) {
+      final plan = ApprovalPolicy.jsonObject(next['purchase_readiness_json']);
+      if (plan['status'] == 'Ready to order' || plan['status'] == 'Approved for order') {
+        await ApprovalPolicy.requireWriter();
+        if (plan['status'] == 'Approved for order') await ApprovalPolicy.requireAdmin();
+        final blockers = await purchaseBlockers(id);
+        if (blockers.isNotEmpty) throw StateError(blockers.join('; '));
+      }
+    }
+    return db.update(table, next, where: 'id = ?', whereArgs: [id]);
   }
 
   Future<int> delete(String table, int id) async {
@@ -789,6 +917,8 @@ class TradeDatabase {
           where: 'id = ?', whereArgs: [sourceExhibitorId], limit: 1);
       if (target.isEmpty || source.isEmpty) return;
 
+      await txn.update('samples', {'exhibitor_id': targetExhibitorId},
+          where: 'exhibitor_id = ?', whereArgs: [sourceExhibitorId]);
       await txn.update(
         'contacts',
         {'exhibitor_id': targetExhibitorId},
@@ -837,6 +967,10 @@ class TradeDatabase {
           targetProductId = await txn.insert('products', copied);
         }
 
+        await txn.update('samples', {'product_id': targetProductId},
+            where: 'product_id = ?', whereArgs: [sourceProductId]);
+        await txn.update('meetings', {'product_id': targetProductId},
+            where: 'product_id = ?', whereArgs: [sourceProductId]);
         await txn.update(
           'quotes',
           {'product_id': targetProductId},
@@ -1039,40 +1173,25 @@ class TradeDatabase {
   Future<int> replaceWithBackup(
       Map<String, List<Map<String, dynamic>>> tables) async {
     final db = await database;
-    const deleteOrder = [
-      'attachments',
-      'quotes',
-      'meetings',
-      'contacts',
-      'products',
-      'exhibitors',
-      'trips',
-      'saved_supplier_filters',
-      'sourcing_briefs',
-    ];
-    const insertOrder = [
-      'trips',
-      'exhibitors',
-      'contacts',
-      'products',
-      'meetings',
-      'quotes',
-      'attachments',
-      'saved_supplier_filters',
-      'sourcing_briefs',
-    ];
-
+    if (await TeamWorkspaceService().load() != null) {
+      throw StateError('Restore into Personal workspace to avoid replacing shared team data.');
+    }
     var restored = 0;
     await db.transaction((txn) async {
-      for (final table in deleteOrder) {
+      // Old cloud IDs must never be reused for unrelated restored local IDs.
+      await txn.delete('cloud_links');
+      await txn.delete('cloud_sync_conflicts');
+      await txn.delete('sync_deletions');
+      for (final table in backupTables.reversed) {
         await txn.delete(table);
       }
-      for (final table in insertOrder) {
-        for (final row in tables[table] ?? const []) {
+      for (final table in backupTables) {
+        for (final row in tables[table] ?? const <Map<String, dynamic>>[]) {
           await txn.insert(table, Map<String, Object?>.from(row));
           restored++;
         }
       }
+      await txn.delete('sync_deletions');
     });
     return restored;
   }

@@ -46,7 +46,8 @@ class CloudApiService {
   Future<CloudTeam> createTeam(String name) async {
     final record =
         await _client.rpc('create_team', params: {'team_name': name});
-    return CloudTeam.fromJson(Map<String, dynamic>.from(record as Map));
+    final row = record is List ? record.single : record;
+    return CloudTeam.fromJson(Map<String, dynamic>.from(row as Map));
   }
 
   Future<void> inviteMember(CloudTeam team, String email, String role) async {

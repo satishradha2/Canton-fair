@@ -6,55 +6,28 @@ class StatCard extends StatelessWidget {
   final int value;
   final IconData icon;
   final Color color;
-
-  const StatCard({
-    super.key,
-    required this.label,
-    required this.value,
-    required this.icon,
-    required this.color,
-  });
+  const StatCard({super.key, required this.label, required this.value, required this.icon, required this.color});
 
   @override
   Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: AppColors.line),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(icon, color: color, size: 20),
-            ),
-            const SizedBox(height: 10),
-            Text(
-              value.toString(),
-              style: const TextStyle(
-                  fontSize: 26,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.ink),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              label,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                  color: AppColors.muted,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600),
-            ),
-          ],
-        ),
-      );
+    padding: const EdgeInsets.all(16),
+    decoration: BoxDecoration(
+      color: Colors.white, borderRadius: BorderRadius.circular(14),
+      border: Border.all(color: AppColors.line)),
+    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Row(children: [
+        Container(width: 30, height: 30,
+          decoration: BoxDecoration(color: color.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(8)),
+          child: Icon(icon, color: color, size: 18)),
+        const Spacer(),
+        Container(width: 16, height: 3, decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(2))),
+      ]),
+      const Spacer(),
+      Text('$value', maxLines: 1, overflow: TextOverflow.ellipsis,
+        style: Theme.of(context).textTheme.headlineMedium),
+      const SizedBox(height: 4),
+      Text(label, maxLines: 2, overflow: TextOverflow.ellipsis,
+        style: Theme.of(context).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600)),
+    ]),
+  );
 }

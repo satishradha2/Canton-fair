@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import '../data/product_score.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:csv/csv.dart';
@@ -332,17 +333,7 @@ class _ExportScreenState extends State<ExportScreen> {
     await SharePlus.instance.share(ShareParams(files: [XFile(file.path)]));
   }
 
-  double _shortlistScore(Product p) {
-    final ratingScore = (p.rating / 5.0) * 40.0;
-    final priceScore =
-        p.quotedPrice == null ? 0.0 : 1000.0 / (1.0 + p.quotedPrice!.abs());
-    final moqScore = p.moq == null ? 0.0 : 30.0 / (1.0 + p.moq!);
-    final leadMatch = RegExp(r'\d+').firstMatch(p.leadTime);
-    final lead =
-        leadMatch == null ? null : double.tryParse(leadMatch.group(0)!);
-    final leadScore = lead == null ? 0.0 : 15.0 / (1.0 + lead);
-    return ratingScore + priceScore + moqScore + leadScore;
-  }
+  double _shortlistScore(Product p) => ProductScore.fromRating(p.rating);
 
   Future<void> _exportFollowUps() async {
     final rows = <List<dynamic>>[

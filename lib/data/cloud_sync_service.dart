@@ -1,6 +1,9 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
+import 'package:crypto/crypto.dart';
+import 'package:sqflite/sqflite.dart';
+import 'approval_policy.dart';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -56,985 +59,414 @@ class CloudConflict {
 class CloudSyncService {
   final _db = TradeDatabase.instance;
   final _workspace = TeamWorkspaceService();
-
   SupabaseClient get _client => Supabase.instance.client;
+  static const _bucket = 'team-attachments';
+  static const _deleted = <String, Object?>{'_deleted': true};
+  static const _relations = <String, Map<String, String>>{
+    'sourcing_brief': {'trip_id': 'trip'},
+    'supplier': {'trip_id': 'trip'},
+    'contact': {'exhibitor_id': 'supplier'},
+    'product': {'exhibitor_id': 'supplier'},
+    'meeting': {'exhibitor_id': 'supplier', 'product_id': 'product'},
+    'quote': {'product_id': 'product'},
+    'sample': {'exhibitor_id': 'supplier', 'product_id': 'product'},
+  };
 
-  Future<SyncResult> syncTrips() async {
-    final team = await _workspace.load();
-    if (team == null) throw StateError('Choose a cloud team before syncing.');
-    var uploaded = 0;
-    var conflicts = 0;
-    for (final trip in await _db.queryAll('trips')) {
-      final localId = trip['id'] as int;
-      final link = await _db.getCloudLink('trip', localId);
-      final recordId = link?['record_id'] as String? ?? _newRecordId();
-      final version = link?['version'] as int?;
-      final payload = Map<String, dynamic>.from(trip)..remove('id');
-      if (await _isUnchanged('trip', localId, recordId, link, payload)) {
-        continue;
-      }
-      try {
-        final response = await _client.rpc('upsert_team_record', params: {
-          'target_team': team.id,
-          'target_record_type': 'trip',
-          'target_record_id': recordId,
-          'target_payload': payload,
-          'expected_version': version == null || version == 0 ? null : version,
-        });
-        final row = (response as List).first as Map<String, dynamic>;
-        await _db.saveCloudLink(
-            'trip', localId, recordId, row['version'] as int,
-            contentHash: _payloadHash(payload));
-        uploaded++;
-      } on PostgrestException catch (error) {
-        if (error.message.contains('sync_conflict')) {
-          await _captureConflict(team.id, 'trip', localId, recordId, payload);
-          conflicts++;
-        } else {
-          rethrow;
-        }
-      }
-    }
+  Future<SyncResult> syncTrips() => syncTeamWorkspace();
 
-    var downloaded = 0;
-    final records = await _client
-        .from('team_records')
-        .select('record_id, payload, version')
-        .eq('team_id', team.id)
-        .eq('record_type', 'trip');
-    for (final record in records) {
-      final recordId = record['record_id'] as String;
-      final version = record['version'] as int;
-      final link = await _db.getCloudLinkByRecordId('trip', recordId);
-      if (link != null && (link['version'] as int) >= version) {
-        continue;
-      }
-      final payload = Map<String, Object?>.from(record['payload'] as Map);
-      final contentHash = _payloadHash(payload);
-      final localId =
-          link?['local_id'] as int? ?? await _db.insert('trips', payload);
-      if (link != null) {
-        await _db.update('trips', localId, payload);
-      }
-      await _db.saveCloudLink('trip', localId, recordId, version,
-          contentHash: contentHash);
-      downloaded++;
-    }
-    await _db.logAudit('Cloud trip sync',
-        '$uploaded uploaded, $downloaded downloaded, $conflicts conflicts.');
-    return SyncResult(uploaded, downloaded, conflicts);
-  }
-
-  Future<SyncResult> syncTeamWorkspace() async {
+  Future<SyncResult> syncTeamWorkspace() => TeamWorkspaceService.exclusive(() async {
     SyncStatusService.setSyncing(true);
     try {
-      final tripResult = await syncTrips();
-      final team = await _workspace.load();
-      if (team == null) throw StateError('Choose a cloud team before syncing.');
-      var uploaded = tripResult.uploaded;
-      var downloaded = tripResult.downloaded;
-      var conflicts = tripResult.conflicts;
-
-      for (final brief in await _db.queryAll('sourcing_briefs')) {
-        final localId = brief['id'] as int;
-        final link = await _db.getCloudLink('sourcing_brief', localId);
-        final recordId = link?['record_id'] as String? ?? _newRecordId();
-        final version = link?['version'] as int?;
-        final payload = Map<String, dynamic>.from(brief)..remove('id');
-        if (await _isUnchanged(
-            'sourcing_brief', localId, recordId, link, payload)) {
-          continue;
-        }
-        try {
-          final response = await _client.rpc('upsert_team_record', params: {
-            'target_team': team.id,
-            'target_record_type': 'sourcing_brief',
-            'target_record_id': recordId,
-            'target_payload': payload,
-            'expected_version':
-                version == null || version == 0 ? null : version,
-          });
-          final row = (response as List).first as Map<String, dynamic>;
-          await _db.saveCloudLink(
-              'sourcing_brief', localId, recordId, row['version'] as int,
-              contentHash: _payloadHash(payload));
-          uploaded++;
-        } on PostgrestException catch (error) {
-          if (error.message.contains('sync_conflict')) {
-            await _captureConflict(
-                team.id, 'sourcing_brief', localId, recordId, payload);
-            conflicts++;
-          } else {
-            rethrow;
-          }
-        }
-      }
-
-      final briefRecords = await _client
-          .from('team_records')
-          .select('record_id, payload, version')
-          .eq('team_id', team.id)
-          .eq('record_type', 'sourcing_brief');
-      for (final record in briefRecords) {
-        final recordId = record['record_id'] as String;
-        final version = record['version'] as int;
-        final link =
-            await _db.getCloudLinkByRecordId('sourcing_brief', recordId);
-        if (link != null && (link['version'] as int) >= version) continue;
-        final payload = Map<String, Object?>.from(record['payload'] as Map);
-        final localId = link?['local_id'] as int? ??
-            await _db.insert('sourcing_briefs', payload);
-        if (link != null) await _db.update('sourcing_briefs', localId, payload);
-        await _db.saveCloudLink('sourcing_brief', localId, recordId, version,
-            contentHash: _payloadHash(payload));
-        downloaded++;
-      }
-
-      for (final supplier in await _db.queryAll('exhibitors')) {
-        final localId = supplier['id'] as int;
-        final tripLink =
-            await _db.getCloudLink('trip', supplier['trip_id'] as int);
-        if (tripLink == null) continue;
-        final link = await _db.getCloudLink('supplier', localId);
-        final recordId = link?['record_id'] as String? ?? _newRecordId();
-        final version = link?['version'] as int?;
-        final payload = Map<String, dynamic>.from(supplier)
-          ..remove('id')
-          ..remove('trip_id')
-          ..['trip_record_id'] = tripLink['record_id'];
-        if (await _isUnchanged('supplier', localId, recordId, link, payload)) {
-          continue;
-        }
-        try {
-          final response = await _client.rpc('upsert_team_record', params: {
-            'target_team': team.id,
-            'target_record_type': 'supplier',
-            'target_record_id': recordId,
-            'target_payload': payload,
-            'expected_version':
-                version == null || version == 0 ? null : version,
-          });
-          final row = (response as List).first as Map<String, dynamic>;
-          await _db.saveCloudLink(
-              'supplier', localId, recordId, row['version'] as int,
-              contentHash: _payloadHash(payload));
-          uploaded++;
-        } on PostgrestException catch (error) {
-          if (error.message.contains('sync_conflict')) {
-            await _captureConflict(
-                team.id, 'supplier', localId, recordId, payload);
-            conflicts++;
-          } else {
-            rethrow;
-          }
-        }
-      }
-
-      final records = await _client
-          .from('team_records')
-          .select('record_id, payload, version')
-          .eq('team_id', team.id)
-          .eq('record_type', 'supplier');
-      for (final record in records) {
-        final recordId = record['record_id'] as String;
-        final version = record['version'] as int;
-        final link = await _db.getCloudLinkByRecordId('supplier', recordId);
-        if (link != null && (link['version'] as int) >= version) continue;
-        final payload = Map<String, Object?>.from(record['payload'] as Map);
-        final contentHash = _payloadHash(payload);
-        final tripRecordId = payload.remove('trip_record_id') as String?;
-        if (tripRecordId == null) continue;
-        final tripLink = await _db.getCloudLinkByRecordId('trip', tripRecordId);
-        if (tripLink == null) continue;
-        payload['trip_id'] = tripLink['local_id'] as int;
-        final localId = link?['local_id'] as int? ??
-            await _db.insert('exhibitors', payload);
-        if (link != null) await _db.update('exhibitors', localId, payload);
-        await _db.saveCloudLink('supplier', localId, recordId, version,
-            contentHash: contentHash);
-        downloaded++;
-      }
-
-      for (final contact in await _db.queryAll('contacts')) {
-        final localId = contact['id'] as int;
-        final supplierLink =
-            await _db.getCloudLink('supplier', contact['exhibitor_id'] as int);
-        if (supplierLink == null) continue;
-        final link = await _db.getCloudLink('contact', localId);
-        final recordId = link?['record_id'] as String? ?? _newRecordId();
-        final version = link?['version'] as int?;
-        final payload = Map<String, dynamic>.from(contact)
-          ..remove('id')
-          ..remove('exhibitor_id')
-          ..['supplier_record_id'] = supplierLink['record_id'];
-        if (await _isUnchanged('contact', localId, recordId, link, payload)) {
-          continue;
-        }
-        try {
-          final response = await _client.rpc('upsert_team_record', params: {
-            'target_team': team.id,
-            'target_record_type': 'contact',
-            'target_record_id': recordId,
-            'target_payload': payload,
-            'expected_version':
-                version == null || version == 0 ? null : version,
-          });
-          final row = (response as List).first as Map<String, dynamic>;
-          await _db.saveCloudLink(
-              'contact', localId, recordId, row['version'] as int,
-              contentHash: _payloadHash(payload));
-          uploaded++;
-        } on PostgrestException catch (error) {
-          if (error.message.contains('sync_conflict')) {
-            await _captureConflict(
-                team.id, 'contact', localId, recordId, payload);
-            conflicts++;
-          } else {
-            rethrow;
-          }
-        }
-      }
-
-      final contactRecords = await _client
-          .from('team_records')
-          .select('record_id, payload, version')
-          .eq('team_id', team.id)
-          .eq('record_type', 'contact');
-      for (final record in contactRecords) {
-        final recordId = record['record_id'] as String;
-        final version = record['version'] as int;
-        final link = await _db.getCloudLinkByRecordId('contact', recordId);
-        if (link != null && (link['version'] as int) >= version) continue;
-        final payload = Map<String, Object?>.from(record['payload'] as Map);
-        final contentHash = _payloadHash(payload);
-        final supplierRecordId =
-            payload.remove('supplier_record_id') as String?;
-        if (supplierRecordId == null) continue;
-        final supplierLink =
-            await _db.getCloudLinkByRecordId('supplier', supplierRecordId);
-        if (supplierLink == null) continue;
-        payload['exhibitor_id'] = supplierLink['local_id'] as int;
-        final localId =
-            link?['local_id'] as int? ?? await _db.insert('contacts', payload);
-        if (link != null) await _db.update('contacts', localId, payload);
-        await _db.saveCloudLink('contact', localId, recordId, version,
-            contentHash: contentHash);
-        downloaded++;
-      }
-
-      for (final product in await _db.queryAll('products')) {
-        final localId = product['id'] as int;
-        final supplierLink =
-            await _db.getCloudLink('supplier', product['exhibitor_id'] as int);
-        if (supplierLink == null) continue;
-        final link = await _db.getCloudLink('product', localId);
-        final recordId = link?['record_id'] as String? ?? _newRecordId();
-        final version = link?['version'] as int?;
-        final payload = Map<String, dynamic>.from(product)
-          ..remove('id')
-          ..remove('exhibitor_id')
-          ..['supplier_record_id'] = supplierLink['record_id'];
-        if (await _isUnchanged('product', localId, recordId, link, payload)) {
-          continue;
-        }
-        try {
-          final response = await _client.rpc('upsert_team_record', params: {
-            'target_team': team.id,
-            'target_record_type': 'product',
-            'target_record_id': recordId,
-            'target_payload': payload,
-            'expected_version':
-                version == null || version == 0 ? null : version,
-          });
-          final row = (response as List).first as Map<String, dynamic>;
-          await _db.saveCloudLink(
-              'product', localId, recordId, row['version'] as int,
-              contentHash: _payloadHash(payload));
-          uploaded++;
-        } on PostgrestException catch (error) {
-          if (error.message.contains('sync_conflict')) {
-            await _captureConflict(
-                team.id, 'product', localId, recordId, payload);
-            conflicts++;
-          } else {
-            rethrow;
-          }
-        }
-      }
-
-      final productRecords = await _client
-          .from('team_records')
-          .select('record_id, payload, version')
-          .eq('team_id', team.id)
-          .eq('record_type', 'product');
-      for (final record in productRecords) {
-        final recordId = record['record_id'] as String;
-        final version = record['version'] as int;
-        final link = await _db.getCloudLinkByRecordId('product', recordId);
-        if (link != null && (link['version'] as int) >= version) continue;
-        final payload = Map<String, Object?>.from(record['payload'] as Map);
-        final contentHash = _payloadHash(payload);
-        final supplierRecordId =
-            payload.remove('supplier_record_id') as String?;
-        if (supplierRecordId == null) continue;
-        final supplierLink =
-            await _db.getCloudLinkByRecordId('supplier', supplierRecordId);
-        if (supplierLink == null) continue;
-        payload['exhibitor_id'] = supplierLink['local_id'] as int;
-        final localId =
-            link?['local_id'] as int? ?? await _db.insert('products', payload);
-        if (link != null) await _db.update('products', localId, payload);
-        await _db.saveCloudLink('product', localId, recordId, version,
-            contentHash: contentHash);
-        downloaded++;
-      }
-
-      for (final meeting in await _db.queryAll('meetings')) {
-        final localId = meeting['id'] as int;
-        final supplierLink =
-            await _db.getCloudLink('supplier', meeting['exhibitor_id'] as int);
-        if (supplierLink == null) continue;
-        final productId = meeting['product_id'] as int?;
-        final productLink = productId == null
-            ? null
-            : await _db.getCloudLink('product', productId);
-        if (productId != null && productLink == null) continue;
-        final link = await _db.getCloudLink('meeting', localId);
-        final recordId = link?['record_id'] as String? ?? _newRecordId();
-        final version = link?['version'] as int?;
-        final payload = Map<String, dynamic>.from(meeting)
-          ..remove('id')
-          ..remove('exhibitor_id')
-          ..remove('product_id')
-          ..['supplier_record_id'] = supplierLink['record_id']
-          ..['product_record_id'] = productLink?['record_id'];
-        if (await _isUnchanged('meeting', localId, recordId, link, payload)) {
-          continue;
-        }
-        try {
-          final response = await _client.rpc('upsert_team_record', params: {
-            'target_team': team.id,
-            'target_record_type': 'meeting',
-            'target_record_id': recordId,
-            'target_payload': payload,
-            'expected_version':
-                version == null || version == 0 ? null : version,
-          });
-          final row = (response as List).first as Map<String, dynamic>;
-          await _db.saveCloudLink(
-              'meeting', localId, recordId, row['version'] as int,
-              contentHash: _payloadHash(payload));
-          uploaded++;
-        } on PostgrestException catch (error) {
-          if (error.message.contains('sync_conflict')) {
-            await _captureConflict(
-                team.id, 'meeting', localId, recordId, payload);
-            conflicts++;
-          } else {
-            rethrow;
-          }
-        }
-      }
-
-      final meetingRecords = await _client
-          .from('team_records')
-          .select('record_id, payload, version')
-          .eq('team_id', team.id)
-          .eq('record_type', 'meeting');
-      for (final record in meetingRecords) {
-        final recordId = record['record_id'] as String;
-        final version = record['version'] as int;
-        final link = await _db.getCloudLinkByRecordId('meeting', recordId);
-        if (link != null && (link['version'] as int) >= version) continue;
-        final payload = Map<String, Object?>.from(record['payload'] as Map);
-        final contentHash = _payloadHash(payload);
-        final supplierRecordId =
-            payload.remove('supplier_record_id') as String?;
-        final productRecordId = payload.remove('product_record_id') as String?;
-        if (supplierRecordId == null) continue;
-        final supplierLink =
-            await _db.getCloudLinkByRecordId('supplier', supplierRecordId);
-        if (supplierLink == null) continue;
-        int? productLocalId;
-        if (productRecordId != null) {
-          final productLink =
-              await _db.getCloudLinkByRecordId('product', productRecordId);
-          if (productLink == null) continue;
-          productLocalId = productLink['local_id'] as int;
-        }
-        payload['exhibitor_id'] = supplierLink['local_id'] as int;
-        payload['product_id'] = productLocalId;
-        final localId =
-            link?['local_id'] as int? ?? await _db.insert('meetings', payload);
-        if (link != null) await _db.update('meetings', localId, payload);
-        await _db.saveCloudLink('meeting', localId, recordId, version,
-            contentHash: contentHash);
-        downloaded++;
-      }
-
-      for (final quote in await _db.queryAll('quotes')) {
-        final localId = quote['id'] as int;
-        final productLink =
-            await _db.getCloudLink('product', quote['product_id'] as int);
-        if (productLink == null) continue;
-        final link = await _db.getCloudLink('quote', localId);
-        final recordId = link?['record_id'] as String? ?? _newRecordId();
-        final version = link?['version'] as int?;
-        final payload = Map<String, dynamic>.from(quote)
-          ..remove('id')
-          ..remove('product_id')
-          ..['product_record_id'] = productLink['record_id'];
-        if (await _isUnchanged('quote', localId, recordId, link, payload)) {
-          continue;
-        }
-        try {
-          final response = await _client.rpc('upsert_team_record', params: {
-            'target_team': team.id,
-            'target_record_type': 'quote',
-            'target_record_id': recordId,
-            'target_payload': payload,
-            'expected_version':
-                version == null || version == 0 ? null : version,
-          });
-          final row = (response as List).first as Map<String, dynamic>;
-          await _db.saveCloudLink(
-              'quote', localId, recordId, row['version'] as int,
-              contentHash: _payloadHash(payload));
-          uploaded++;
-        } on PostgrestException catch (error) {
-          if (error.message.contains('sync_conflict')) {
-            await _captureConflict(
-                team.id, 'quote', localId, recordId, payload);
-            conflicts++;
-          } else {
-            rethrow;
-          }
-        }
-      }
-
-      final quoteRecords = await _client
-          .from('team_records')
-          .select('record_id, payload, version')
-          .eq('team_id', team.id)
-          .eq('record_type', 'quote');
-      for (final record in quoteRecords) {
-        final recordId = record['record_id'] as String;
-        final version = record['version'] as int;
-        final link = await _db.getCloudLinkByRecordId('quote', recordId);
-        if (link != null && (link['version'] as int) >= version) continue;
-        final payload = Map<String, Object?>.from(record['payload'] as Map);
-        final contentHash = _payloadHash(payload);
-        final productRecordId = payload.remove('product_record_id') as String?;
-        if (productRecordId == null) continue;
-        final productLink =
-            await _db.getCloudLinkByRecordId('product', productRecordId);
-        if (productLink == null) continue;
-        payload['product_id'] = productLink['local_id'] as int;
-        final localId =
-            link?['local_id'] as int? ?? await _db.insert('quotes', payload);
-        if (link != null) await _db.update('quotes', localId, payload);
-        await _db.saveCloudLink('quote', localId, recordId, version,
-            contentHash: contentHash);
-        downloaded++;
-      }
-
-      for (final sample in await _db.queryAll('samples')) {
-        final localId = sample['id'] as int;
-        final supplierLink =
-            await _db.getCloudLink('supplier', sample['exhibitor_id'] as int);
-        if (supplierLink == null) continue;
-        final productId = sample['product_id'] as int?;
-        final productLink = productId == null
-            ? null
-            : await _db.getCloudLink('product', productId);
-        if (productId != null && productLink == null) continue;
-        final link = await _db.getCloudLink('sample', localId);
-        final recordId = link?['record_id'] as String? ?? _newRecordId();
-        final version = link?['version'] as int?;
-        final payload = Map<String, dynamic>.from(sample)
-          ..remove('id')
-          ..remove('exhibitor_id')
-          ..remove('product_id')
-          ..['supplier_record_id'] = supplierLink['record_id']
-          ..['product_record_id'] = productLink?['record_id'];
-        if (await _isUnchanged('sample', localId, recordId, link, payload)) {
-          continue;
-        }
-        try {
-          final response = await _client.rpc('upsert_team_record', params: {
-            'target_team': team.id,
-            'target_record_type': 'sample',
-            'target_record_id': recordId,
-            'target_payload': payload,
-            'expected_version':
-                version == null || version == 0 ? null : version,
-          });
-          final row = (response as List).first as Map<String, dynamic>;
-          await _db.saveCloudLink(
-              'sample', localId, recordId, row['version'] as int,
-              contentHash: _payloadHash(payload));
-          uploaded++;
-        } on PostgrestException catch (error) {
-          if (error.message.contains('sync_conflict')) {
-            await _captureConflict(
-                team.id, 'sample', localId, recordId, payload);
-            conflicts++;
-          } else {
-            rethrow;
-          }
-        }
-      }
-
-      final sampleRecords = await _client
-          .from('team_records')
-          .select('record_id, payload, version')
-          .eq('team_id', team.id)
-          .eq('record_type', 'sample');
-      for (final record in sampleRecords) {
-        final recordId = record['record_id'] as String;
-        final version = record['version'] as int;
-        final link = await _db.getCloudLinkByRecordId('sample', recordId);
-        if (link != null && (link['version'] as int) >= version) continue;
-        final payload = Map<String, Object?>.from(record['payload'] as Map);
-        final contentHash = _payloadHash(payload);
-        final supplierRecordId =
-            payload.remove('supplier_record_id') as String?;
-        final productRecordId = payload.remove('product_record_id') as String?;
-        if (supplierRecordId == null) continue;
-        final supplierLink =
-            await _db.getCloudLinkByRecordId('supplier', supplierRecordId);
-        if (supplierLink == null) continue;
-        int? productLocalId;
-        if (productRecordId != null) {
-          final productLink =
-              await _db.getCloudLinkByRecordId('product', productRecordId);
-          if (productLink == null) continue;
-          productLocalId = productLink['local_id'] as int;
-        }
-        payload['exhibitor_id'] = supplierLink['local_id'] as int;
-        payload['product_id'] = productLocalId;
-        final localId =
-            link?['local_id'] as int? ?? await _db.insert('samples', payload);
-        if (link != null) await _db.update('samples', localId, payload);
-        await _db.saveCloudLink('sample', localId, recordId, version,
-            contentHash: contentHash);
-        downloaded++;
-      }
-
-      for (final attachment in await _db.queryAll('attachments')) {
-        final localId = attachment['id'] as int;
-        final ownerRecordType =
-            _ownerRecordType(attachment['owner_type'] as String);
-        if (ownerRecordType == null) continue;
-        final ownerLink = await _db.getCloudLink(
-            ownerRecordType, attachment['owner_id'] as int);
-        if (ownerLink == null) continue;
-        final localPath = attachment['path'] as String;
-        final file = File(localPath);
-        if (!await file.exists()) continue;
-        final link = await _db.getCloudLink('attachment', localId);
-        final recordId = link?['record_id'] as String? ?? _newRecordId();
-        final version = link?['version'] as int?;
-        final storagePath = _storagePath(team.id, recordId, localPath);
-        final payload = Map<String, dynamic>.from(attachment)
-          ..remove('id')
-          ..remove('owner_id')
-          ..remove('path')
-          ..['owner_record_type'] = ownerRecordType
-          ..['owner_record_id'] = ownerLink['record_id']
-          ..['storage_path'] = storagePath;
-        if (await _isUnchanged(
-            'attachment', localId, recordId, link, payload)) {
-          continue;
-        }
-        try {
-          await _client.storage.from(_attachmentBucket).upload(
-                storagePath,
-                file,
-                fileOptions: const FileOptions(upsert: true),
-              );
-          final response = await _client.rpc('upsert_team_record', params: {
-            'target_team': team.id,
-            'target_record_type': 'attachment',
-            'target_record_id': recordId,
-            'target_payload': payload,
-            'expected_version':
-                version == null || version == 0 ? null : version,
-          });
-          final row = (response as List).first as Map<String, dynamic>;
-          await _db.saveCloudLink(
-              'attachment', localId, recordId, row['version'] as int,
-              contentHash: _payloadHash(payload));
-          uploaded++;
-        } on PostgrestException catch (error) {
-          if (error.message.contains('sync_conflict')) {
-            await _captureConflict(
-                team.id, 'attachment', localId, recordId, payload);
-            conflicts++;
-          } else {
-            rethrow;
-          }
-        }
-      }
-
-      final attachmentRecords = await _client
-          .from('team_records')
-          .select('record_id, payload, version')
-          .eq('team_id', team.id)
-          .eq('record_type', 'attachment');
-      for (final record in attachmentRecords) {
-        final recordId = record['record_id'] as String;
-        final version = record['version'] as int;
-        final link = await _db.getCloudLinkByRecordId('attachment', recordId);
-        if (link != null && (link['version'] as int) >= version) continue;
-        final payload = Map<String, Object?>.from(record['payload'] as Map);
-        final contentHash = _payloadHash(payload);
-        final ownerRecordType = payload.remove('owner_record_type') as String?;
-        final ownerRecordId = payload.remove('owner_record_id') as String?;
-        final storagePath = payload.remove('storage_path') as String?;
-        if (ownerRecordType == null ||
-            ownerRecordId == null ||
-            storagePath == null) {
-          continue;
-        }
-        final ownerLink =
-            await _db.getCloudLinkByRecordId(ownerRecordType, ownerRecordId);
-        if (ownerLink == null) continue;
-        final ownerType = _localOwnerType(ownerRecordType);
-        if (ownerType == null) continue;
-        final localPath = await _downloadAttachment(
-            storagePath, ownerType, ownerLink['local_id'] as int);
-        payload['owner_type'] = ownerType;
-        payload['owner_id'] = ownerLink['local_id'] as int;
-        payload['path'] = localPath;
-        final localId = link?['local_id'] as int? ??
-            await _db.insert('attachments', payload);
-        if (link != null) await _db.update('attachments', localId, payload);
-        await _db.saveCloudLink('attachment', localId, recordId, version,
-            contentHash: contentHash);
-        downloaded++;
-      }
-
-      // Activity records are deliberately append-only. They provide a shared,
-      // field-friendly view of who changed what without altering source data.
-      for (final activity in await _db.queryAll('audit_logs')) {
-        final localId = activity['id'] as int;
-        final link = await _db.getCloudLink('activity', localId);
-        final recordId = link?['record_id'] as String? ?? _newRecordId();
-        final version = link?['version'] as int?;
-        final payload = Map<String, dynamic>.from(activity)..remove('id');
-        if ((payload['actor_email'] as String? ?? '').isEmpty) {
-          payload['actor_email'] =
-              _client.auth.currentUser?.email ?? 'Team member';
-        }
-        if (await _isUnchanged('activity', localId, recordId, link, payload)) {
-          continue;
-        }
-        try {
-          final response = await _client.rpc('upsert_team_record', params: {
-            'target_team': team.id,
-            'target_record_type': 'activity',
-            'target_record_id': recordId,
-            'target_payload': payload,
-            'expected_version':
-                version == null || version == 0 ? null : version,
-          });
-          final row = (response as List).first as Map<String, dynamic>;
-          await _db.update('audit_logs', localId,
-              {'actor_email': payload['actor_email'] as String});
-          await _db.saveCloudLink(
-              'activity', localId, recordId, row['version'] as int,
-              contentHash: _payloadHash(payload));
-          uploaded++;
-        } on PostgrestException catch (error) {
-          if (error.message.contains('sync_conflict')) {
-            await _captureConflict(
-                team.id, 'activity', localId, recordId, payload);
-            conflicts++;
-          } else {
-            rethrow;
-          }
-        }
-      }
-
-      final activityRecords = await _client
-          .from('team_records')
-          .select('record_id, payload, version')
-          .eq('team_id', team.id)
-          .eq('record_type', 'activity');
-      for (final record in activityRecords) {
-        final recordId = record['record_id'] as String;
-        final version = record['version'] as int;
-        final link = await _db.getCloudLinkByRecordId('activity', recordId);
-        if (link != null && (link['version'] as int) >= version) continue;
-        final payload = Map<String, Object?>.from(record['payload'] as Map);
-        final contentHash = _payloadHash(payload);
-        final localId = link?['local_id'] as int? ??
-            await _db.insert('audit_logs', payload);
-        if (link != null) await _db.update('audit_logs', localId, payload);
-        await _db.saveCloudLink('activity', localId, recordId, version,
-            contentHash: contentHash);
-        downloaded++;
-      }
-
-      await _db.logAudit('Cloud workspace sync',
-          '$uploaded uploaded, $downloaded downloaded, $conflicts conflicts.');
-      return SyncResult(uploaded, downloaded, conflicts);
+      final result = await _sync();
+      await SyncStatusService().recordSuccess(uploaded: result.uploaded,
+          downloaded: result.downloaded, conflicts: result.conflicts);
+      return result;
+    } catch (error) {
+      await SyncStatusService().recordFailure(error);
+      rethrow;
     } finally {
       SyncStatusService.setSyncing(false);
     }
+  });
+
+  Future<SyncResult> _sync() async {
+    final team = await _requireTeam();
+    final scope = await _workspace.scopeKey();
+    final db = await _db.database;
+    final role = await ApprovalPolicy.currentRole();
+    var uploaded = 0;
+    var downloaded = 0;
+    final remote = <String, List<Map<String, dynamic>>>{};
+    // Read every page, including tombstones. Capture before writes so a
+    // subsequent concurrent server change cannot masquerade as our baseline.
+    for (final type in TradeDatabase.syncTables.keys) {
+      remote[type] = await _records(team.id, type);
+    }
+    if (role != 'viewer') {
+      // Allocate stable IDs before network writes so retries do not duplicate
+      // records if a request succeeds but its response is lost.
+      for (final entry in TradeDatabase.syncTables.entries) {
+        for (final row in await db.query(entry.value)) {
+          final id = row['id'] as int;
+          if (await _link(db, entry.key, id: id) == null) {
+            await _saveLink(db, entry.key, id, _newRecordId(), 0, '');
+          }
+        }
+      }
+      final deferredProducts = <Map<String, Object?>>[];
+      for (final entry in TradeDatabase.syncTables.entries) {
+        for (final row in await db.query(entry.value)) {
+          await _assertScope(scope);
+          final link = await _link(db, entry.key, id: row['id'] as int);
+          if (link == null || await _hasConflict(db, entry.key, link['record_id'] as String)) continue;
+          final payload = await _toCloud(db, entry.key, row, team.id, link['record_id'] as String);
+          if (_hash(payload) == link['content_hash']) continue;
+          if (entry.key == 'product') {
+            final plan = ApprovalPolicy.jsonObject(payload['purchase_readiness_json']);
+            if (['Ready to order', 'Approved for order'].contains(plan['status'])) {
+              deferredProducts.add(row);
+              if ((link['version'] as int) > 0) continue;
+              payload['purchase_readiness_json'] = jsonEncode({...plan, 'status': 'Needs review'});
+            }
+          }
+          if (await _upload(db, team.id, entry.key, link, payload, scope)) uploaded++;
+        }
+      }
+      // Child deletions precede parent deletions; the server refuses dangling
+      // references, including children added by another device.
+      for (final type in TradeDatabase.syncTables.keys.toList().reversed) {
+        for (final deletion in await db.query('sync_deletions',
+            where: 'record_type = ?', whereArgs: [type])) {
+          if (await _hasConflict(db, type, deletion['record_id'] as String)) continue;
+          final link = await _link(db, type, id: deletion['local_id'] as int);
+          if (link == null) continue;
+          if (await _upload(db, team.id, type, link, _deleted, scope)) uploaded++;
+        }
+      }
+
+      for (final row in deferredProducts) {
+        final link = await _link(db, 'product', id: row['id'] as int);
+        if (link == null || await _hasConflict(db, 'product', link['record_id'] as String)) continue;
+        final payload = await _toCloud(db, 'product', row, team.id, link['record_id'] as String);
+        if (_hash(payload) != link['content_hash'] &&
+            await _upload(db, team.id, 'product', link, payload, scope)) {
+          uploaded++;
+        }
+      }
+    }
+    for (final entry in TradeDatabase.syncTables.entries) {
+      for (final record in remote[entry.key]!) {
+        await _assertScope(scope);
+        final id = record['record_id'] as String;
+        if (await _hasConflict(db, entry.key, id)) continue;
+        final link = await _link(db, entry.key, recordId: id);
+        if (link != null && (link['version'] as int) >= (record['version'] as int)) continue;
+        if (link != null) {
+          final local = await _localPayload(db, entry.key, link, team.id);
+          if (_hash(local) != link['content_hash'] && _hash(local) != _hash(record['payload'])) {
+            await _conflict(db, team.id, entry.key, link, local, record);
+            continue;
+          }
+        }
+        await _apply(db, team.id, entry.key, record);
+        downloaded++;
+      }
+    }
+    final conflicts = await db.query('cloud_sync_conflicts');
+    return SyncResult(uploaded, downloaded, conflicts.length);
   }
 
-  String _newRecordId() {
-    final random = Random.secure();
-    final bytes = List<int>.generate(16, (_) => random.nextInt(256));
-    return bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+  Future<TeamWorkspace> _requireTeam() async {
+    final team = await _workspace.load();
+    if (team == null) throw StateError('Choose a cloud team before syncing. Personal records stay private.');
+    Object? version;
+    try {
+      version = await _client.rpc('sync_protocol_version');
+    } on PostgrestException {
+      throw StateError('Apply Supabase migration 010_sync_safety.sql before syncing.');
+    }
+    if (version != 2) throw StateError('Apply Supabase migration 010_sync_safety.sql before syncing.');
+    return team;
+  }
+
+  Future<void> _assertScope(String scope) async {
+    if (await _workspace.scopeKey() != scope) {
+      throw StateError('Account or workspace changed; synchronization stopped.');
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> _records(String team, String type) async {
+    final result = <Map<String, dynamic>>[];
+    const size = 500;
+    for (var offset = 0;; offset += size) {
+      final page = await _client.from('team_records')
+          .select('record_id,payload,version').eq('team_id', team)
+          .eq('record_type', type).order('record_id').range(offset, offset + size - 1);
+      result.addAll(page.map((row) => Map<String, dynamic>.from(row)));
+      if (page.length < size) break;
+    }
+    return result;
+  }
+
+  Future<Map<String, dynamic>?> _link(DatabaseExecutor db, String type,
+      {int? id, String? recordId}) async {
+    final rows = await db.query('cloud_links',
+        where: id != null ? 'record_type = ? AND local_id = ?' : 'record_type = ? AND record_id = ?',
+        whereArgs: [type, id ?? recordId]);
+    return rows.isEmpty ? null : Map<String, dynamic>.from(rows.first);
+  }
+
+  Future<void> _saveLink(DatabaseExecutor db, String type, int id,
+      String recordId, int version, String hash) async {
+    await db.insert('cloud_links', {
+      'record_type': type, 'local_id': id, 'record_id': recordId,
+      'version': version, 'content_hash': hash,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<bool> _hasConflict(DatabaseExecutor db, String type, String id) async =>
+      (await db.query('cloud_sync_conflicts',
+          where: 'record_type = ? AND record_id = ?', whereArgs: [type, id])).isNotEmpty;
+
+  Future<Map<String, Object?>> _localPayload(Database db, String type,
+      Map<String, dynamic> link, String team) async {
+    final rows = await db.query(TradeDatabase.syncTables[type]!,
+        where: 'id = ?', whereArgs: [link['local_id']]);
+    if (rows.isEmpty) return Map<String, Object?>.from(_deleted);
+    return _toCloud(db, type, rows.first, team, link['record_id'] as String);
+  }
+
+  Future<Map<String, Object?>> _toCloud(DatabaseExecutor db, String type,
+      Map<String, Object?> row, String team, String recordId) async {
+    final payload = Map<String, Object?>.from(row)..remove('id');
+    for (final entry in (_relations[type] ?? const <String, String>{}).entries) {
+      final localId = payload.remove(entry.key);
+      final foreignKey = '${entry.value}_record_id';
+      if (localId == null) {
+        payload[foreignKey] = null;
+      } else {
+        final link = await _link(db, entry.value, id: localId as int);
+        if (link == null) throw StateError('Missing ${entry.value} link for $type.');
+        payload[foreignKey] = link['record_id'];
+      }
+    }
+    if (type == 'attachment') {
+      final ownerType = payload.remove('owner_type') as String;
+      final ownerRecordType = ownerType == 'exhibitor' ? 'supplier' : ownerType;
+      if (!['supplier', 'contact', 'product'].contains(ownerRecordType)) {
+        throw StateError('Unsupported attachment owner.');
+      }
+      final owner = await _link(db, ownerRecordType, id: payload.remove('owner_id') as int);
+      if (owner == null) throw StateError('Attachment owner has not been synchronized.');
+      final file = File(payload.remove('path') as String);
+      final bytes = await file.readAsBytes();
+      final digest = sha256.convert(bytes).toString();
+      var extension = path.extension(file.path).toLowerCase();
+      if (!RegExp(r'^\.[a-z0-9]{1,12}$').hasMatch(extension)) extension = '';
+      payload['owner_record_type'] = ownerRecordType;
+      payload['owner_record_id'] = owner['record_id'];
+      payload['file_sha256'] = digest;
+      payload['storage_path'] = '$team/$recordId/$digest$extension';
+    }
+    return payload;
+  }
+
+  Future<Map<String, Object?>> _fromCloud(DatabaseExecutor db, String team,
+      String type, Map<String, Object?> source) async {
+    final payload = Map<String, Object?>.from(source)..remove('id');
+    for (final entry in (_relations[type] ?? const <String, String>{}).entries) {
+      // Never interpret a legacy device-local foreign key as this device's ID.
+      payload.remove(entry.key);
+      final foreignId = payload.remove('${entry.value}_record_id');
+      final requiredParent = entry.key == 'exhibitor_id' ||
+          (type == 'supplier' && entry.key == 'trip_id') ||
+          (type == 'quote' && entry.key == 'product_id');
+      if (foreignId == null) {
+        if (requiredParent) throw StateError('Missing cloud parent for $type.');
+        payload[entry.key] = null;
+      } else {
+        final link = await _link(db, entry.value, recordId: foreignId as String);
+        if (link == null) throw StateError('Download the parent before resolving $type.');
+        final parent = await db.query(TradeDatabase.syncTables[entry.value]!,
+            where: 'id = ?', whereArgs: [link['local_id']]);
+        if (parent.isEmpty) throw StateError('The parent of $type was deleted.');
+        payload[entry.key] = link['local_id'];
+      }
+    }
+    if (type == 'attachment') {
+      final ownerType = payload.remove('owner_record_type') as String?;
+      final ownerId = payload.remove('owner_record_id') as String?;
+      final storagePath = payload.remove('storage_path') as String?;
+      final digest = payload.remove('file_sha256') as String?;
+      payload.remove('owner_type');
+      if (ownerType == null || ownerId == null || storagePath == null ||
+          !['supplier', 'contact', 'product'].contains(ownerType) ||
+          !storagePath.startsWith('$team/')) {
+        throw StateError('Invalid cloud attachment owner or path.');
+      }
+      final owner = await _link(db, ownerType, recordId: ownerId);
+      if (owner == null) throw StateError('Download the attachment owner first.');
+      final bytes = await _client.storage.from(_bucket).download(storagePath);
+      if (digest != null && sha256.convert(bytes).toString() != digest) {
+        throw StateError('Downloaded attachment checksum mismatch.');
+      }
+      final root = await getApplicationDocumentsDirectory();
+      final fileKey = sha256.convert(utf8.encode(storagePath)).toString();
+      final file = File('${root.path}/team_files/${await _workspace.scopeKey()}/$fileKey${path.extension(storagePath)}');
+      await file.parent.create(recursive: true);
+      await file.writeAsBytes(bytes, flush: true);
+      payload['owner_type'] = ownerType == 'supplier' ? 'exhibitor' : ownerType;
+      payload['owner_id'] = owner['local_id'];
+      payload['path'] = file.path;
+    }
+    return payload;
+  }
+
+  Future<bool> _upload(Database db, String team, String type,
+      Map<String, dynamic> link, Map<String, Object?> payload, String scope) async {
+    final recordId = link['record_id'] as String;
+    final remote = await _client.from('team_records').select('payload,version,record_id')
+        .eq('team_id', team).eq('record_type', type).eq('record_id', recordId).maybeSingle();
+    // Also makes an ambiguous network retry idempotent.
+    if (remote != null && _hash(remote['payload']) == _hash(payload)) {
+      await _saveLink(db, type, link['local_id'] as int, recordId,
+          remote['version'] as int, _hash(payload));
+      if (payload['_deleted'] == true) {
+        await db.delete('sync_deletions', where: 'record_type = ? AND local_id = ?',
+            whereArgs: [type, link['local_id']]);
+      }
+      return false;
+    }
+    if (remote != null && remote['version'] != link['version']) {
+      await _conflict(db, team, type, link, payload, remote);
+      return false;
+    }
+    if (type == 'attachment' && payload['_deleted'] != true) {
+      final rows = await db.query('attachments', where: 'id = ?', whereArgs: [link['local_id']]);
+      final bytes = await File(rows.single['path'] as String).readAsBytes();
+      if (sha256.convert(bytes).toString() != payload['file_sha256']) {
+        throw StateError('Attachment changed while syncing. Retry.');
+      }
+      try {
+        await _client.storage.from(_bucket).uploadBinary(payload['storage_path'] as String,
+            bytes, fileOptions: const FileOptions(upsert: false));
+      } on StorageException catch (error) {
+        if (error.statusCode != '409' && error.statusCode != 'Duplicate') rethrow;
+        final existing = await _client.storage.from(_bucket).download(payload['storage_path'] as String);
+        if (sha256.convert(existing).toString() != payload['file_sha256']) rethrow;
+      }
+    }
+    await _assertScope(scope);
+    try {
+      final response = await _client.rpc('upsert_team_record_v2', params: {
+        'target_team': team, 'target_record_type': type, 'target_record_id': recordId,
+        'target_payload': payload, 'expected_version': link['version'],
+      });
+      final version = ((response as List).single as Map)['version'] as int;
+      await _saveLink(db, type, link['local_id'] as int, recordId, version, _hash(payload));
+      if (payload['_deleted'] == true) {
+        await db.delete('sync_deletions', where: 'record_type = ? AND local_id = ?',
+            whereArgs: [type, link['local_id']]);
+      }
+      return true;
+    } on PostgrestException catch (error) {
+      if (!error.message.contains('sync_conflict')) rethrow;
+      final latest = await _client.from('team_records').select('payload,version,record_id')
+          .eq('team_id', team).eq('record_type', type).eq('record_id', recordId).single();
+      await _conflict(db, team, type, link, payload, latest);
+      return false;
+    }
+  }
+
+  Future<void> _conflict(DatabaseExecutor db, String team, String type,
+      Map<String, dynamic> link, Map<String, Object?> local, Map<String, dynamic> remote) async {
+    await db.insert('cloud_sync_conflicts', {
+      'team_id': team, 'record_type': type, 'local_id': link['local_id'],
+      'record_id': link['record_id'], 'local_payload': jsonEncode(local),
+      'remote_payload': jsonEncode(remote['payload']), 'remote_version': remote['version'],
+      'created_at': DateTime.now().toUtc().toIso8601String(),
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<void> _apply(Database db, String team, String type, Map<String, dynamic> record) async {
+    final source = Map<String, Object?>.from(record['payload'] as Map);
+    final recordId = record['record_id'] as String;
+    final link = await _link(db, type, recordId: recordId);
+    final table = TradeDatabase.syncTables[type]!;
+    final payload = source['_deleted'] == true ? null : await _fromCloud(db, team, type, source);
+    await db.transaction((txn) async {
+      int? localId = link?['local_id'] as int?;
+      if (payload == null) {
+        if (localId == null) return; // Unknown tombstone needs no local row.
+        await txn.delete(table, where: 'id = ?', whereArgs: [localId]);
+      } else if (localId == null) {
+        localId = await txn.insert(table, payload);
+      } else {
+        final rows = await txn.query(table, where: 'id = ?', whereArgs: [localId]);
+        if (rows.isEmpty) {
+          await txn.insert(table, {...payload, 'id': localId});
+        } else {
+          await txn.update(table, payload, where: 'id = ?', whereArgs: [localId]);
+        }
+      }
+      await _saveLink(txn, type, localId, recordId, record['version'] as int, _hash(source));
+      await txn.delete('sync_deletions', where: 'record_type = ? AND local_id = ?',
+          whereArgs: [type, localId]);
+    });
   }
 
   Future<List<CloudConflict>> conflicts() async =>
       (await _db.getCloudSyncConflicts()).map(CloudConflict.fromMap).toList();
 
-  Future<void> keepLocalConflict(CloudConflict conflict) async {
-    final response = await _client.rpc('upsert_team_record', params: {
-      'target_team': conflict.teamId,
-      'target_record_type': conflict.recordType,
-      'target_record_id': conflict.recordId,
-      'target_payload': conflict.localPayload,
-      'expected_version': conflict.remoteVersion,
-    });
-    final row = (response as List).first as Map<String, dynamic>;
-    await _db.saveCloudLink(
-      conflict.recordType,
-      conflict.localId,
-      conflict.recordId,
-      row['version'] as int,
-      contentHash: _payloadHash(conflict.localPayload),
-    );
-    await _db.deleteCloudSyncConflict(conflict.id);
-  }
+  Future<void> keepLocalConflict(CloudConflict conflict) => _resolve(conflict, keepLocal: true);
+  Future<void> useCloudConflict(CloudConflict conflict) => _resolve(conflict, keepLocal: false);
 
-  Future<void> useCloudConflict(CloudConflict conflict) async {
-    final payload = Map<String, Object?>.from(conflict.remotePayload);
-    String table;
-    switch (conflict.recordType) {
-      case 'trip':
-        table = 'trips';
-        break;
-      case 'supplier':
-        final tripRecordId = payload.remove('trip_record_id') as String?;
-        final tripLink = tripRecordId == null
-            ? null
-            : await _db.getCloudLinkByRecordId('trip', tripRecordId);
-        if (tripLink == null) {
-          throw StateError('Cloud trip is not available locally.');
+  Future<void> _resolve(CloudConflict conflict, {required bool keepLocal}) =>
+      TeamWorkspaceService.exclusive(() async {
+        final team = await _requireTeam();
+        if (team.id != conflict.teamId) throw StateError('This conflict belongs to another team.');
+        final scope = await _workspace.scopeKey();
+        final db = await _db.database;
+        final latest = await _client.from('team_records').select('payload,version,record_id')
+            .eq('team_id', team.id).eq('record_type', conflict.recordType)
+            .eq('record_id', conflict.recordId).single();
+        final link = await _link(db, conflict.recordType, id: conflict.localId);
+        if (link == null) throw StateError('Conflict record no longer exists.');
+        final local = await _localPayload(db, conflict.recordType, link, team.id);
+        if (latest['version'] != conflict.remoteVersion) {
+          await _conflict(db, team.id, conflict.recordType, link, local, latest);
+          throw StateError('Cloud changed again. Refresh and review the latest conflict.');
         }
-        payload['trip_id'] = tripLink['local_id'] as int;
-        table = 'exhibitors';
-        break;
-      case 'contact':
-      case 'product':
-        final supplierRecordId =
-            payload.remove('supplier_record_id') as String?;
-        final supplierLink = supplierRecordId == null
-            ? null
-            : await _db.getCloudLinkByRecordId('supplier', supplierRecordId);
-        if (supplierLink == null) {
-          throw StateError('Cloud supplier is not available locally.');
-        }
-        payload['exhibitor_id'] = supplierLink['local_id'] as int;
-        table = conflict.recordType == 'contact' ? 'contacts' : 'products';
-        break;
-      case 'quote':
-        final productRecordId = payload.remove('product_record_id') as String?;
-        final productLink = productRecordId == null
-            ? null
-            : await _db.getCloudLinkByRecordId('product', productRecordId);
-        if (productLink == null) {
-          throw StateError('Cloud product is not available locally.');
-        }
-        payload['product_id'] = productLink['local_id'] as int;
-        table = 'quotes';
-        break;
-      case 'meeting':
-        final supplierRecordId =
-            payload.remove('supplier_record_id') as String?;
-        final productRecordId = payload.remove('product_record_id') as String?;
-        final supplierLink = supplierRecordId == null
-            ? null
-            : await _db.getCloudLinkByRecordId('supplier', supplierRecordId);
-        if (supplierLink == null) {
-          throw StateError('Cloud supplier is not available locally.');
-        }
-        payload['exhibitor_id'] = supplierLink['local_id'] as int;
-        if (productRecordId != null) {
-          final productLink =
-              await _db.getCloudLinkByRecordId('product', productRecordId);
-          if (productLink == null) {
-            throw StateError('Cloud product is not available locally.');
+        if (keepLocal) {
+          await ApprovalPolicy.requireWriter();
+          final selected = {...link, 'version': latest['version']};
+          await _upload(db, team.id, conflict.recordType, selected, local, scope);
+          final updated = await _link(db, conflict.recordType, id: conflict.localId);
+          if (updated?['content_hash'] != _hash(local)) {
+            throw StateError('The cloud changed again. Review the refreshed conflict.');
           }
-          payload['product_id'] = productLink['local_id'] as int;
+          // Local data is already the current version chosen by the user.
+          // Do not replace it with an older conflict snapshot.
         } else {
-          payload['product_id'] = null;
+          await _assertScope(scope);
+          await _apply(db, team.id, conflict.recordType, latest);
         }
-        table = 'meetings';
-        break;
-      case 'sample':
-        final supplierRecordId =
-            payload.remove('supplier_record_id') as String?;
-        final productRecordId = payload.remove('product_record_id') as String?;
-        final supplierLink = supplierRecordId == null
-            ? null
-            : await _db.getCloudLinkByRecordId('supplier', supplierRecordId);
-        if (supplierLink == null) {
-          throw StateError('Cloud supplier is not available locally.');
-        }
-        payload['exhibitor_id'] = supplierLink['local_id'] as int;
-        if (productRecordId != null) {
-          final productLink =
-              await _db.getCloudLinkByRecordId('product', productRecordId);
-          if (productLink == null) {
-            throw StateError('Cloud product is not available locally.');
-          }
-          payload['product_id'] = productLink['local_id'] as int;
-        } else {
-          payload['product_id'] = null;
-        }
-        table = 'samples';
-        break;
-      case 'attachment':
-        final ownerRecordType = payload.remove('owner_record_type') as String?;
-        final ownerRecordId = payload.remove('owner_record_id') as String?;
-        final storagePath = payload.remove('storage_path') as String?;
-        final ownerLink = ownerRecordType == null || ownerRecordId == null
-            ? null
-            : await _db.getCloudLinkByRecordId(ownerRecordType, ownerRecordId);
-        final ownerType =
-            ownerRecordType == null ? null : _localOwnerType(ownerRecordType);
-        if (ownerLink == null || ownerType == null || storagePath == null) {
-          throw StateError('Cloud attachment owner is not available locally.');
-        }
-        payload['owner_type'] = ownerType;
-        payload['owner_id'] = ownerLink['local_id'] as int;
-        payload['path'] = await _downloadAttachment(
-            storagePath, ownerType, ownerLink['local_id'] as int);
-        table = 'attachments';
-        break;
-      default:
-        throw StateError(
-            'Use cloud is not available for ${conflict.recordType} yet.');
-    }
-    await _db.update(table, conflict.localId, payload);
-    await _db.saveCloudLink(conflict.recordType, conflict.localId,
-        conflict.recordId, conflict.remoteVersion,
-        contentHash: _payloadHash(conflict.remotePayload));
-    await _db.deleteCloudSyncConflict(conflict.id);
+        await db.delete('cloud_sync_conflicts', where: 'id = ?', whereArgs: [conflict.id]);
+      });
+
+  String _newRecordId() {
+    final random = Random.secure();
+    return List.generate(16, (_) => random.nextInt(256))
+        .map((value) => value.toRadixString(16).padLeft(2, '0')).join();
   }
 
-  Future<void> _captureConflict(
-    String teamId,
-    String recordType,
-    int localId,
-    String recordId,
-    Map<String, Object?> localPayload,
-  ) async {
-    final remote = await _client
-        .from('team_records')
-        .select('payload, version')
-        .eq('team_id', teamId)
-        .eq('record_type', recordType)
-        .eq('record_id', recordId)
-        .single();
-    await _db.saveCloudSyncConflict(
-      teamId: teamId,
-      recordType: recordType,
-      localId: localId,
-      recordId: recordId,
-      localPayload: localPayload,
-      remotePayload: Map<String, Object?>.from(remote['payload'] as Map),
-      remoteVersion: remote['version'] as int,
-    );
-  }
-
-  static const _attachmentBucket = 'team-attachments';
-
-  String? _ownerRecordType(String ownerType) => switch (ownerType) {
-        'exhibitor' => 'supplier',
-        'product' => 'product',
-        'contact' => 'contact',
-        _ => null,
-      };
-
-  String? _localOwnerType(String recordType) => switch (recordType) {
-        'supplier' => 'exhibitor',
-        'product' => 'product',
-        'contact' => 'contact',
-        _ => null,
-      };
-
-  String _storagePath(String teamId, String recordId, String localPath) {
-    final extension = path.extension(localPath).toLowerCase();
-    return '$teamId/$recordId/file$extension';
-  }
-
-  Future<String> _downloadAttachment(
-      String storagePath, String ownerType, int ownerId) async {
-    final root = await getApplicationDocumentsDirectory();
-    final directory = Directory('${root.path}/attachments/$ownerType/$ownerId');
-    await directory.create(recursive: true);
-    final attachmentId = path.basename(path.dirname(storagePath));
-    final target = File(
-        '${directory.path}/attachment_$attachmentId${path.extension(storagePath)}');
-    if (!await target.exists()) {
-      final bytes =
-          await _client.storage.from(_attachmentBucket).download(storagePath);
-      await target.writeAsBytes(bytes, flush: true);
-    }
-    return target.path;
-  }
-
-  Future<bool> _isUnchanged(
-    String recordType,
-    int localId,
-    String recordId,
-    Map<String, dynamic>? link,
-    Map<String, dynamic> payload,
-  ) async {
-    if (link == null) return false;
-    final contentHash = _payloadHash(payload);
-    final savedHash = link['content_hash'] as String? ?? '';
-    if (savedHash == contentHash) return true;
-
-    // Older app versions did not retain content fingerprints. Treat their
-    // existing cloud link as the first sync baseline to avoid false conflicts.
-    if (savedHash.isEmpty) {
-      await _db.saveCloudLink(
-        recordType,
-        localId,
-        recordId,
-        link['version'] as int,
-        contentHash: contentHash,
-      );
-      return true;
-    }
-    return false;
-  }
-
-  String _payloadHash(Map<String, Object?> payload) =>
-      jsonEncode(_canonicalize(payload));
-
-  Object? _canonicalize(Object? value) {
+  String _hash(Object? value) => jsonEncode(_canonical(value));
+  Object? _canonical(Object? value) {
     if (value is Map) {
-      final entries = value.entries.toList()
-        ..sort((left, right) =>
-            left.key.toString().compareTo(right.key.toString()));
-      return {
-        for (final entry in entries)
-          entry.key.toString(): _canonicalize(entry.value),
-      };
+      final keys = value.keys.map((key) => key.toString()).toList()..sort();
+      return {for (final key in keys) key: _canonical(value[key])};
     }
-    if (value is List) {
-      return value.map(_canonicalize).toList();
-    }
+    if (value is List) return value.map(_canonical).toList();
     return value;
   }
 }

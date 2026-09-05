@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'team_workspace_service.dart';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -42,7 +43,7 @@ class SyncStatusService {
   }
 
   Future<SyncStatus> load() async {
-    final value = await _storage.read(key: _key);
+    final value = await _storage.read(key: '${_key}_${await TeamWorkspaceService().scopeKey()}');
     if (value == null) return const SyncStatus();
     try {
       return SyncStatus.fromJson(jsonDecode(value) as Map<String, dynamic>);
@@ -76,7 +77,7 @@ class SyncStatusService {
   }
 
   Future<void> _save(Map<String, Object?> value) async {
-    await _storage.write(key: _key, value: jsonEncode(value));
+    await _storage.write(key: '${_key}_${await TeamWorkspaceService().scopeKey()}', value: jsonEncode(value));
     changes.value++;
   }
 }
