@@ -15,6 +15,7 @@ import io.flutter.plugin.common.MethodChannel
 import java.io.File
 
 class MainActivity : FlutterFragmentActivity() {
+    private val cardScanner = LiveCardScanner(this)
     private val backupChannel = "canton_fair_crm/backup"
     private val backupPickerRequestCode = 7231
     private val documentPickerRequestCode = 7232
@@ -64,6 +65,7 @@ class MainActivity : FlutterFragmentActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         CardImageProcessor(this).register(flutterEngine)
+        cardScanner.register(flutterEngine)
         if (!screenReceiverRegistered) {
             val filter = IntentFilter(Intent.ACTION_SCREEN_OFF)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {

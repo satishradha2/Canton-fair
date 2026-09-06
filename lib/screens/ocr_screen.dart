@@ -19,6 +19,7 @@ class OcrScreen extends StatefulWidget {
 
 class _OcrScreenState extends State<OcrScreen> {
   static const _images = MethodChannel('canton_fair_crm/card_image');
+  static const _scanner = MethodChannel('canton_fair_crm/card_scanner');
   BusinessCardCapture? _draft;
   bool _busy = true;
   String? _error;
@@ -51,6 +52,17 @@ class _OcrScreenState extends State<OcrScreen> {
       _draft = draft;
       final side = draft.pendingSide;
       if (side != null) {
+        String? recovered;
+        if (Platform.isAndroid) {
+          recovered = await _scanner.invokeMethod<String>('recover', {'token': '${draft.id}_$side'});
+        }
+        if (recovered != null) {
+          await draft.keepImage(side, recovered);
+          draft.sides[side]!['capture_method'] = 'live_scanner';
+          await draft.save();
+          await _scanner.invokeMethod<void>('discard', {'token': '${draft.id}_$side'});
+          await draft.readSide(side);
+        } else {
         // Recover only a picker operation previously started by this OCR draft.
         final lost = await ImagePicker().retrieveLostData();
         if (lost.files?.isNotEmpty == true) {
@@ -63,6 +75,7 @@ class _OcrScreenState extends State<OcrScreen> {
           if (lost.exception != null) {
             _error = 'Interrupted capture could not be recovered. Existing draft images are preserved.';
           }
+        }
         }
       }
       if (mounted) setState(_populate);
@@ -100,6 +113,25 @@ class _OcrScreenState extends State<OcrScreen> {
     try {
       draft.pendingSide = side;
       await draft.save();
+      if (Platform.isAndroid && source == ImageSource.camera) {
+        if (mounted) setState(() => _status = 'Opening live card scanner. Review the detected edges before accepting.');
+        final token = '${draft.id}_$side';
+        final scan = await CameraCaptureService.capture(() =>
+            _scanner.invokeMethod<String>('scan', {'token': token}));
+        if (scan == null) {
+          draft.pendingSide = null;
+          await draft.save();
+          return;
+        }
+        await draft.keepImage(side, scan);
+        draft.sides[side]!['capture_method'] = 'live_scanner';
+        await draft.save();
+        await _scanner.invokeMethod<void>('discard', {'token': token});
+        if (mounted) setState(() => _status = 'Reading the accepted $side card scan...');
+        await draft.readSide(side);
+        if (mounted) setState(_populate);
+        return;
+      }
       Future<XFile?> pick() => ImagePicker().pickImage(source: source);
       final photo = source == ImageSource.camera
           ? await CameraCaptureService.capture(pick) : await pick();
@@ -113,6 +145,8 @@ class _OcrScreenState extends State<OcrScreen> {
       if (mounted) setState(() => _status = 'Reading $side on-device...');
       await draft.readSide(side);
       if (mounted) setState(_populate);
+    } on PlatformException catch (error) {
+      if (mounted) setState(() => _error = error.message ?? 'Live card scanning is unavailable. Existing images are unchanged.');
     } catch (_) {
       if (mounted) {
         setState(() => _error = 'Capture or reading failed. Any copied original remains in your local draft. Retry reading or capture again.');
@@ -235,7 +269,9 @@ class _OcrScreenState extends State<OcrScreen> {
               cacheWidth: 1000,
               errorBuilder: (_, error, stack) => const Center(child: Text('Original unavailable. Capture again.'))),
           )),
-          const Text('Tap the original to zoom. Retaking does not erase manual edits.'),
+          Text(page['capture_method'] == 'live_scanner'
+              ? 'Accepted card scan. Only the cropped image is saved. Tap to zoom.'
+              : 'Tap the original to zoom. Retaking does not erase manual edits.'),
         ],
         const SizedBox(height: 12),
         Wrap(spacing: 8, runSpacing: 8, children: [
@@ -289,7 +325,7 @@ class _OcrScreenState extends State<OcrScreen> {
         body: SafeArea(child: ListView(padding: const EdgeInsets.all(20), children: [
           Text('Keep the complete card', style: Theme.of(context).textTheme.headlineSmall),
           const SizedBox(height: 8),
-          const Text('Capture both sides, review details, then save to a supplier. Originals and recognition output are retained. Local drafts resume when you reopen this screen.'),
+          const Text('Scan each side with live edge detection, confirm the crop, then review supplier details. New camera scans retain only the accepted cropped card. Existing photos and gallery imports remain unchanged.'),
           const SizedBox(height: 12),
           if (_busy) ...[const LinearProgressIndicator(), const SizedBox(height: 8), Text(_status)],
           if (_error != null) Padding(padding: const EdgeInsets.symmetric(vertical: 12),
