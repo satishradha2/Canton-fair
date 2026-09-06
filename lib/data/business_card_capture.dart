@@ -6,6 +6,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import 'business_card_parser.dart';
+import 'card_crop_text_check.dart';
 import 'team_workspace_service.dart';
 
 /// App-owned originals and OCR output survive leaving the screen or restarting.
@@ -102,7 +103,10 @@ class BusinessCardCapture {
 
   String readingPath(String side) {
     final corrected = sides[side]?['processed_file'] as String?;
-    if (corrected == null || p.basename(corrected) != corrected) return imagePath(side);
+    if (corrected == null || p.basename(corrected) != corrected ||
+        sides[side]?['crop_verified'] != true) {
+      return imagePath(side);
+    }
     return p.join(directory.path, corrected);
   }
 
@@ -115,6 +119,7 @@ class BusinessCardCapture {
       throw StateError('The corrected image is not in this card draft.');
     }
     sides[side]!['processed_file'] = p.basename(resolvedImage);
+    sides[side]!['crop_verified'] = false;
     await save();
   }
 
@@ -150,30 +155,72 @@ class BusinessCardCapture {
       if (mode == 'Korean + English') TextRecognitionScript.korean,
       if (mode == 'Devanagari + English') TextRecognitionScript.devanagiri,
     ];
-    final passes = <String, dynamic>{};
     final warnings = <String>[];
-    for (final script in scripts) {
-      final recognizer = TextRecognizer(script: script);
-      try {
-        final result = await recognizer.processImage(InputImage.fromFilePath(readingPath(side)));
-        passes[script.name] = {
-          'text': result.text,
-          'input_file': p.basename(readingPath(side)),
-          'lines': [for (final block in result.blocks) for (final line in block.lines) {
-            'text': line.text,
-            'box': [line.boundingBox.left, line.boundingBox.top,
-              line.boundingBox.right, line.boundingBox.bottom],
-            'languages': line.recognizedLanguages,
-          }],
-        };
-      } catch (_) {
-        warnings.add('${script.name} recognition failed. Original preserved; retry reading.');
-      } finally {
-        await recognizer.close();
+    Future<Map<String, dynamic>> recognize(String path, String source) async {
+      final passes = <String, dynamic>{};
+      for (final script in scripts) {
+        final recognizer = TextRecognizer(script: script);
+        try {
+          final result = await recognizer.processImage(InputImage.fromFilePath(path));
+          passes[script.name] = {
+            'text': result.text,
+            'input_file': p.basename(path),
+            'lines': [for (final block in result.blocks) for (final line in block.lines) {
+              'text': line.text,
+              'box': [line.boundingBox.left, line.boundingBox.top,
+                line.boundingBox.right, line.boundingBox.bottom],
+              'languages': line.recognizedLanguages,
+            }],
+          };
+        } catch (_) {
+          warnings.add('${script.name} recognition failed for the $source. Original preserved; retry reading.');
+        } finally {
+          await recognizer.close();
+        }
+      }
+      return passes;
+    }
+
+    // Never use an unverified crop for cloud extraction. Verification is an
+    // OCR-based safeguard, not proof that every printed character was detected.
+    page['crop_verified'] = false;
+    final originals = await recognize(imagePath(side), 'original');
+    page['original_passes'] = originals;
+    var selected = originals;
+    final corrected = page['processed_file'] as String?;
+    if (corrected != null && p.basename(corrected) == corrected) {
+      final cropped = await recognize(p.join(directory.path, corrected), 'crop');
+      page['crop_passes'] = cropped;
+      final check = CardCropTextCheck.evaluate(originals: originals, cropped: cropped,
+          requiredScripts: scripts.map((script) => script.name).toSet());
+      final verified = check.verified;
+      page['crop_verified'] = verified;
+      page['crop_check'] = {
+        'method': 'original-versus-crop-ocr-v1',
+        'verified_at': DateTime.now().toUtc().toIso8601String(),
+        'missing_lines': check.missingLines,
+        'complete': check.complete,
+      };
+      if (verified) {
+        selected = cropped;
+      } else {
+        warnings.add('Using the original: the crop could not be confirmed to retain all readable text. Both images and recognition results are preserved.');
       }
     }
     final previous = Map<String, dynamic>.from(page['passes'] as Map? ?? {});
-    page['passes'] = {...previous, ...passes};
+    // Keep prior output in the archive, but never mix an old crop's text into
+    // the active result for a different input image.
+    if (previous.isNotEmpty) {
+      final history = List<dynamic>.from(page['reading_history'] as List? ?? []);
+      history.add({'read_at': page['read_at'], 'passes': previous});
+      page['reading_history'] = history;
+    }
+    final currentInput = p.basename(readingPath(side));
+    page['passes'] = {
+      for (final entry in previous.entries)
+        if ((entry.value as Map)['input_file'] == currentInput) entry.key: entry.value,
+      ...selected,
+    };
     page['mode'] = mode;
     page['read_at'] = DateTime.now().toUtc().toIso8601String();
     page['warnings'] = warnings;

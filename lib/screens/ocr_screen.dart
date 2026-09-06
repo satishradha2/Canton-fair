@@ -22,6 +22,7 @@ class _OcrScreenState extends State<OcrScreen> {
   BusinessCardCapture? _draft;
   bool _busy = true;
   String? _error;
+  String? _cropNotice;
   String _status = 'Opening local card draft...';
   static const _fields = <String, String>{
     ...SupplierProfile.companyFields,
@@ -92,6 +93,7 @@ class _OcrScreenState extends State<OcrScreen> {
     setState(() {
       _busy = true;
       _error = null;
+      _cropNotice = null;
       _status = 'Capturing $side. Keep all four edges visible and avoid glare.';
     });
     final draft = _draft!;
@@ -129,7 +131,7 @@ class _OcrScreenState extends State<OcrScreen> {
       ).timeout(const Duration(seconds: 20));
       if (prepared == null || prepared['detected'] != true) {
         if (mounted) {
-          setState(() => _error =
+          setState(() => _cropNotice =
               'Could not confidently detect the $side edges. Reading the original instead. Adjust crop is optional.');
         }
         return;
@@ -141,7 +143,7 @@ class _OcrScreenState extends State<OcrScreen> {
       await draft.useCrop(side, corrected);
     } catch (_) {
       if (mounted) {
-        setState(() => _error =
+        setState(() => _cropNotice =
             'Automatic crop was unavailable for the $side. Reading the preserved original instead. You can optionally adjust the crop later.');
       }
     }
@@ -244,7 +246,9 @@ class _OcrScreenState extends State<OcrScreen> {
           if (page != null) TextButton(onPressed: _busy ? null : () => _reread(side), child: const Text('Read again')),
           if (page != null && Platform.isAndroid) TextButton(onPressed: _busy ? null : () => _crop(side), child: const Text('Adjust crop')),
         ]),
-        if (page?['processed_file'] != null) const Text('A perspective-corrected copy is used for reading. The preview above is the preserved original.'),
+        if (page?['processed_file'] != null) Text(page?['crop_verified'] == true
+            ? 'A corrected copy passed the text-retention check and is used for reading. The preview above is the preserved original.'
+            : 'The crop is retained, but reading uses the original until the text-retention check passes.'),
         if (side == 'back' && page == null) CheckboxListTile(
           contentPadding: EdgeInsets.zero,
           title: const Text('The back is blank / this is a single-sided card'),
@@ -290,6 +294,8 @@ class _OcrScreenState extends State<OcrScreen> {
           if (_busy) ...[const LinearProgressIndicator(), const SizedBox(height: 8), Text(_status)],
           if (_error != null) Padding(padding: const EdgeInsets.symmetric(vertical: 12),
             child: Semantics(liveRegion: true, child: Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)))),
+          if (_cropNotice != null) Padding(padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Semantics(liveRegion: true, child: Text(_cropNotice!))),
           if (draft != null) ...[
             const SizedBox(height: 16),
             DropdownButtonFormField<String>(
