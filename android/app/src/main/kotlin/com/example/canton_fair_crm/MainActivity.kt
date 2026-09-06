@@ -63,6 +63,7 @@ class MainActivity : FlutterFragmentActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        CardImageProcessor(this).register(flutterEngine)
         if (!screenReceiverRegistered) {
             val filter = IntentFilter(Intent.ACTION_SCREEN_OFF)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {

@@ -137,6 +137,13 @@ class _FieldCaptureChecklistDialogState
   void initState() {
     super.initState();
     final seed = widget.prefill;
+    _contactName.text = seed['person'] ?? '';
+    _contactRole.text = seed['role'] ?? '';
+    _phone.text = seed['phone'] ?? '';
+    _email.text = seed['email'] ?? '';
+    _whatsapp.text = seed['whatsapp'] ?? '';
+    _wechat.text = seed['wechat'] ?? '';
+    _notes.text = seed['notes'] ?? '';
     _tripId = widget.selectedTripId;
     _name = TextEditingController(text: seed['name'] ?? '');
     _booth = TextEditingController(text: seed['booth'] ?? '');

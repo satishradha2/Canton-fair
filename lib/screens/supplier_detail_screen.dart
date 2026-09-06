@@ -14,6 +14,9 @@ import '../data/reminder_service.dart';
 import '../models/models.dart';
 import '../theme/app_theme.dart';
 import '../widgets/enterprise_widgets.dart';
+import 'business_card_archive_screen.dart';
+import '../data/supplier_profile.dart';
+import 'supplier_profile_screen.dart';
 
 class SupplierDetailScreen extends StatefulWidget {
   final Exhibitor supplier;
@@ -76,6 +79,16 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
       'shortlisted': decision == 'Shortlist' ? 1 : 0,
     });
     if (mounted) setState(() => _decision = decision);
+  }
+
+  Future<void> _editSupplierProfile({int? contactId}) async {
+    final saved = await Navigator.of(context).push<Exhibitor>(MaterialPageRoute(
+      builder: (_) => SupplierProfileScreen(supplierId: widget.supplier.id!, contactId: contactId),
+    ));
+    if (!mounted || saved == null) return;
+    Navigator.of(context).pushReplacement(MaterialPageRoute<void>(
+      builder: (_) => SupplierDetailScreen(supplier: saved),
+    ));
   }
 
   void _reload() {
@@ -1938,6 +1951,40 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
           ),
           _fieldCapturePanel(supplier),
           const SizedBox(height: 16),
+          SectionPanel(
+            title: 'Company and contact details',
+            subtitle: 'Editable supplier profile, addresses and separate contact records.',
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              OutlinedButton.icon(onPressed: _editSupplierProfile,
+                icon: const Icon(Icons.edit_outlined), label: const Text('Edit supplier details')),
+              ExpansionTile(tilePadding: EdgeInsets.zero, title: const Text('Additional company information'),
+                children: [
+                  for (final entry in SupplierProfile.company(supplier).entries)
+                    if (entry.value.isNotEmpty && !['name', 'booth', 'hall', 'country', 'category', 'notes'].contains(entry.key))
+                      ListTile(title: Text(SupplierProfile.companyFields[entry.key] ?? entry.key),
+                        subtitle: SelectableText(entry.value)),
+                ],
+              ),
+              const Text('Open Contacts to review or edit each person and their additional phone numbers, emails and other details.'),
+            ]),
+          ),
+          if (_fieldCapture(supplier)['business_card'] is Map) ...[
+            const SizedBox(height: 16),
+            SectionPanel(
+              title: 'Business card archive',
+              subtitle: 'Original front/back images, reviewed details and complete OCR text.',
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                for (final card in SupplierProfile.cards(supplier)) OutlinedButton.icon(
+                  icon: const Icon(Icons.badge_outlined),
+                  label: Text('Open card / ${card['reviewed_at'] ?? card['id']}'),
+                  onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(
+                    builder: (_) => BusinessCardArchiveScreen(supplierId: supplier.id!, archive: card),
+                  )),
+                ),
+              ]),
+            ),
+          ],
+          const SizedBox(height: 16),
           _fairIntelligencePanel(),
           const SizedBox(height: 16),
           SectionPanel(
@@ -2003,10 +2050,14 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
                       const CircleAvatar(child: Icon(Icons.person_outline)),
                   title: Text(
                       contact.name.isEmpty ? 'Unnamed contact' : contact.name),
+                  onTap: () => _editSupplierProfile(contactId: contact.id),
                   subtitle: Text([
                     contact.designation,
                     contact.phone,
                     contact.email,
+                    for (final entry in SupplierProfile.contact(contact).entries)
+                      if (entry.value.isNotEmpty && !['person', 'role', 'phone', 'email', 'language'].contains(entry.key))
+                        '${SupplierProfile.contactFields[entry.key]}: ${entry.value}',
                     if ((profile['influence'] as String? ?? '').isNotEmpty &&
                         profile['influence'] != 'Not recorded')
                       profile['influence'] as String,
@@ -2032,6 +2083,10 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
                                     : contact.whatsapp,
                                 whatsapp: true),
                             icon: const Icon(Icons.chat_outlined)),
+                      IconButton(
+                          tooltip: 'Edit contact details',
+                          onPressed: () => _editSupplierProfile(contactId: contact.id),
+                          icon: const Icon(Icons.edit_outlined)),
                       IconButton(
                           tooltip: 'Save business card photo',
                           onPressed: () => _captureBusinessCard(contact),

@@ -10,6 +10,8 @@ import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../data/database.dart';
 import '../data/camera_capture_service.dart';
+import '../data/business_card_capture.dart';
+import '../data/supplier_profile.dart';
 import '../data/cloud_sync_service.dart';
 import '../data/cloud_api_service.dart';
 import '../data/capture_defaults_service.dart';
@@ -25,6 +27,7 @@ import '../widgets/voice_note_field.dart';
 import 'scanner_screen.dart';
 import 'ocr_screen.dart';
 import 'supplier_detail_screen.dart';
+import 'supplier_profile_screen.dart';
 import 'photo_annotation_screen.dart';
 import 'hall_route_screen.dart';
 
@@ -667,10 +670,35 @@ class _CapturesScreenState extends State<CapturesScreen> {
   }
 
   Future<void> _openOcrCapture() async {
-    final details = await Navigator.of(context).push<Map<String, String>>(
+    final card = await Navigator.of(context).push<BusinessCardCapture>(
         MaterialPageRoute(builder: (_) => const OcrScreen()));
-    if (!mounted || details == null) return;
-    await _openAddExhibitorSheet(prefill: details);
+    if (!mounted || card == null) return;
+    try {
+      if (await TeamWorkspaceService().scopeKey() != card.scope) {
+        throw StateError('Workspace changed. Reopen the original workspace.');
+      }
+      if (!mounted) return;
+      final destination = await chooseCardSupplier(context);
+      if (!mounted || destination == null) return;
+      if (destination == -1) {
+        await _openAddExhibitorSheet(prefill: card.fields, businessCard: card);
+      } else {
+        final saved = await Navigator.of(context).push<Exhibitor>(MaterialPageRoute(
+          builder: (_) => SupplierProfileScreen(supplierId: destination, card: card),
+        ));
+        if (!mounted || saved == null) return;
+        _load();
+        await Navigator.of(context).push<void>(MaterialPageRoute(
+          builder: (_) => SupplierDetailScreen(supplier: saved),
+        ));
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Could not complete supplier capture. Your card draft remains available; reopen Scan card details.'),
+        ));
+      }
+    }
   }
 
   Future<void> _openCloseTripSheet(int tripId) async {
@@ -802,7 +830,10 @@ class _CapturesScreenState extends State<CapturesScreen> {
     }
   }
 
-  Future<void> _openAddExhibitorSheet({Map<String, String>? prefill}) async {
+  Future<void> _openAddExhibitorSheet({
+    Map<String, String>? prefill,
+    BusinessCardCapture? businessCard,
+  }) async {
     final seed = prefill ?? {};
     final trips = await _trips;
     final defaults = await CaptureDefaultsService().load();
@@ -833,62 +864,121 @@ class _CapturesScreenState extends State<CapturesScreen> {
       shortlisted: capture.shortlisted,
       rating: capture.rating,
       decision: capture.shortlisted ? 'Shortlist' : 'Maybe',
-      fieldCaptureJson: jsonEncode(capture.fieldCapture),
+      fieldCaptureJson: jsonEncode({
+        ...capture.fieldCapture,
+        'supplier_details': {
+          if (businessCard != null) ...SupplierProfile.companySubset(businessCard.fields),
+          'name': capture.name, 'booth': capture.booth, 'hall': capture.hall,
+          'country': capture.country, 'category': capture.category, 'notes': capture.notes,
+        },
+        if (businessCard != null) 'business_card': businessCard.archive(
+          reviewedFields: {
+            ...businessCard.fields,
+            'name': capture.name, 'person': capture.contactName,
+            'role': capture.contactRole, 'phone': capture.phone,
+            'email': capture.email, 'whatsapp': capture.whatsapp,
+            'wechat': capture.wechat, 'country': capture.country,
+            'booth': capture.booth, 'hall': capture.hall,
+          },
+        ),
+      }),
       verificationJson: jsonEncode({
         'status': 'Unverified',
       }),
     );
     final allow = await _showDuplicateCheck(candidate);
     if (!allow || !mounted) return;
-    final exhibitorId = await db.insertExhibitor(candidate);
-    if (capture.contactName.isNotEmpty) {
-      await db.insert(
-        'contacts',
-        Contact(
-          exhibitorId: exhibitorId,
-          name: capture.contactName,
-          designation: capture.contactRole,
-          phone: capture.phone,
-          email: capture.email,
-          whatsapp: capture.whatsapp,
-          wechat: capture.wechat,
-        ).toMap()
-          ..remove('id'),
-      );
-    }
-    if (capture.productName.isNotEmpty) {
-      await db.insert(
-        'products',
-        Product(
-          exhibitorId: exhibitorId,
-          name: capture.productName,
-          modelCode: capture.model,
-          moq: capture.moq,
-          quotedPrice: capture.price,
-          leadTime: capture.leadTime,
-          paymentTerms: capture.paymentTerms,
-          shortlisted: capture.shortlisted,
-          rating: capture.rating,
-          detailsJson: jsonEncode(capture.productDetails),
-        ).toMap()
-          ..remove('id'),
-      );
-    }
-    if (capture.nextAction != 'No action') {
-      await db.insert(
-        'meetings',
-        Meeting(
-          exhibitorId: exhibitorId,
-          meetingDate: DateTime.now(),
-          followUpDate: capture.followUpDate,
-          outcome: capture.nextAction,
-          priority: capture.shortlisted ? 'High' : 'Medium',
-          notes: capture.meetingNotes,
-          commitmentsJson: jsonEncode(capture.meetingCommitments),
-        ).toMap()
-          ..remove('id'),
-      );
-    }
+    await TeamWorkspaceService.exclusive(() async {
+      if (businessCard != null &&
+          await TeamWorkspaceService().scopeKey() != businessCard.scope) {
+        throw StateError('Workspace changed. Reopen the card in its original workspace.');
+      }
+      if (businessCard != null) {
+        for (final side in businessCard.sides.keys) {
+          if (!await File(businessCard.imagePath(side)).exists()) {
+            throw StateError('A card image is missing. Recapture it before saving.');
+          }
+        }
+      }
+      final sql = await db.database;
+      await sql.transaction((txn) async {
+        // Supplier, contact, images and OCR archive either all commit or none do.
+        final exhibitorId = await txn.insert('exhibitors', candidate.toMap()..remove('id'));
+        if (capture.contactName.isNotEmpty || capture.phone.isNotEmpty ||
+            capture.email.isNotEmpty || capture.whatsapp.isNotEmpty || capture.wechat.isNotEmpty ||
+            (businessCard != null && SupplierProfile.contactFields.keys.any(
+              (key) => businessCard.fields[key]?.isNotEmpty ?? false))) {
+          await txn.insert('contacts', Contact(
+            exhibitorId: exhibitorId,
+            name: capture.contactName.isEmpty ? 'Unnamed company contact' : capture.contactName,
+            designation: capture.contactRole, phone: capture.phone,
+            email: capture.email, whatsapp: capture.whatsapp,
+            wechat: capture.wechat,
+            profileJson: jsonEncode({
+              if (businessCard != null) 'business_card_id': businessCard.id,
+              'details': {
+                if (businessCard != null) ...SupplierProfile.contactSubset(businessCard.fields),
+                'person': capture.contactName, 'role': capture.contactRole,
+                'phone': capture.phone, 'email': capture.email,
+                'whatsapp': capture.whatsapp, 'wechat': capture.wechat,
+              },
+              if (businessCard != null) 'language': businessCard.fields['language'] ?? '',
+            }),
+          ).toMap()..remove('id'));
+        }
+        if (capture.productName.isNotEmpty) {
+          await txn.insert('products', Product(
+            exhibitorId: exhibitorId, name: capture.productName,
+            modelCode: capture.model, moq: capture.moq,
+            quotedPrice: capture.price, leadTime: capture.leadTime,
+            paymentTerms: capture.paymentTerms,
+            shortlisted: capture.shortlisted, rating: capture.rating,
+            detailsJson: jsonEncode(capture.productDetails),
+          ).toMap()..remove('id'));
+        }
+        if (capture.nextAction != 'No action') {
+          await txn.insert('meetings', Meeting(
+            exhibitorId: exhibitorId, meetingDate: DateTime.now(),
+            followUpDate: capture.followUpDate, outcome: capture.nextAction,
+            priority: capture.shortlisted ? 'High' : 'Medium',
+            notes: capture.meetingNotes,
+            commitmentsJson: jsonEncode(capture.meetingCommitments),
+          ).toMap()..remove('id'));
+        }
+        if (businessCard != null) {
+          for (final side in businessCard.sides.keys) {
+            await txn.insert('attachments', Attachment(
+              ownerType: 'exhibitor', ownerId: exhibitorId, kind: 'image',
+              path: businessCard.imagePath(side),
+              note: 'Business card $side | ${businessCard.id}',
+              createdAt: DateTime.now(),
+            ).toMap()..remove('id'));
+            if (businessCard.readingPath(side) != businessCard.imagePath(side)) {
+              if (!await File(businessCard.readingPath(side)).exists()) {
+                throw StateError('The corrected card image is missing. Adjust the crop again.');
+              }
+              await txn.insert('attachments', Attachment(
+                ownerType: 'exhibitor', ownerId: exhibitorId, kind: 'image',
+                path: businessCard.readingPath(side),
+                note: 'Business card $side corrected | ${businessCard.id}',
+                createdAt: DateTime.now(),
+              ).toMap()..remove('id'));
+            }
+          }
+        }
+      });
+      if (businessCard != null) {
+        try {
+          await businessCard.markSaved();
+        } catch (_) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              content: Text('Supplier and card saved. Draft cleanup failed; do not save the same draft again.'),
+            ));
+          }
+        }
+      }
+    });
     await CaptureDefaultsService().save(
       tripId: capture.tripId,
       country: capture.country,
