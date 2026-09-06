@@ -9,6 +9,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../data/database.dart';
+import '../data/camera_capture_service.dart';
 import '../data/reminder_service.dart';
 import '../models/models.dart';
 import '../theme/app_theme.dart';
@@ -120,9 +121,11 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
 
   Future<void> _captureBusinessCard(Contact contact) async {
     if (contact.id == null) return;
-    final picked = await ImagePicker().pickImage(
-      source: ImageSource.camera,
-      imageQuality: 75,
+    final picked = await CameraCaptureService.capture(
+      () => ImagePicker().pickImage(
+        source: ImageSource.camera,
+        imageQuality: 75,
+      ),
     );
     if (picked == null) return;
     if (!mounted) return;

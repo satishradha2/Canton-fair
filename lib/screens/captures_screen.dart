@@ -9,6 +9,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../data/database.dart';
+import '../data/camera_capture_service.dart';
 import '../data/cloud_sync_service.dart';
 import '../data/cloud_api_service.dart';
 import '../data/capture_defaults_service.dart';
@@ -1842,11 +1843,14 @@ class _CapturesScreenState extends State<CapturesScreen> {
     final picker = ImagePicker();
     final isVideo = source == 'videoCamera' || source == 'videoGallery';
     if (isVideo) {
-      final picked = await picker.pickVideo(
+      Future<XFile?> pickVideo() => picker.pickVideo(
         source:
             source == 'videoCamera' ? ImageSource.camera : ImageSource.gallery,
         maxDuration: const Duration(minutes: 2),
       );
+      final picked = source == 'videoCamera'
+          ? await CameraCaptureService.capture(pickVideo)
+          : await pickVideo();
       if (picked == null || !mounted) return;
       final root = await getApplicationDocumentsDirectory();
       final targetDir =
@@ -1868,10 +1872,13 @@ class _CapturesScreenState extends State<CapturesScreen> {
       _load();
       return;
     }
-    final picked = await picker.pickImage(
+    Future<XFile?> pickImage() => picker.pickImage(
       source: source == 'camera' ? ImageSource.camera : ImageSource.gallery,
       imageQuality: 70,
     );
+    final picked = source == 'camera'
+        ? await CameraCaptureService.capture(pickImage)
+        : await pickImage();
     if (picked == null || !mounted) return;
 
     final root = await getApplicationDocumentsDirectory();

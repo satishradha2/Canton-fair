@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 import '../data/business_card_parser.dart';
+import '../data/camera_capture_service.dart';
 
 class OcrScreen extends StatefulWidget {
   const OcrScreen({super.key});
@@ -83,7 +84,9 @@ class _OcrScreenState extends State<OcrScreen> {
 
   Future<String?> _extractText() async {
     final picker = ImagePicker();
-    final XFile? image = await picker.pickImage(source: ImageSource.camera);
+    final XFile? image = await CameraCaptureService.capture(
+      () => picker.pickImage(source: ImageSource.camera),
+    );
     if (image == null) return null;
     final inputImage = InputImage.fromFilePath(image.path);
     final recognizer = TextRecognizer();

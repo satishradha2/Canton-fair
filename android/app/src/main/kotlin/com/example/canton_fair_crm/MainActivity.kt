@@ -1,7 +1,14 @@
 package com.example.canton_fair_crm
 
 import android.app.Activity
+import android.app.KeyguardManager
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
+import android.os.Build
+import android.os.PowerManager
+import android.os.SystemClock
 import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -13,6 +20,20 @@ class MainActivity : FlutterFragmentActivity() {
     private val documentPickerRequestCode = 7232
     private var pendingResult: MethodChannel.Result? = null
     private var pendingPrefix = "backup"
+    private var cameraToken: Int? = null
+    private var cameraStartedAt = 0L
+    private var cameraScreenOff = true
+    private var screenReceiverRegistered = false
+    private val screenReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == Intent.ACTION_SCREEN_OFF) cameraScreenOff = true
+        }
+    }
+
+    override fun onDestroy() {
+        if (screenReceiverRegistered) unregisterReceiver(screenReceiver)
+        super.onDestroy()
+    }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
@@ -42,6 +63,36 @@ class MainActivity : FlutterFragmentActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        if (!screenReceiverRegistered) {
+            val filter = IntentFilter(Intent.ACTION_SCREEN_OFF)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                registerReceiver(screenReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+            } else {
+                registerReceiver(screenReceiver, filter)
+            }
+            screenReceiverRegistered = true
+        }
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "canton_fair_crm/camera_lock")
+            .setMethodCallHandler { call, result ->
+                val power = getSystemService(Context.POWER_SERVICE) as PowerManager
+                val keyguard = getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
+                when (call.method) {
+                    "begin" -> {
+                        cameraToken = call.arguments as? Int
+                        cameraStartedAt = SystemClock.elapsedRealtime()
+                        cameraScreenOff = !power.isInteractive || keyguard.isKeyguardLocked
+                        result.success(null)
+                    }
+                    "finish" -> {
+                        val allowed = cameraToken != null && cameraToken == (call.arguments as? Int) &&
+                            !cameraScreenOff && power.isInteractive && !keyguard.isKeyguardLocked &&
+                            SystemClock.elapsedRealtime() - cameraStartedAt < 60_000L
+                        cameraToken = null
+                        result.success(allowed)
+                    }
+                    else -> result.notImplemented()
+                }
+            }
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, backupChannel)
             .setMethodCallHandler { call, result ->
                 if (call.method != "pickBackup" && call.method != "pickDocument") {
