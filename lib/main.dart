@@ -5,6 +5,7 @@ import 'screens/auth_gate.dart';
 import 'data/reminder_service.dart';
 import 'data/team_workspace_service.dart';
 import 'theme/app_theme.dart';
+import 'widgets/app_lock_gate.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -31,7 +32,8 @@ Future<void> main() async {
       debugShowCheckedModeBanner: false,
       theme: buildAppTheme(),
       home: const AuthGate(),
-      builder: (context, child) => ValueListenableBuilder<bool>(
+      builder: (context, child) => AppLockGate(
+        child: ValueListenableBuilder<bool>(
         valueListenable: TeamWorkspaceService.busy,
         builder: (context, busy, _) => PopScope(
           canPop: !busy,
@@ -43,6 +45,7 @@ Future<void> main() async {
             ],
           ]),
         ),
+      ),
       ),
     ),
   );

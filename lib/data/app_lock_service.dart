@@ -1,10 +1,12 @@
 import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:local_auth/local_auth.dart';
 
 class AppLockService {
+  static final changes = ValueNotifier<int>(0);
   static const _pinKey = 'app_lock_pin_hash';
   final FlutterSecureStorage _storage = const FlutterSecureStorage();
   final LocalAuthentication _localAuth = LocalAuthentication();
@@ -14,6 +16,7 @@ class AppLockService {
 
   Future<void> setPin(String pin) async {
     await _storage.write(key: _pinKey, value: _hash(pin));
+    changes.value++;
   }
 
   Future<bool> verifyPin(String pin) async {
@@ -21,7 +24,10 @@ class AppLockService {
     return saved != null && saved == _hash(pin);
   }
 
-  Future<void> disable() => _storage.delete(key: _pinKey);
+  Future<void> disable() async {
+    await _storage.delete(key: _pinKey);
+    changes.value++;
+  }
 
   Future<bool> get canUseBiometrics async {
     try {

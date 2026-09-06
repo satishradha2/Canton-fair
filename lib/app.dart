@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'data/update_service.dart';
-import 'data/app_lock_service.dart';
 import 'data/language_service.dart';
 import 'data/sync_status_service.dart';
 import 'screens/dashboard_screen.dart';
@@ -14,7 +13,6 @@ import 'screens/settings_screen.dart';
 import 'screens/activity_feed_screen.dart';
 import 'screens/sourcing_briefs_screen.dart';
 import 'screens/procurement_workspace_screen.dart';
-import 'widgets/app_lock_screen.dart';
 import 'widgets/enterprise_widgets.dart';
 import 'theme/app_theme.dart';
 
@@ -25,15 +23,11 @@ class CantonFairApp extends StatefulWidget {
   State<CantonFairApp> createState() => _CantonFairAppState();
 }
 
-class _CantonFairAppState extends State<CantonFairApp>
-    with WidgetsBindingObserver {
+class _CantonFairAppState extends State<CantonFairApp> {
   int _index = 0;
   final _updates = UpdateService();
   bool _checkedStartupUpdate = false;
-  final _appLock = AppLockService();
   final _languageService = LanguageService();
-  bool _lockReady = false;
-  bool _locked = false;
   String _language = 'en';
   final ValueNotifier<CaptureQuickAction?> _captureQuickAction =
       ValueNotifier(null);
@@ -52,7 +46,6 @@ class _CantonFairAppState extends State<CantonFairApp>
     AnalyticsScreen(),
     ExportScreen(),
     SettingsScreen(
-      onAppLockChanged: _refreshAppLock,
       onLanguageChanged: _changeLanguage,
     ),
     const ActivityFeedScreen(),
@@ -62,8 +55,6 @@ class _CantonFairAppState extends State<CantonFairApp>
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
-    _refreshAppLock();
     _loadLanguage();
     WidgetsBinding.instance
         .addPostFrameCallback((_) => _checkForStartupUpdate());
@@ -81,7 +72,6 @@ class _CantonFairAppState extends State<CantonFairApp>
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
     _captureQuickAction.dispose();
     super.dispose();
   }
@@ -90,23 +80,6 @@ class _CantonFairAppState extends State<CantonFairApp>
     setState(() => _index = 1);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _captureQuickAction.value = action;
-    });
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused && _lockReady) {
-      _refreshAppLock(lockWhenEnabled: true);
-    }
-  }
-
-  Future<void> _refreshAppLock({bool lockWhenEnabled = false}) async {
-    final enabled = await _appLock.isEnabled;
-    if (!mounted) return;
-    final shouldLock = enabled && (lockWhenEnabled || _locked || !_lockReady);
-    setState(() {
-      _lockReady = true;
-      _locked = shouldLock;
     });
   }
 
@@ -259,12 +232,6 @@ class _CantonFairAppState extends State<CantonFairApp>
 
   @override
   Widget build(BuildContext context) {
-    if (!_lockReady) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
-    }
-    if (_locked) {
-      return AppLockScreen(onUnlocked: () => setState(() => _locked = false));
-    }
     return AppLanguage(
       code: _language,
       child: LayoutBuilder(builder: (context, constraints) {
