@@ -9,6 +9,7 @@ import '../data/supplier_profile.dart';
 import '../data/camera_capture_service.dart';
 import '../widgets/card_ai_panel.dart';
 import 'card_crop_screen.dart';
+import 'supplier_profile_screen.dart';
 
 class OcrScreen extends StatefulWidget {
   const OcrScreen({super.key});
@@ -25,6 +26,8 @@ class _OcrScreenState extends State<OcrScreen> {
   String? _error;
   String? _cropNotice;
   String _status = 'Opening local card draft...';
+  static const _primaryFields = {'name', 'person', 'role', 'email', 'phone',
+    'whatsapp', 'wechat', 'websites', 'address', 'country'};
   static const _fields = <String, String>{
     ...SupplierProfile.companyFields,
     ...SupplierProfile.contactFields,
@@ -78,6 +81,7 @@ class _OcrScreenState extends State<OcrScreen> {
         }
         }
       }
+      if (draft.applyLatestAi() > 0) await draft.save();
       if (mounted) setState(_populate);
     } catch (_) {
       if (mounted) {
@@ -217,7 +221,7 @@ class _OcrScreenState extends State<OcrScreen> {
     }
   }
 
-  Future<void> _useDetails() async {
+  Future<void> _useDetails({bool existing = false}) async {
     if (_busy || _draft == null || ModalRoute.of(context)?.isCurrent != true) return;
     final draft = _draft!;
     if (!draft.sides.containsKey('front') ||
@@ -229,6 +233,9 @@ class _OcrScreenState extends State<OcrScreen> {
       setState(() => _error = 'Enter or confirm the company / supplier name.');
       return;
     }
+    final destination = existing ? await chooseCardSupplier(context, allowCreate: false) : -1;
+    if (!mounted || destination == null) return;
+    draft.supplierDestination = destination;
     setState(() { _busy = true; _status = 'Preserving reviewed details...'; });
     try {
       for (final entry in _controllers.entries) {
@@ -297,7 +304,10 @@ class _OcrScreenState extends State<OcrScreen> {
           },
         ),
         for (final warning in (page?['warnings'] as List? ?? []))
-          Padding(padding: const EdgeInsets.only(top: 8), child: Text(warning.toString())),
+          Padding(padding: const EdgeInsets.only(top: 8), child: Text(
+            side == 'back' && warning.toString().startsWith('Very little text detected.')
+                ? 'Little text on the back. A logo-only back is fine; its image stays attached. If contact details are printed here, check the scan.'
+                : warning.toString())),
         if (page != null) ExpansionTile(
           tilePadding: EdgeInsets.zero, title: const Text('Source text / recognition passes'),
           children: [for (final entry in (page['passes'] as Map? ?? {}).entries)
@@ -314,6 +324,27 @@ class _OcrScreenState extends State<OcrScreen> {
     super.dispose();
   }
 
+  Widget _fieldEditor(MapEntry<String, String> entry, Map<String, List<String>> candidates) {
+    final draft = _draft!;
+    return Padding(padding: const EdgeInsets.only(bottom: 16), child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start, children: [
+        TextField(controller: _controllers[entry.key], enabled: !_busy,
+          minLines: 1, maxLines: SupplierProfile.multiline.contains(entry.key) ? 4 : 1,
+          decoration: InputDecoration(labelText: entry.value,
+            helperText: draft.edited.contains(entry.key) ? 'Manually reviewed / edited' : null),
+          onChanged: (value) => _persistEdit(entry.key, value)),
+        if ((candidates[entry.key]?.length ?? 0) > 1)
+          Wrap(spacing: 6, runSpacing: 4, children: [
+            for (final value in candidates[entry.key]!) ActionChip(label: Text(value),
+              onPressed: _busy ? null : () {
+                _controllers[entry.key]!.text = value;
+                _persistEdit(entry.key, value);
+              }),
+          ]),
+      ],
+    ));
+  }
+
   @override
   Widget build(BuildContext context) {
     final draft = _draft;
@@ -322,6 +353,16 @@ class _OcrScreenState extends State<OcrScreen> {
       canPop: !_busy,
       child: Scaffold(
         appBar: AppBar(title: const Text('Business card capture')),
+        bottomNavigationBar: draft == null ? null : SafeArea(top: false,
+          child: Padding(padding: const EdgeInsets.all(12), child: Column(mainAxisSize: MainAxisSize.min, children: [
+            const Text('Next: review and confirm the supplier save.'),
+            Wrap(spacing: 8, runSpacing: 8, alignment: WrapAlignment.center, children: [
+              FilledButton.icon(onPressed: _busy ? null : () => _useDetails(),
+                icon: const Icon(Icons.add_business_outlined), label: const Text('Save new supplier')),
+              OutlinedButton(onPressed: _busy ? null : () => _useDetails(existing: true),
+                child: const Text('Update existing supplier')),
+            ]),
+          ]))),
         body: SafeArea(child: ListView(padding: const EdgeInsets.all(20), children: [
           Text('Keep the complete card', style: Theme.of(context).textTheme.headlineSmall),
           const SizedBox(height: 8),
@@ -359,32 +400,18 @@ class _OcrScreenState extends State<OcrScreen> {
               onChanged: () { if (mounted) setState(_populate); },
             ),
             const SizedBox(height: 20),
-            Text('Review contact details', style: Theme.of(context).textTheme.titleLarge),
+            Text('Your supplier details', style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 8),
-            const Text('Select alternative readings below a field or edit manually. Additional numbers, addresses and unmapped text are preserved with the card.'),
+            const Text('AI fills untouched fields for you. Check the company, contact and numbers, then choose a save action below. Both card images will follow the supplier.'),
             const SizedBox(height: 16),
-            for (final entry in _fields.entries) ...[
-              TextField(
-                controller: _controllers[entry.key], enabled: !_busy,
-                minLines: 1,
-                maxLines: SupplierProfile.multiline.contains(entry.key) ? 4 : 1,
-                decoration: InputDecoration(labelText: entry.value,
-                  helperText: draft.edited.contains(entry.key) ? 'Manually reviewed / edited' : null),
-                onChanged: (value) => _persistEdit(entry.key, value),
-              ),
-              if ((candidates[entry.key]?.length ?? 0) > 1)
-                Wrap(spacing: 6, runSpacing: 4, children: [
-                  for (final value in candidates[entry.key]!) ActionChip(
-                    label: Text(value), onPressed: _busy ? null : () {
-                      _controllers[entry.key]!.text = value;
-                      _persistEdit(entry.key, value);
-                    },
-                  ),
-                ]),
-              const SizedBox(height: 16),
-            ],
-            FilledButton.icon(onPressed: _busy ? null : _useDetails,
-              icon: const Icon(Icons.fact_check_outlined), label: const Text('Continue to supplier capture')),
+            for (final entry in _fields.entries)
+              if (_primaryFields.contains(entry.key) || (draft.fields[entry.key]?.trim().isNotEmpty ?? false))
+                _fieldEditor(entry, candidates),
+            ExpansionTile(title: const Text('Additional supplier fields'), children: [
+              for (final entry in _fields.entries)
+                if (!_primaryFields.contains(entry.key) && !(draft.fields[entry.key]?.trim().isNotEmpty ?? false))
+                  _fieldEditor(entry, candidates),
+            ]),
             const SizedBox(height: 10),
             const Text('This step saves a local draft, not a supplier. Complete supplier capture to link the card images and details to your records. OCR is processed on-device; saved records follow your existing workspace sync settings.'),
           ],

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../data/business_card_capture.dart';
 import '../data/card_ai_service.dart';
+import '../data/supplier_profile.dart';
 
 class CardAiPanel extends StatefulWidget {
   const CardAiPanel({super.key, required this.draft, required this.enabled,
@@ -47,6 +48,8 @@ class _CardAiPanelState extends State<CardAiPanel>
       final result = await CardAiService.read(draft, translateOnly: translateOnly, language: _language);
       result['input_files'] = inputs;
       draft.aiReadings.add(result);
+      if (!translateOnly) draft.applyLatestAi();
+      if (mounted) widget.onChanged();
       try {
         await draft.save().timeout(const Duration(seconds: 15));
       } on TimeoutException {
@@ -84,7 +87,10 @@ class _CardAiPanelState extends State<CardAiPanel>
       final key = entry.key as String;
       final value = entry.value as String;
       if (value.trim().isEmpty || (field != null && key != field)) continue;
-      if (field == null && (widget.draft.fields[key]?.trim().isNotEmpty ?? false)) continue;
+      if (field == null && (widget.draft.edited.contains(key) ||
+          (widget.draft.fields[key]?.trim().isNotEmpty ?? false))) {
+        continue;
+      }
       widget.draft.fields[key] = value;
       widget.draft.edited.add(key);
     }
@@ -104,9 +110,9 @@ class _CardAiPanelState extends State<CardAiPanel>
     final current = latest != null && widget.draft.matchesAi(latest);
     return Card(child: Padding(padding: const EdgeInsets.all(16), child: Column(
       crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text('OpenAI reading and translation', style: Theme.of(context).textTheme.titleLarge),
+        Text('Fill supplier details with AI', style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(height: 8),
-        const Text('Optional online processing. Nothing is uploaded automatically. Review suggestions before using them; original text and images stay intact.'),
+        const Text('Extraction fills untouched supplier fields automatically. Your manual edits are protected. Review the details before saving; nothing is uploaded without confirmation.'),
         const SizedBox(height: 12),
         DropdownButtonFormField<String>(initialValue: _language, isExpanded: true,
           decoration: const InputDecoration(labelText: 'Translate into'),
@@ -123,15 +129,15 @@ class _CardAiPanelState extends State<CardAiPanel>
         if (_error != null) Padding(padding: const EdgeInsets.only(top: 12), child: Semantics(liveRegion: true, child: Text(_error!))),
         if (latest != null) ...[
           const Divider(),
-          Text('Latest reading: ${latest['model']} / ${latest['target_language']}'),
+          if (current && latest['operation'] == 'extract')
+            const Text('Extraction ready. Review your supplier details below; no further AI request is needed.'),
           if (!current) const Text('The images have changed since this reading. Run AI extraction again before applying suggestions.'),
-          for (final warning in latest['warnings'] as List? ?? []) Text(warning.toString()),
           if (latest['operation'] == 'extract') ...[
             TextButton(onPressed: widget.enabled && current ? () => _apply(latest) : null, child: const Text('Fill blank fields only')),
             ExpansionTile(title: const Text('Review extracted suggestions'), children: [
               for (final entry in (latest['fields'] as Map).entries)
                 if (entry.value.toString().trim().isNotEmpty) ListTile(
-                  title: Text(entry.key.toString()), subtitle: SelectableText(entry.value.toString()),
+                  title: Text(SupplierProfile.companyFields[entry.key] ?? SupplierProfile.contactFields[entry.key] ?? entry.key.toString()), subtitle: SelectableText(entry.value.toString()),
                   trailing: TextButton(onPressed: widget.enabled && current ? () => _apply(latest, field: entry.key as String) : null,
                     child: const Text('Use')),
                 ),
@@ -139,13 +145,16 @@ class _CardAiPanelState extends State<CardAiPanel>
                 ListTile(title: Text(item['label'] as String), subtitle: SelectableText(item['value'] as String)),
             ]),
           ],
-          ExpansionTile(title: const Text('Original transcript and translation'), children: [
+          ExpansionTile(title: const Text('Reading notes, transcript and translation'), children: [
+            ListTile(title: Text('Engine: ${latest['model']} / ${latest['target_language']}'),
+              subtitle: Text('${history.length} cloud readings retained.')),
+            for (final warning in latest['warnings'] as List? ?? [])
+              ListTile(subtitle: Text(warning.toString())),
             for (final side in widget.draft.sides.keys) ListTile(
               title: Text(side), subtitle: SelectableText(
                 'Original:\n${(latest['transcript'] as Map)[side] ?? ''}\n\nTranslation:\n${(latest['translation'] as Map)[side] ?? ''}'),
             ),
           ]),
-          Text('${history.length} cloud reading(s) preserved with this card.'),
         ],
       ],
     )));

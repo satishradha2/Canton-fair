@@ -25,6 +25,7 @@ class BusinessCardCapture {
   String mode = 'Chinese + English';
   String? pendingSide;
   bool backBlank = false;
+  int? supplierDestination;
   Future<void> _writes = Future<void>.value();
 
   static const modes = [
@@ -259,6 +260,24 @@ class BusinessCardCapture {
     for (final key in {...fields.keys, ...suggestions.keys}) {
       if (!edited.contains(key)) fields[key] = suggestions[key] ?? '';
     }
+    applyLatestAi();
+  }
+
+  int applyLatestAi() {
+    for (final reading in aiReadings.reversed) {
+      if (reading['operation'] != 'extract' || !matchesAi(reading)) continue;
+      var count = 0;
+      for (final entry in (reading['fields'] as Map? ?? {}).entries) {
+        if (entry.key is! String || entry.value is! String) continue;
+        final key = entry.key as String;
+        final value = (entry.value as String).trim();
+        if (edited.contains(key) || value.isEmpty || fields[key] == value) continue;
+        fields[key] = value;
+        count++;
+      }
+      return count;
+    }
+    return 0;
   }
 
   Map<String, dynamic> archive({Map<String, String>? reviewedFields}) => {

@@ -174,12 +174,13 @@ class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
 }
 
 /// Null means cancelled; -1 selects the existing new-supplier wizard.
-Future<int?> chooseCardSupplier(BuildContext context) async {
-  return Navigator.of(context).push<int>(MaterialPageRoute(builder: (_) => const _CardSupplierPicker()));
+Future<int?> chooseCardSupplier(BuildContext context, {bool allowCreate = true}) async {
+  return Navigator.of(context).push<int>(MaterialPageRoute(builder: (_) => _CardSupplierPicker(allowCreate: allowCreate)));
 }
 
 class _CardSupplierPicker extends StatefulWidget {
-  const _CardSupplierPicker();
+  const _CardSupplierPicker({required this.allowCreate});
+  final bool allowCreate;
   @override
   State<_CardSupplierPicker> createState() => _CardSupplierPickerState();
 }
@@ -192,7 +193,7 @@ class _CardSupplierPickerState extends State<_CardSupplierPicker> {
     appBar: AppBar(title: const Text('Where should this card be saved?')),
     body: Column(children: [
       Padding(padding: const EdgeInsets.all(16), child: Column(children: [
-        FilledButton.icon(onPressed: () => Navigator.pop(context, -1), icon: const Icon(Icons.add), label: const Text('Create a new supplier')),
+        if (widget.allowCreate) FilledButton.icon(onPressed: () => Navigator.pop(context, -1), icon: const Icon(Icons.add), label: const Text('Create a new supplier')),
         const SizedBox(height: 16),
         TextField(decoration: const InputDecoration(labelText: 'Find an existing supplier', prefixIcon: Icon(Icons.search)),
           onChanged: (value) => setState(() => _query = value.trim().toLowerCase())),
@@ -201,7 +202,7 @@ class _CardSupplierPickerState extends State<_CardSupplierPicker> {
         if (snapshot.hasError) return const Center(child: Text('Could not load suppliers. Reopen this screen to retry.'));
         if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
         final matches = snapshot.data!.where((supplier) => '${supplier.name} ${supplier.booth} ${supplier.country}'.toLowerCase().contains(_query)).toList();
-        if (matches.isEmpty) return const Center(child: Text('No matching suppliers. You can create a new one.'));
+        if (matches.isEmpty) return const Center(child: Text('No matching suppliers. Try another search or go back to create a new supplier.'));
         return ListView.builder(itemCount: matches.length, itemBuilder: (context, index) {
           final supplier = matches[index];
           return ListTile(title: Text(supplier.name), subtitle: Text('Booth ${supplier.booth} | ${supplier.country} | Trip #${supplier.tripId}'),

@@ -678,7 +678,7 @@ class _CapturesScreenState extends State<CapturesScreen> {
         throw StateError('Workspace changed. Reopen the original workspace.');
       }
       if (!mounted) return;
-      final destination = await chooseCardSupplier(context);
+      final destination = card.supplierDestination ?? await chooseCardSupplier(context);
       if (!mounted || destination == null) return;
       if (destination == -1) {
         await _openAddExhibitorSheet(prefill: card.fields, businessCard: card);
