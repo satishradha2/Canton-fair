@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../data/business_card_capture.dart';
@@ -14,7 +16,11 @@ class CardAiPanel extends StatefulWidget {
   State<CardAiPanel> createState() => _CardAiPanelState();
 }
 
-class _CardAiPanelState extends State<CardAiPanel> {
+class _CardAiPanelState extends State<CardAiPanel>
+    with AutomaticKeepAliveClientMixin<CardAiPanel> {
+  @override
+  bool get wantKeepAlive => true;
+
   String _language = 'English';
   String? _error;
   bool _working = false;
@@ -34,13 +40,18 @@ class _CardAiPanelState extends State<CardAiPanel> {
     if (!mounted || consent != true || !widget.enabled) return;
     final draft = widget.draft;
     final inputs = draft.imageIdentities;
+    final onBusyChanged = widget.onBusyChanged;
     setState(() { _working = true; _error = null; });
-    widget.onBusyChanged(true);
+    onBusyChanged(true);
     try {
       final result = await CardAiService.read(draft, translateOnly: translateOnly, language: _language);
       result['input_files'] = inputs;
       draft.aiReadings.add(result);
-      await draft.save();
+      try {
+        await draft.save().timeout(const Duration(seconds: 15));
+      } on TimeoutException {
+        throw StateError('AI reading finished, but saving the local draft is taking too long. The result is shown below; check free storage before leaving. Do not repeat the paid request.');
+      }
       if (mounted) widget.onChanged();
     } catch (error) {
       if (mounted) {
@@ -50,8 +61,10 @@ class _CardAiPanelState extends State<CardAiPanel> {
     } finally {
       if (mounted) {
         setState(() => _working = false);
-        widget.onBusyChanged(false);
       }
+      // The screen callback checks its own mounted state, even if this panel
+      // was removed while awaiting a platform or network operation.
+      onBusyChanged(false);
     }
   }
 
@@ -85,6 +98,7 @@ class _CardAiPanelState extends State<CardAiPanel> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final history = widget.draft.aiReadings;
     final latest = history.isEmpty ? null : history.last;
     final current = latest != null && widget.draft.matchesAi(latest);

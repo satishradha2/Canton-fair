@@ -23,25 +23,39 @@ class CardAiService {
 
   static Future<Map<String, dynamic>> read(BusinessCardCapture draft,
       {required bool translateOnly, required String language}) async {
+    var expired = false;
+    var submitted = false;
+    void checkDeadline() {
+      if (expired) throw StateError('Card reading deadline exceeded.');
+    }
+
+    Future<Map<String, dynamic>> perform() async {
     final workspace = TeamWorkspaceService();
     if (await workspace.scopeKey() != draft.scope) throw StateError('Workspace changed. Reopen the draft.');
+    checkDeadline();
     final team = await workspace.load();
+    checkDeadline();
     final pages = <Map<String, Object?>>[];
     for (final side in ['front', 'back']) {
       if (!draft.sides.containsKey(side)) continue;
+      checkDeadline();
       pages.add({
         'side': side, 'text': translateOnly ? draft.translationSource(side) : draft.sideText(side),
         if (!translateOnly) 'image': await _images.invokeMethod<String>('upload', {'path': draft.readingPath(side)}),
       });
+      checkDeadline();
     }
     if (await workspace.scopeKey() != draft.scope) throw StateError('Workspace changed. Nothing was uploaded.');
+    checkDeadline();
     try {
+      submitted = true;
       final response = await Supabase.instance.client.functions.invoke('card-ai', body: {
         'request_id': _requestId(), 'team_id': team?.id,
         'operation': translateOnly ? 'translate' : 'extract',
         'target_language': language, 'consent': true, 'pages': pages,
       }).timeout(const Duration(seconds: 90));
       if (await workspace.scopeKey() != draft.scope) throw StateError('Workspace changed. Reopen the original workspace.');
+      checkDeadline();
       final data = Map<String, dynamic>.from(response.data as Map);
       if (response.status != 200 || data['error'] != null) throw StateError('Cloud service could not complete this card.');
       return data;
@@ -52,5 +66,16 @@ class CardAiService {
     } on TimeoutException {
       throw StateError('Cloud reading timed out. It may have incurred usage; no automatic retry was made.');
     }
+    }
+
+    // Covers workspace access and native image preparation as well as HTTP.
+    // A timed-out native call may complete later; deadline checks prevent it
+    // from starting a cloud upload after the caller has already stopped waiting.
+    return perform().timeout(const Duration(seconds: 110), onTimeout: () {
+      expired = true;
+      throw StateError(submitted
+          ? 'Cloud reading timed out. It may have incurred usage; no automatic retry was made.'
+          : 'Preparing the card timed out. Nothing was uploaded. Your original images are preserved.');
+    });
   }
 }

@@ -107,10 +107,14 @@ class BusinessCardCapture {
   }
 
   Future<void> useCrop(String side, String path) async {
-    if (p.dirname(path) != directory.path || !await File(path).exists()) {
+    final resolvedDirectory = await directory.resolveSymbolicLinks();
+    final resolvedImage = await File(path).resolveSymbolicLinks();
+    if (!sides.containsKey(side) ||
+        !p.equals(p.dirname(resolvedImage), resolvedDirectory) ||
+        !await File(resolvedImage).exists()) {
       throw StateError('The corrected image is not in this card draft.');
     }
-    sides[side]!['processed_file'] = p.basename(path);
+    sides[side]!['processed_file'] = p.basename(resolvedImage);
     await save();
   }
 

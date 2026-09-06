@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../data/business_card_capture.dart';
@@ -17,6 +18,7 @@ class OcrScreen extends StatefulWidget {
 }
 
 class _OcrScreenState extends State<OcrScreen> {
+  static const _images = MethodChannel('canton_fair_crm/card_image');
   BusinessCardCapture? _draft;
   bool _busy = true;
   String? _error;
@@ -52,6 +54,7 @@ class _OcrScreenState extends State<OcrScreen> {
         final lost = await ImagePicker().retrieveLostData();
         if (lost.files?.isNotEmpty == true) {
           await draft.keepImage(side, lost.files!.first.path);
+          await _autoCrop(draft, side);
           await draft.readSide(side);
         } else {
           draft.pendingSide = null;
@@ -104,12 +107,7 @@ class _OcrScreenState extends State<OcrScreen> {
         return;
       }
       await draft.keepImage(side, photo.path);
-      if (mounted && Platform.isAndroid) {
-        final corrected = await Navigator.of(context).push<String>(MaterialPageRoute(
-          builder: (_) => CardCropScreen(path: draft.imagePath(side)),
-        ));
-        if (corrected != null) await draft.useCrop(side, corrected);
-      }
+      await _autoCrop(draft, side);
       if (mounted) setState(() => _status = 'Reading $side on-device...');
       await draft.readSide(side);
       if (mounted) setState(_populate);
@@ -119,6 +117,33 @@ class _OcrScreenState extends State<OcrScreen> {
       }
     } finally {
       if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _autoCrop(BusinessCardCapture draft, String side) async {
+    if (!Platform.isAndroid) return;
+    if (mounted) setState(() => _status = 'Automatically cropping $side...');
+    try {
+      final prepared = await _images.invokeMapMethod<String, dynamic>(
+        'prepare', {'path': draft.imagePath(side)},
+      ).timeout(const Duration(seconds: 20));
+      if (prepared == null || prepared['detected'] != true) {
+        if (mounted) {
+          setState(() => _error =
+              'Could not confidently detect the $side edges. Reading the original instead. Adjust crop is optional.');
+        }
+        return;
+      }
+      final corrected = await _images.invokeMethod<String>('crop', {
+        'path': prepared['path'], 'corners': prepared['corners'],
+      }).timeout(const Duration(seconds: 20));
+      if (corrected == null) throw StateError('No corrected image returned.');
+      await draft.useCrop(side, corrected);
+    } catch (_) {
+      if (mounted) {
+        setState(() => _error =
+            'Automatic crop was unavailable for the $side. Reading the preserved original instead. You can optionally adjust the crop later.');
+      }
     }
   }
 
@@ -284,6 +309,7 @@ class _OcrScreenState extends State<OcrScreen> {
             const SizedBox(height: 12),
             _sidePanel('front'), _sidePanel('back'),
             CardAiPanel(
+              key: ValueKey('card-ai-${draft.id}'),
               draft: draft, enabled: !_busy,
               onBusyChanged: (value) {
                 if (mounted) setState(() { _busy = value; _status = 'Reading with OpenAI...'; });
