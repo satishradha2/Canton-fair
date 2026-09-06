@@ -26,8 +26,7 @@ class _OcrScreenState extends State<OcrScreen> {
   String? _error;
   String? _cropNotice;
   String _status = 'Opening local card draft...';
-  static const _primaryFields = {'name', 'person', 'role', 'email', 'phone',
-    'whatsapp', 'wechat', 'websites', 'address', 'country'};
+  static const _primaryFields = {'name', 'person', 'role', 'email', 'phone'};
   static const _fields = <String, String>{
     ...SupplierProfile.companyFields,
     ...SupplierProfile.contactFields,
@@ -267,18 +266,16 @@ class _OcrScreenState extends State<OcrScreen> {
     return Card(child: Padding(
       padding: const EdgeInsets.all(16),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(side == 'front' ? '01 / FRONT' : '02 / BACK', style: Theme.of(context).textTheme.titleMedium),
+        Text(side == 'front' ? 'Front of card' : 'Back of card', style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: 12),
         if (page != null) ...[
           InkWell(onTap: _busy ? null : () => _preview(side), child: SizedBox(
-            height: 170, width: double.infinity,
+            height: 130, width: double.infinity,
             child: Image.file(File(draft.imagePath(side)), fit: BoxFit.contain,
               cacheWidth: 1000,
               errorBuilder: (_, error, stack) => const Center(child: Text('Original unavailable. Capture again.'))),
           )),
-          Text(page['capture_method'] == 'live_scanner'
-              ? 'Accepted card scan. Only the cropped image is saved. Tap to zoom.'
-              : 'Tap the original to zoom. Retaking does not erase manual edits.'),
+          const Text('Tap image to enlarge.'),
         ],
         const SizedBox(height: 12),
         Wrap(spacing: 8, runSpacing: 8, children: [
@@ -286,12 +283,7 @@ class _OcrScreenState extends State<OcrScreen> {
             icon: const Icon(Icons.camera_alt_outlined), label: Text(page == null ? 'Capture $side' : 'Retake $side')),
           OutlinedButton.icon(onPressed: _busy ? null : () => _capture(side, ImageSource.gallery),
             icon: const Icon(Icons.photo_library_outlined), label: const Text('Import image')),
-          if (page != null) TextButton(onPressed: _busy ? null : () => _reread(side), child: const Text('Read again')),
-          if (page != null && Platform.isAndroid) TextButton(onPressed: _busy ? null : () => _crop(side), child: const Text('Adjust crop')),
         ]),
-        if (page?['processed_file'] != null) Text(page?['crop_verified'] == true
-            ? 'A corrected copy passed the text-retention check and is used for reading. The preview above is the preserved original.'
-            : 'The crop is retained, but reading uses the original until the text-retention check passes.'),
         if (side == 'back' && page == null) CheckboxListTile(
           contentPadding: EdgeInsets.zero,
           title: const Text('The back is blank / this is a single-sided card'),
@@ -303,14 +295,19 @@ class _OcrScreenState extends State<OcrScreen> {
             }
           },
         ),
-        for (final warning in (page?['warnings'] as List? ?? []))
-          Padding(padding: const EdgeInsets.only(top: 8), child: Text(
-            side == 'back' && warning.toString().startsWith('Very little text detected.')
-                ? 'Little text on the back. A logo-only back is fine; its image stays attached. If contact details are printed here, check the scan.'
-                : warning.toString())),
         if (page != null) ExpansionTile(
-          tilePadding: EdgeInsets.zero, title: const Text('Source text / recognition passes'),
-          children: [for (final entry in (page['passes'] as Map? ?? {}).entries)
+          tilePadding: EdgeInsets.zero, title: const Text('Scan options and reading notes'),
+          children: [
+            Wrap(spacing: 8, children: [
+              TextButton(onPressed: _busy ? null : () => _reread(side), child: const Text('Read again')),
+              if (Platform.isAndroid) TextButton(onPressed: _busy ? null : () => _crop(side), child: const Text('Adjust crop')),
+            ]),
+            if (page['processed_file'] != null) ListTile(subtitle: Text(page['crop_verified'] == true
+                ? 'The corrected copy is used for reading.' : 'The original is used because crop verification was inconclusive.')),
+            for (final warning in (page['warnings'] as List? ?? []))
+              ListTile(subtitle: Text(side == 'back' && warning.toString().startsWith('Very little text detected.')
+                  ? 'Little text detected. A logo-only back is fine; the image is retained.' : warning.toString())),
+            for (final entry in (page['passes'] as Map? ?? {}).entries)
             ListTile(title: Text(entry.key.toString()),
               subtitle: SelectableText((entry.value as Map)['text'] as String? ?? ''))],
         ),
@@ -352,10 +349,11 @@ class _OcrScreenState extends State<OcrScreen> {
     return PopScope(
       canPop: !_busy,
       child: Scaffold(
-        appBar: AppBar(title: const Text('Business card capture')),
+        appBar: AppBar(title: const Text('Scan business card')),
         bottomNavigationBar: draft == null ? null : SafeArea(top: false,
           child: Padding(padding: const EdgeInsets.all(12), child: Column(mainAxisSize: MainAxisSize.min, children: [
-            const Text('Next: review and confirm the supplier save.'),
+            Text('Review before saving', style: Theme.of(context).textTheme.labelMedium),
+            const SizedBox(height: 8),
             Wrap(spacing: 8, runSpacing: 8, alignment: WrapAlignment.center, children: [
               FilledButton.icon(onPressed: _busy ? null : () => _useDetails(),
                 icon: const Icon(Icons.add_business_outlined), label: const Text('Save new supplier')),
@@ -364,9 +362,10 @@ class _OcrScreenState extends State<OcrScreen> {
             ]),
           ]))),
         body: SafeArea(child: ListView(padding: const EdgeInsets.all(20), children: [
-          Text('Keep the complete card', style: Theme.of(context).textTheme.headlineSmall),
+          Text('Card to supplier', style: Theme.of(context).textTheme.headlineSmall),
           const SizedBox(height: 8),
-          const Text('Scan each side with live edge detection, confirm the crop, then review supplier details. New camera scans retain only the accepted cropped card. Existing photos and gallery imports remain unchanged.'),
+          Text('Scan. Review. Save.', style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+            color: Theme.of(context).colorScheme.onSurfaceVariant)),
           const SizedBox(height: 12),
           if (_busy) ...[const LinearProgressIndicator(), const SizedBox(height: 8), Text(_status)],
           if (_error != null) Padding(padding: const EdgeInsets.symmetric(vertical: 12),
@@ -375,7 +374,45 @@ class _OcrScreenState extends State<OcrScreen> {
             child: Semantics(liveRegion: true, child: Text(_cropNotice!))),
           if (draft != null) ...[
             const SizedBox(height: 16),
-            DropdownButtonFormField<String>(
+            Card(child: ExpansionTile(
+              key: const PageStorageKey('card-images'),
+              initiallyExpanded: draft.sides.isEmpty,
+              leading: const Icon(Icons.contact_page_outlined),
+              title: const Text('Business card images'),
+              subtitle: Text('${draft.sides.length} of 2 sides captured${draft.backBlank ? ' - single-sided card' : ''}'),
+              children: [_sidePanel('front'), _sidePanel('back')],
+            )),
+            const SizedBox(height: 8),
+            CardAiPanel(
+              key: ValueKey('card-ai-${draft.id}'),
+              draft: draft, enabled: !_busy,
+              onBusyChanged: (value) {
+                if (mounted) setState(() { _busy = value; _status = 'Reading with OpenAI...'; });
+              },
+              onChanged: () { if (mounted) setState(_populate); },
+            ),
+            const SizedBox(height: 24),
+            Text('Supplier details', style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 4),
+            Text('Check the extracted details. All fields are editable.',
+              style: Theme.of(context).textTheme.bodySmall),
+            const SizedBox(height: 16),
+            for (final key in _primaryFields)
+              _fieldEditor(MapEntry(key, _fields[key]!), candidates),
+            Card(child: ExpansionTile(
+              key: const PageStorageKey('supplier-extra-fields'),
+              title: const Text('More supplier details'),
+              subtitle: const Text('Address, website, messaging and company information'),
+              childrenPadding: const EdgeInsets.all(16),
+              children: [
+                for (final entry in _fields.entries)
+                  if (!_primaryFields.contains(entry.key)) _fieldEditor(entry, candidates),
+              ],
+            )),
+            const SizedBox(height: 8),
+            ExpansionTile(title: const Text('On-device reading settings'),
+              childrenPadding: const EdgeInsets.symmetric(vertical: 12), children: [
+              DropdownButtonFormField<String>(
               initialValue: draft.mode, isExpanded: true,
               decoration: const InputDecoration(labelText: 'Reading scripts'),
               items: BusinessCardCapture.modes.map((mode) => DropdownMenuItem(value: mode, child: Text(mode))).toList(),
@@ -388,32 +425,11 @@ class _OcrScreenState extends State<OcrScreen> {
               },
             ),
             const SizedBox(height: 8),
-            const Text('After changing scripts, use Read again for each side. Arabic and other unsupported scripts require manual transcription. OCR suggestions are not verified facts.'),
-            const SizedBox(height: 12),
-            _sidePanel('front'), _sidePanel('back'),
-            CardAiPanel(
-              key: ValueKey('card-ai-${draft.id}'),
-              draft: draft, enabled: !_busy,
-              onBusyChanged: (value) {
-                if (mounted) setState(() { _busy = value; _status = 'Reading with OpenAI...'; });
-              },
-              onChanged: () { if (mounted) setState(_populate); },
-            ),
-            const SizedBox(height: 20),
-            Text('Your supplier details', style: Theme.of(context).textTheme.titleLarge),
-            const SizedBox(height: 8),
-            const Text('AI fills untouched fields for you. Check the company, contact and numbers, then choose a save action below. Both card images will follow the supplier.'),
-            const SizedBox(height: 16),
-            for (final entry in _fields.entries)
-              if (_primaryFields.contains(entry.key) || (draft.fields[entry.key]?.trim().isNotEmpty ?? false))
-                _fieldEditor(entry, candidates),
-            ExpansionTile(title: const Text('Additional supplier fields'), children: [
-              for (final entry in _fields.entries)
-                if (!_primaryFields.contains(entry.key) && !(draft.fields[entry.key]?.trim().isNotEmpty ?? false))
-                  _fieldEditor(entry, candidates),
+            const Text('After changing scripts, choose Read again under each image. Use AI for additional languages; review all results before saving.'),
             ]),
             const SizedBox(height: 10),
-            const Text('This step saves a local draft, not a supplier. Complete supplier capture to link the card images and details to your records. OCR is processed on-device; saved records follow your existing workspace sync settings.'),
+            Text('Draft saved on this device. Supplier records are saved after confirmation.',
+              style: Theme.of(context).textTheme.bodySmall),
           ],
         ])),
       ),
