@@ -666,12 +666,10 @@ class _CapturesScreenState extends State<CapturesScreen> {
   }
 
   Future<void> _openOcrCapture() async {
-    final value = await Navigator.of(context)
-        .push<String>(MaterialPageRoute(builder: (_) => const OcrScreen()));
-    if (value == null || value.trim().isEmpty) return;
-    final parsed = await _parseScannerPayload(value);
-    await _openAddExhibitorSheet(prefill: parsed);
-    if (!mounted) return;
+    final details = await Navigator.of(context).push<Map<String, String>>(
+        MaterialPageRoute(builder: (_) => const OcrScreen()));
+    if (!mounted || details == null) return;
+    await _openAddExhibitorSheet(prefill: details);
   }
 
   Future<void> _openCloseTripSheet(int tripId) async {
