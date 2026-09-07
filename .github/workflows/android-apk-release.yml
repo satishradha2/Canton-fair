@@ -94,7 +94,14 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$TAG" "$APK_NAME" \
-            --latest \
-            --title "Canton Fair CRM $TAG" \
-            --notes "Automatic APK build from commit $GITHUB_SHA."
+          # Re-running a workflow keeps its run number and release tag.
+          # Update that release's APK rather than trying to create it again.
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$APK_NAME" --clobber
+          else
+            gh release create "$TAG" "$APK_NAME" \
+              --target "$GITHUB_SHA" \
+              --latest \
+              --title "Canton Fair CRM $TAG" \
+              --notes "Automatic APK build from commit $GITHUB_SHA."
+          fi
