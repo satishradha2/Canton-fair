@@ -10,6 +10,7 @@ import 'screens/followup_screen.dart';
 import 'screens/analytics_screen.dart';
 import 'screens/export_screen.dart';
 import 'screens/settings_screen.dart';
+import 'screens/account_profile_screen.dart';
 import 'screens/activity_feed_screen.dart';
 import 'screens/sourcing_briefs_screen.dart';
 import 'screens/procurement_workspace_screen.dart';
@@ -149,6 +150,12 @@ class _CantonFairAppState extends State<CantonFairApp> {
     title: 'Workspace',
     subtitle: 'Your sourcing tools, team records, and workspace controls. Choose a task to continue.',
     children: [
+      _toolGroup('MY ACCOUNT', [
+        ('My profile', 'Your signed-in account and workspace', Icons.person_outline,
+          () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AccountProfileScreen()))),
+        ('Log out', 'Sign out of this device', Icons.logout, () => confirmAccountLogout(context)),
+      ]),
+      const SizedBox(height: 28),
       _toolGroup('SOURCE & FOLLOW UP', [
         ('Suppliers', 'Contacts, products, files and booth visits', Icons.storefront_outlined, () => setState(() => _index = 1)),
         ('Sourcing briefs', 'Define requirements for your next purchase', Icons.assignment_outlined, () => setState(() => _index = 8)),

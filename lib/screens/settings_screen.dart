@@ -14,6 +14,7 @@ import '../theme/app_theme.dart';
 import '../widgets/enterprise_widgets.dart';
 import 'team_setup_screen.dart';
 import 'sync_status_screen.dart';
+import 'account_profile_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   final Future<void> Function()? onAppLockChanged;
@@ -365,6 +366,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
       subtitle:
           'Device-level controls, app updates, backup readiness, and data governance.',
       children: [
+        SectionPanel(
+          title: 'Account',
+          child: Column(children: [
+            _settingTile(icon: Icons.person_outline, title: 'My profile',
+              subtitle: 'Signed-in user and workspace details', trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AccountProfileScreen()))),
+            _settingTile(icon: Icons.logout, title: 'Log out',
+              subtitle: 'Sign out of this device without deleting offline data',
+              onTap: _syncing || _creatingBackup || _restoringBackup ? null : () => confirmAccountLogout(context)),
+          ]),
+        ),
+        const SizedBox(height: 16),
         SectionPanel(
           title: tr(context, 'system'),
           child: Column(

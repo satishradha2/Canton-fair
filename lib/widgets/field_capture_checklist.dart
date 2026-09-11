@@ -1,9 +1,41 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
+
+import '../data/camera_capture_service.dart';
 
 import '../models/models.dart';
 import '../theme/app_theme.dart';
 
+class FieldCapturePhoto {
+  const FieldCapturePhoto({required this.path, required this.category, this.productKey});
+  final String path;
+  final String category;
+  final String? productKey;
+}
+
+class FieldCaptureProduct {
+  const FieldCaptureProduct({required this.key, required this.fields,
+    required this.rating, required this.shortlisted, required this.bestSeller, required this.newProduct});
+  final String key;
+  final Map<String, String> fields;
+  final int rating;
+  final bool shortlisted;
+  final bool bestSeller;
+  final bool newProduct;
+  String get name => fields['name'] ?? '';
+  Map<String, Object?> get details => {
+    for (final key in ['materials', 'dimensions', 'colours', 'packaging',
+      'carton_dimensions', 'tooling_cost', 'customisation']) key: fields[key] ?? '',
+    'best_seller': bestSeller, 'new_product': newProduct,
+  };
+}
+
 class FieldCaptureResult {
+  final List<FieldCaptureProduct> products;
+  final List<FieldCapturePhoto> photos;
   final int tripId;
   final String name;
   final String booth;
@@ -33,6 +65,8 @@ class FieldCaptureResult {
   final Map<String, Object?> fieldCapture;
 
   const FieldCaptureResult({
+    this.products = const [],
+    this.photos = const [],
     required this.tripId,
     required this.name,
     required this.booth,
@@ -64,6 +98,7 @@ class FieldCaptureResult {
 }
 
 class FieldCaptureChecklistDialog extends StatefulWidget {
+  final String captureScope;
   final List<Trip> trips;
   final int selectedTripId;
   final String defaultCountry;
@@ -71,6 +106,7 @@ class FieldCaptureChecklistDialog extends StatefulWidget {
 
   const FieldCaptureChecklistDialog({
     super.key,
+    required this.captureScope,
     required this.trips,
     required this.selectedTripId,
     required this.defaultCountry,
@@ -95,6 +131,25 @@ class _FieldCaptureChecklistDialogState
   var _nextAction = 'Follow up';
   DateTime? _followUpDate;
   final _checked = <String>{};
+  final _photos = <FieldCapturePhoto>[];
+  final _products = <FieldCaptureProduct>[];
+  String _productKey = 'product_${DateTime.now().microsecondsSinceEpoch}';
+  int _productRating = 0;
+  bool _productShortlisted = false;
+  final _scroll = ScrollController();
+  bool _capturing = false;
+  String? _error;
+  static const _titles = ['Supplier & booth', 'Company profile', 'Contact person',
+    'Product & pricing', 'Certifications', 'Conversation', 'Review & save'];
+  static const _descriptions = [
+    'Identify the supplier and remember where you met.',
+    'Record capabilities relevant to your sourcing needs.',
+    'Keep the right contact and their preferred communication details.',
+    'Capture the product, specifications and indicative terms.',
+    'Record what you saw. Verification can follow after the fair.',
+    'Summarize the discussion and commitments on both sides.',
+    'Check the essentials and choose the next action.',
+  ];
 
   late final TextEditingController _name;
   late final TextEditingController _booth;
@@ -157,6 +212,7 @@ class _FieldCaptureChecklistDialogState
 
   @override
   void dispose() {
+    _scroll.dispose();
     for (final controller in [
       _name,
       _booth,
@@ -214,14 +270,24 @@ class _FieldCaptureChecklistDialogState
   }
 
   void _finish() {
-    if (!_formKey.currentState!.validate()) {
+    if (_name.text.trim().isEmpty) {
       setState(() => _step = 0);
+      setState(() => _error = 'Enter a supplier name before saving.');
+      if (_scroll.hasClients) _scroll.jumpTo(0);
       return;
     }
+    if (!_commitProduct()) {
+      setState(() { _step = 3; _error = 'Enter a product name to link the product photos.'; });
+      if (_scroll.hasClients) _scroll.jumpTo(0);
+      return;
+    }
+    if (!_formKey.currentState!.validate()) return;
     final checklist = _checked.toList()..sort();
     Navigator.pop(
       context,
       FieldCaptureResult(
+        products: List.unmodifiable(_products),
+        photos: List.unmodifiable(_photos),
         tripId: _tripId,
         name: _name.text.trim(),
         booth: _booth.text.trim(),
@@ -291,6 +357,7 @@ class _FieldCaptureChecklistDialogState
       );
 
   Widget _basicStep() => Column(
+        spacing: 16,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text('Supplier and booth',
@@ -300,6 +367,7 @@ class _FieldCaptureChecklistDialogState
             const Text('Create a trip first to save a supplier.')
           else
             DropdownButtonFormField<int>(
+              isExpanded: true,
               initialValue: _tripId,
               decoration: const InputDecoration(labelText: 'Trip'),
               items: widget.trips
@@ -328,15 +396,18 @@ class _FieldCaptureChecklistDialogState
           TextFormField(
               controller: _country,
               decoration: const InputDecoration(labelText: 'Country')),
+          _photoSection('stand', 'Expo stand photos', 'Remember the booth, signage and display.'),
         ],
       );
 
   Widget _companyStep() => Column(
+        spacing: 16,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text('Company and capability',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
           DropdownButtonFormField<String>(
+            isExpanded: true,
             initialValue: _companyType,
             decoration: const InputDecoration(labelText: 'Company type'),
             items: const ['Not recorded', 'Manufacturer', 'Trading company']
@@ -364,6 +435,7 @@ class _FieldCaptureChecklistDialogState
               controller: _factorySize,
               decoration: const InputDecoration(labelText: 'Factory size')),
           DropdownButtonFormField<String>(
+            isExpanded: true,
             initialValue: _oemOdm,
             decoration: const InputDecoration(labelText: 'OEM / ODM'),
             items: const ['Not recorded', 'OEM', 'ODM', 'OEM + ODM', 'No']
@@ -373,6 +445,7 @@ class _FieldCaptureChecklistDialogState
             onChanged: (value) => setState(() => _oemOdm = value ?? _oemOdm),
           ),
           DropdownButtonFormField<String>(
+            isExpanded: true,
             initialValue: _auditStatus,
             decoration:
                 const InputDecoration(labelText: 'Factory audit status'),
@@ -393,6 +466,7 @@ class _FieldCaptureChecklistDialogState
       );
 
   Widget _contactStep() => Column(
+        spacing: 16,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text('Person met',
@@ -420,21 +494,37 @@ class _FieldCaptureChecklistDialogState
               controller: _email,
               keyboardType: TextInputType.emailAddress,
               decoration: const InputDecoration(labelText: 'Email')),
+          _photoSection('person', 'Person you met', 'Ask permission before taking or saving their photo.'),
         ],
       );
 
   Widget _productStep() => Column(
+        spacing: 16,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text('Product and commercial terms',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
           const SizedBox(height: 10),
+          Text('${_products.length} products added', style: Theme.of(context).textTheme.titleSmall),
+          for (final product in _products) Card(child: ListTile(
+            title: Text(product.name),
+            subtitle: Text('${product.fields['model'] ?? ''} | ${product.rating}/5${product.shortlisted ? " | Shortlisted" : ""}\n${_photos.where((photo) => photo.productKey == product.key).length} photos'),
+            isThreeLine: true,
+            trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+              IconButton(tooltip: 'Edit product', onPressed: () => _editProduct(product), icon: const Icon(Icons.edit_outlined)),
+              IconButton(tooltip: 'Remove product', onPressed: () => _removeProduct(product), icon: const Icon(Icons.delete_outline)),
+            ]),
+          )),
+          const Divider(),
+          Text(_products.any((product) => product.key == _productKey) ? 'Edit product' : 'Add a product',
+            style: Theme.of(context).textTheme.titleMedium),
           TextFormField(
               controller: _productName,
               decoration: const InputDecoration(labelText: 'Product seen')),
           TextFormField(
               controller: _model,
               decoration: const InputDecoration(labelText: 'Model / SKU')),
+          _photoSection('product', 'Product photos', 'Add multiple views, packaging and product labels.'),
           TextFormField(
               controller: _materials,
               decoration: const InputDecoration(labelText: 'Materials')),
@@ -490,10 +580,27 @@ class _FieldCaptureChecklistDialogState
           TextFormField(
               controller: _paymentTerms,
               decoration: const InputDecoration(labelText: 'Payment terms')),
+          DropdownButtonFormField<int>(key: ValueKey('rating-$_productKey-$_productRating'),
+            initialValue: _productRating, isExpanded: true,
+            decoration: const InputDecoration(labelText: 'Product rating'),
+            items: List.generate(6, (value) => DropdownMenuItem(value: value, child: Text('$value / 5'))),
+            onChanged: (value) => setState(() => _productRating = value ?? 0)),
+          SwitchListTile.adaptive(contentPadding: EdgeInsets.zero,
+            title: const Text('Shortlist this product'), value: _productShortlisted,
+            onChanged: (value) => setState(() => _productShortlisted = value)),
+          FilledButton.tonalIcon(onPressed: () {
+            if (_productName.text.trim().isEmpty) {
+              setState(() => _error = 'Enter a product name before adding it.');
+              return;
+            }
+            if (_commitProduct()) setState(() => _error = null);
+          }, icon: const Icon(Icons.add), label: const Text('Save product & add another')),
+          const Text('Next also includes the product currently being edited. Each product has its own photos and shortlist decision.'),
         ],
       );
 
   Widget _certificateStep() => Column(
+        spacing: 16,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text('Certificates observed at the booth',
@@ -511,6 +618,7 @@ class _FieldCaptureChecklistDialogState
       );
 
   Widget _meetingStep() => Column(
+        spacing: 16,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text('Meeting outcome and commitments',
@@ -559,11 +667,26 @@ class _FieldCaptureChecklistDialogState
       );
 
   Widget _decisionStep() => Column(
+        spacing: 16,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text('Review and next action',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+          Container(width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(color: Theme.of(context).colorScheme.surfaceContainerLow,
+              borderRadius: BorderRadius.circular(12)),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, spacing: 8, children: [
+              Text(_name.text.trim().isEmpty ? 'Supplier name missing' : _name.text.trim(),
+                style: Theme.of(context).textTheme.titleMedium),
+              Text('Booth: ${_booth.text.trim().isEmpty ? "Not recorded" : _booth.text.trim()}'),
+              if (_contactName.text.trim().isNotEmpty) Text('Contact: ${_contactName.text.trim()}'),
+              Text('${_products.length} products'),
+              for (final product in _products) Text('${product.name} | ${product.rating}/5${product.shortlisted ? " | Shortlisted" : ""}'),
+              Text('${_photos.length} photos attached'),
+            ])),
           DropdownButtonFormField<int>(
+            isExpanded: true,
             initialValue: _rating,
             decoration: const InputDecoration(labelText: 'Initial rating'),
             items: List.generate(
@@ -579,6 +702,7 @@ class _FieldCaptureChecklistDialogState
             onChanged: (value) => setState(() => _shortlisted = value ?? false),
           ),
           DropdownButtonFormField<String>(
+            isExpanded: true,
             initialValue: _nextAction,
             decoration: const InputDecoration(labelText: 'Next action'),
             items: const [
@@ -601,55 +725,184 @@ class _FieldCaptureChecklistDialogState
               icon: const Icon(Icons.event_available_outlined),
               label: Text(_dateLabel(_followUpDate)),
             ),
+          TextFormField(controller: _notes, minLines: 2, maxLines: 4,
+            decoration: const InputDecoration(labelText: 'Additional supplier notes')),
         ],
       );
 
+  Future<void> _addPhoto(String category, ImageSource source) async {
+    if (_capturing) return;
+    setState(() { _capturing = true; _error = null; });
+    try {
+      Future<XFile?> pick() => ImagePicker().pickImage(source: source, imageQuality: 90, maxWidth: 2400);
+      final image = source == ImageSource.camera ? await CameraCaptureService.capture(pick) : await pick();
+      if (image == null || !mounted) return;
+      final root = await getApplicationDocumentsDirectory();
+      final folder = Directory('${root.path}/attachments/${widget.captureScope}/field_photos');
+      await folder.create(recursive: true);
+      final suffix = image.path.split('.').last.toLowerCase();
+      final extension = RegExp(r'^[a-z0-9]{1,8}$').hasMatch(suffix) ? suffix : 'jpg';
+      final saved = await File(image.path).copy('${folder.path}/${category}_${DateTime.now().microsecondsSinceEpoch}.$extension');
+      if (mounted) {
+        setState(() => _photos.add(FieldCapturePhoto(path: saved.path, category: category,
+            productKey: category == 'product' ? _productKey : null)));
+      }
+    } catch (_) {
+      if (mounted) setState(() => _error = 'Could not add the photo. Existing entries are unchanged; please retry.');
+    } finally {
+      if (mounted) setState(() => _capturing = false);
+    }
+  }
+
+  Widget _photoSection(String category, String title, String description) {
+    final photos = _photos.where((photo) => photo.category == category &&
+        (category != 'product' || photo.productKey == _productKey)).toList();
+    return Container(width: double.infinity, padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(color: Theme.of(context).colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant)),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, spacing: 12, children: [
+        Text(title, style: Theme.of(context).textTheme.titleSmall),
+        Text(description, style: Theme.of(context).textTheme.bodySmall),
+        Wrap(spacing: 8, runSpacing: 8, children: [
+          OutlinedButton.icon(onPressed: _capturing ? null : () => _addPhoto(category, ImageSource.camera),
+            icon: const Icon(Icons.add_a_photo_outlined), label: const Text('Take photo')),
+          TextButton.icon(onPressed: _capturing ? null : () => _addPhoto(category, ImageSource.gallery),
+            icon: const Icon(Icons.photo_library_outlined), label: const Text('From gallery')),
+        ]),
+        if (photos.isNotEmpty) Wrap(spacing: 12, runSpacing: 12, children: [
+          for (final photo in photos) SizedBox(width: 112, child: Column(children: [
+            ClipRRect(borderRadius: BorderRadius.circular(8), child: Image.file(File(photo.path),
+              width: 112, height: 88, fit: BoxFit.cover, cacheWidth: 336,
+              errorBuilder: (_, error, stack) => const SizedBox(height: 88, child: Center(child: Text('Photo unavailable'))))),
+            TextButton(onPressed: _capturing ? null : () => setState(() => _photos.remove(photo)),
+              child: const Text('Remove')),
+          ])),
+        ]),
+      ]));
+  }
+
+  void _move(int direction) {
+    if (direction > 0 && !_formKey.currentState!.validate()) return;
+    if (direction > 0 && _step == 3 && !_commitProduct()) return;
+    FocusScope.of(context).unfocus();
+    setState(() { _step += direction; _error = null; });
+    if (_scroll.hasClients) _scroll.jumpTo(0);
+  }
+
+  Map<String, TextEditingController> get _productControllers => {
+    'name': _productName, 'model': _model, 'price': _price, 'moq': _moq,
+    'lead_time': _leadTime, 'payment_terms': _paymentTerms, 'materials': _materials,
+    'dimensions': _dimensions, 'colours': _colours, 'packaging': _packaging,
+    'carton_dimensions': _cartonDimensions, 'tooling_cost': _toolingCost,
+    'customisation': _customisation,
+  };
+
+  bool _commitProduct() {
+    final fields = {for (final entry in _productControllers.entries) entry.key: entry.value.text.trim()};
+    final hasPhoto = _photos.any((photo) => photo.productKey == _productKey);
+    final hasInput = fields.values.any((value) => value.isNotEmpty) || hasPhoto ||
+        _productRating != 0 || _productShortlisted || _bestSeller || _newProduct;
+    if (!hasInput && !_products.any((product) => product.key == _productKey)) return true;
+    if (fields['name']!.isEmpty) {
+      setState(() => _error = 'Enter a name for this product, or clear its details and photos.');
+      return false;
+    }
+    for (final key in ['price', 'moq']) {
+      final value = fields[key]!;
+      final number = double.tryParse(value);
+      if (value.isNotEmpty && (number == null || !number.isFinite || number < 0)) {
+        setState(() => _error = 'Enter a valid non-negative ${key == "price" ? "price" : "MOQ"}.');
+        return false;
+      }
+    }
+    final product = FieldCaptureProduct(key: _productKey, fields: Map.unmodifiable(fields),
+        rating: _productRating, shortlisted: _productShortlisted, bestSeller: _bestSeller, newProduct: _newProduct);
+    final index = _products.indexWhere((item) => item.key == _productKey);
+    if (index < 0) { _products.add(product); } else { _products[index] = product; }
+    _resetProduct();
+    return true;
+  }
+
+  void _resetProduct() {
+    for (final controller in _productControllers.values) { controller.clear(); }
+    _productKey = 'product_${DateTime.now().microsecondsSinceEpoch}';
+    _productRating = 0;
+    _productShortlisted = false;
+    _bestSeller = false;
+    _newProduct = false;
+  }
+
+  void _editProduct(FieldCaptureProduct product) {
+    if (_productKey != product.key && !_commitProduct()) return;
+    setState(() {
+      _productKey = product.key;
+      for (final entry in _productControllers.entries) { entry.value.text = product.fields[entry.key] ?? ''; }
+      _productRating = product.rating;
+      _productShortlisted = product.shortlisted;
+      _bestSeller = product.bestSeller;
+      _newProduct = product.newProduct;
+      _error = null;
+    });
+  }
+
+  Future<void> _removeProduct(FieldCaptureProduct product) async {
+    final remove = await showDialog<bool>(context: context, builder: (context) => AlertDialog(
+      title: const Text('Remove product?'), content: Text('Remove ${product.name} and its photos from this capture?'),
+      actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Keep')),
+        FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Remove'))],
+    ));
+    if (!mounted || remove != true) return;
+    setState(() {
+      _products.removeWhere((item) => item.key == product.key);
+      _photos.removeWhere((photo) => photo.productKey == product.key);
+      if (_productKey == product.key) _resetProduct();
+    });
+  }
+
   @override
-  Widget build(BuildContext context) => AlertDialog(
-        title: const Text('Canton Fair capture'),
-        content: Form(
-          key: _formKey,
-          child: SizedBox(
-            width: 390,
-            child: SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _stepHeader(),
-                  const SizedBox(height: 18),
-                  IndexedStack(
-                    index: _step,
-                    children: [
-                      _basicStep(),
-                      _companyStep(),
-                      _contactStep(),
-                      _productStep(),
-                      _certificateStep(),
-                      _meetingStep(),
-                      _decisionStep(),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel')),
-          if (_step > 0)
-            TextButton(
-                onPressed: () => setState(() => _step--),
-                child: const Text('Back')),
-          FilledButton(
-            onPressed: widget.trips.isEmpty
-                ? null
-                : _step == 6
-                    ? _finish
-                    : () => setState(() => _step++),
-            child: Text(_step == 6 ? 'Save capture' : 'Next'),
-          ),
-        ],
-      );
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final steps = [_basicStep, _companyStep, _contactStep, _productStep,
+      _certificateStep, _meetingStep, _decisionStep];
+    return PopScope(canPop: !_capturing, child: Dialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 24),
+      clipBehavior: Clip.antiAlias,
+      child: SizedBox(width: 720, height: MediaQuery.sizeOf(context).height * 0.9,
+        child: Column(children: [
+          Padding(padding: const EdgeInsets.fromLTRB(24, 20, 16, 16), child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                Expanded(child: Text('Supplier capture', style: theme.textTheme.titleLarge)),
+                IconButton(tooltip: 'Cancel capture', onPressed: _capturing ? null : () => Navigator.pop(context),
+                  icon: const Icon(Icons.close)),
+              ]),
+              _stepHeader(),
+              const SizedBox(height: 12),
+              Text(_titles[_step], style: theme.textTheme.titleMedium),
+              const SizedBox(height: 4),
+              Text(_descriptions[_step], style: theme.textTheme.bodySmall),
+            ])),
+          const Divider(height: 1),
+          if (_capturing) const LinearProgressIndicator(),
+          if (_error != null) Padding(padding: const EdgeInsets.all(12),
+            child: Semantics(liveRegion: true, child: Text(_error!, style: TextStyle(color: theme.colorScheme.error)))),
+          Expanded(child: AbsorbPointer(absorbing: _capturing, child: Form(key: _formKey,
+            child: SingleChildScrollView(controller: _scroll,
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+              padding: const EdgeInsets.all(24),
+              child: KeyedSubtree(key: ValueKey(_step), child: steps[_step]()),
+            )))),
+          const Divider(height: 1),
+          SafeArea(top: false, child: Padding(padding: const EdgeInsets.all(16), child: Row(children: [
+            TextButton(onPressed: _capturing ? null : () => Navigator.pop(context), child: const Text('Cancel')),
+            const Spacer(),
+            if (_step > 0) TextButton(onPressed: _capturing ? null : () => _move(-1), child: const Text('Back')),
+            const SizedBox(width: 8),
+            FilledButton(onPressed: _capturing || widget.trips.isEmpty ? null : _step == 6 ? _finish : () => _move(1),
+              child: Text(_step == 6 ? 'Save capture' : 'Next')),
+          ]))),
+        ])),
+    ));
+  }
 }

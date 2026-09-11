@@ -746,62 +746,112 @@ class _CapturesScreenState extends State<CapturesScreen> {
     String start = '';
     String end = '';
     String notes = '';
+    bool saving = false;
+    String? error;
     await showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(tr(context, 'addTrip')),
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(builder: (ctx, update) {
+        Future<void> chooseDate(bool isStart) async {
+          final earliest = isStart ? DateTime(2000) : _parseDate(start) ?? DateTime(2000);
+          final previous = _parseDate(isStart ? start : end) ?? DateTime.now();
+          final picked = await showDatePicker(context: ctx,
+            initialDate: previous.isBefore(earliest) ? earliest : previous,
+            firstDate: earliest, lastDate: DateTime(2100),
+            helpText: isStart ? 'Trip start date' : 'Trip end date');
+          if (picked == null || !ctx.mounted) return;
+          final text = '${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
+          update(() {
+            if (isStart) {
+              start = text;
+              if (_parseDate(end)?.isBefore(picked) ?? false) end = '';
+            } else {
+              end = text;
+            }
+          });
+        }
+        Widget dateField(bool isStart) {
+          final value = isStart ? start : end;
+          return TextFormField(key: ValueKey('${isStart ? 'start' : 'end'}-$value'),
+            initialValue: value, readOnly: true, enabled: !saving,
+            onTap: () => chooseDate(isStart),
+            decoration: InputDecoration(labelText: isStart ? 'Start date' : 'End date',
+              hintText: 'Select date', prefixIcon: const Icon(Icons.calendar_today_outlined),
+              suffixIcon: value.isEmpty ? null : IconButton(tooltip: 'Clear date',
+                onPressed: saving ? null : () => update(() { if (isStart) { start = ''; } else { end = ''; } }),
+                icon: const Icon(Icons.close, size: 18))));
+        }
+        return PopScope(canPop: !saving, child: AlertDialog(
+        insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+        titlePadding: const EdgeInsets.fromLTRB(24, 24, 16, 8),
+        contentPadding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
+        actionsPadding: const EdgeInsets.fromLTRB(24, 0, 24, 20),
+        title: Row(children: [
+          Container(padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(color: Theme.of(ctx).colorScheme.surfaceContainerLow,
+              borderRadius: BorderRadius.circular(12)),
+            child: const Icon(Icons.flight_takeoff_outlined)),
+          const SizedBox(width: 12),
+          Expanded(child: Text('Create trip', style: Theme.of(ctx).textTheme.titleLarge)),
+        ]),
         content: Form(
           key: formKey,
-          child: SingleChildScrollView(
+          child: SizedBox(width: 480, child: SingleChildScrollView(
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text('Basics',
-                      style: TextStyle(fontWeight: FontWeight.w800)),
-                ),
-                const SizedBox(height: 8),
-                const Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                      'You can add contacts, products, scoring, and follow-ups after saving.',
-                      style: TextStyle(color: AppColors.muted, fontSize: 12)),
-                ),
-                const SizedBox(height: 12),
+                Text('Organize suppliers, visits and follow-ups for your next sourcing trip.',
+                  style: Theme.of(ctx).textTheme.bodySmall),
+                const SizedBox(height: 24),
                 TextFormField(
-                  decoration: const InputDecoration(labelText: 'Trip name'),
+                  initialValue: name, enabled: !saving,
+                  textCapitalization: TextCapitalization.words,
+                  textInputAction: TextInputAction.next,
+                  decoration: const InputDecoration(labelText: 'Trip name',
+                    hintText: 'e.g. Canton Fair - October 2026', prefixIcon: Icon(Icons.work_outline)),
+                  validator: (value) => value == null || value.trim().isEmpty ? 'Enter a trip name' : null,
                   onSaved: (v) => name = v?.trim() ?? name,
                 ),
+                const SizedBox(height: 20),
                 TextFormField(
-                  decoration: const InputDecoration(labelText: 'City'),
+                  initialValue: city, enabled: !saving,
+                  textCapitalization: TextCapitalization.words,
+                  decoration: const InputDecoration(labelText: 'Destination city', prefixIcon: Icon(Icons.location_on_outlined)),
                   onSaved: (v) => city = v?.trim() ?? city,
                 ),
+                const SizedBox(height: 24),
+                Text('Travel dates (optional)', style: Theme.of(ctx).textTheme.titleSmall),
+                const SizedBox(height: 16),
+                dateField(true),
+                const SizedBox(height: 20),
+                dateField(false),
+                const SizedBox(height: 24),
                 TextFormField(
-                  decoration:
-                      const InputDecoration(labelText: 'Start date YYYY-MM-DD'),
-                  onSaved: (v) => start = v?.trim() ?? '',
-                ),
-                TextFormField(
-                  decoration:
-                      const InputDecoration(labelText: 'End date YYYY-MM-DD'),
-                  onSaved: (v) => end = v?.trim() ?? '',
-                ),
-                TextFormField(
-                  decoration: const InputDecoration(labelText: 'Notes'),
+                  enabled: !saving, minLines: 2, maxLines: 4,
+                  textCapitalization: TextCapitalization.sentences,
+                  decoration: const InputDecoration(labelText: 'Notes (optional)',
+                    hintText: 'Sourcing priorities, halls to visit or travel details', alignLabelWithHint: true),
                   onSaved: (v) => notes = v?.trim() ?? '',
                 ),
+                if (error != null) Padding(padding: const EdgeInsets.only(top: 16),
+                  child: Semantics(liveRegion: true, child: Text(error!,
+                    style: TextStyle(color: Theme.of(ctx).colorScheme.error)))),
               ],
             ),
-          ),
+          )),
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx),
+              onPressed: saving ? null : () => Navigator.pop(ctx),
               child: Text(tr(context, 'cancel'))),
-          ElevatedButton(
-            child: Text(tr(context, 'save')),
-            onPressed: () async {
+          FilledButton.icon(
+            icon: saving ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.check),
+            label: Text(saving ? 'Saving...' : 'Create trip'),
+            onPressed: saving ? null : () async {
+              if (formKey.currentState?.validate() != true) return;
               formKey.currentState?.save();
+              update(() { saving = true; error = null; });
+              try {
               final trip = Trip(
                 name: name,
                 city: city,
@@ -814,10 +864,17 @@ class _CapturesScreenState extends State<CapturesScreen> {
               if (!ctx.mounted) return;
               Navigator.pop(ctx);
               _load();
+              } catch (_) {
+                if (ctx.mounted) update(() {
+                  saving = false;
+                  error = 'Could not save the trip. Your entries are kept; please retry.';
+                });
+              }
             },
           ),
         ],
-      ),
+      ));
+      }),
     );
   }
 
@@ -837,6 +894,7 @@ class _CapturesScreenState extends State<CapturesScreen> {
     final seed = prefill ?? {};
     final trips = await _trips;
     final defaults = await CaptureDefaultsService().load();
+    final captureScope = await TeamWorkspaceService().scopeKey();
     if (!mounted) return;
     int selectedTrip = trips.any((trip) => trip.id == defaults.tripId)
         ? defaults.tripId!
@@ -846,6 +904,7 @@ class _CapturesScreenState extends State<CapturesScreen> {
     final capture = await showDialog<FieldCaptureResult>(
       context: context,
       builder: (_) => FieldCaptureChecklistDialog(
+        captureScope: captureScope,
         trips: trips,
         selectedTripId: selectedTrip,
         defaultCountry: defaults.country,
@@ -889,6 +948,12 @@ class _CapturesScreenState extends State<CapturesScreen> {
     final allow = await _showDuplicateCheck(candidate);
     if (!allow || !mounted) return;
     await TeamWorkspaceService.exclusive(() async {
+      if (await TeamWorkspaceService().scopeKey() != captureScope) {
+        throw StateError('Workspace changed. Reopen capture in the original workspace.');
+      }
+      for (final photo in capture.photos) {
+        if (!await File(photo.path).exists()) throw StateError('A captured photo is missing.');
+      }
       if (businessCard != null &&
           await TeamWorkspaceService().scopeKey() != businessCard.scope) {
         throw StateError('Workspace changed. Reopen the card in its original workspace.');
@@ -926,14 +991,15 @@ class _CapturesScreenState extends State<CapturesScreen> {
             }),
           ).toMap()..remove('id'));
         }
-        if (capture.productName.isNotEmpty) {
-          await txn.insert('products', Product(
-            exhibitorId: exhibitorId, name: capture.productName,
-            modelCode: capture.model, moq: capture.moq,
-            quotedPrice: capture.price, leadTime: capture.leadTime,
-            paymentTerms: capture.paymentTerms,
-            shortlisted: capture.shortlisted, rating: capture.rating,
-            detailsJson: jsonEncode(capture.productDetails),
+        final capturedProductIds = <String, int>{};
+        for (final product in capture.products) {
+          capturedProductIds[product.key] = await txn.insert('products', Product(
+            exhibitorId: exhibitorId, name: product.name,
+            modelCode: product.fields['model'] ?? '', moq: double.tryParse(product.fields['moq'] ?? ''),
+            quotedPrice: double.tryParse(product.fields['price'] ?? ''), leadTime: product.fields['lead_time'] ?? '',
+            paymentTerms: product.fields['payment_terms'] ?? '',
+            shortlisted: product.shortlisted, rating: product.rating,
+            detailsJson: jsonEncode(product.details),
           ).toMap()..remove('id'));
         }
         if (capture.nextAction != 'No action') {
@@ -943,6 +1009,21 @@ class _CapturesScreenState extends State<CapturesScreen> {
             priority: capture.shortlisted ? 'High' : 'Medium',
             notes: capture.meetingNotes,
             commitmentsJson: jsonEncode(capture.meetingCommitments),
+          ).toMap()..remove('id'));
+        }
+        for (final photo in capture.photos) {
+          final capturedProductId = capturedProductIds[photo.productKey];
+          if (photo.category == 'product' && capturedProductId == null) {
+            throw StateError('Product photos require a product record.');
+          }
+          await txn.insert('attachments', Attachment(
+            ownerType: photo.category == 'product' ? 'product' : 'exhibitor',
+            ownerId: photo.category == 'product' ? capturedProductId! : exhibitorId,
+            kind: 'image', path: photo.path,
+            note: photo.category == 'stand' ? 'Expo stand / booth'
+                : photo.category == 'person' ? 'Person met: ${capture.contactName}'
+                : 'Product: ${capture.products.firstWhere((product) => product.key == photo.productKey).name}',
+            createdAt: DateTime.now(),
           ).toMap()..remove('id'));
         }
         if (businessCard != null) {
