@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../theme/app_theme.dart';
 
 class StatCard extends StatelessWidget {
   final String label;
@@ -9,11 +8,13 @@ class StatCard extends StatelessWidget {
   const StatCard({super.key, required this.label, required this.value, required this.icon, required this.color});
 
   @override
-  Widget build(BuildContext context) => Container(
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Container(
     padding: const EdgeInsets.all(16),
     decoration: BoxDecoration(
-      color: Colors.white, borderRadius: BorderRadius.circular(14),
-      border: Border.all(color: AppColors.line)),
+      color: colors.surface, borderRadius: BorderRadius.circular(8),
+      border: Border.all(color: colors.outlineVariant)),
     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Row(children: [
         Container(width: 30, height: 30,
@@ -30,4 +31,5 @@ class StatCard extends StatelessWidget {
         style: Theme.of(context).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600)),
     ]),
   );
+  }
 }

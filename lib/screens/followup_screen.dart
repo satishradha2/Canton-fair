@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../data/database.dart';
 import '../data/cloud_api_service.dart';
@@ -22,6 +23,7 @@ class _FollowUpScreenState extends State<FollowUpScreen> {
   final db = TradeDatabase.instance;
   late Future<List<Meeting>> _dueFuture;
   late Future<List<_FollowUpPackCandidate>> _packFuture;
+  final Set<int> _selectedTaskIds = <int>{};
 
   @override
   void initState() {
@@ -40,7 +42,46 @@ class _FollowUpScreenState extends State<FollowUpScreen> {
   Future<void> _completeMeeting(Meeting meeting) async {
     await db.update('meetings', meeting.id!, {'completed': 1});
     await ReminderService.cancel(meeting.id!);
+    await HapticFeedback.mediumImpact();
     _refresh();
+  }
+
+  void _toggleTaskSelection(Meeting meeting) {
+    if (meeting.id == null) return;
+    HapticFeedback.selectionClick();
+    setState(() {
+      if (!_selectedTaskIds.add(meeting.id!)) _selectedTaskIds.remove(meeting.id!);
+    });
+  }
+
+  Future<void> _completeSelected() async {
+    final selected = _selectedTaskIds.toList();
+    for (final id in selected) {
+      await db.update('meetings', id, {'completed': 1});
+      await ReminderService.cancel(id);
+    }
+    await HapticFeedback.mediumImpact();
+    if (!mounted) return;
+    setState(() => _selectedTaskIds.clear());
+    _refresh();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('${selected.length} follow-up${selected.length == 1 ? '' : 's'} completed.')),
+    );
+  }
+
+  Future<void> _postponeSelected() async {
+    final selected = _selectedTaskIds.toList();
+    final tomorrow = DateTime.now().add(const Duration(days: 1));
+    for (final id in selected) {
+      await db.update('meetings', id, {'follow_up_date': tomorrow.toIso8601String()});
+    }
+    await HapticFeedback.selectionClick();
+    if (!mounted) return;
+    setState(() => _selectedTaskIds.clear());
+    _refresh();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('${selected.length} follow-up${selected.length == 1 ? '' : 's'} moved to tomorrow.')),
+    );
   }
 
   Future<void> _postpone(Meeting meeting) async {
@@ -348,6 +389,25 @@ class _FollowUpScreenState extends State<FollowUpScreen> {
             title: tr(context, 'followUpQueue'),
             subtitle:
                 'Complete team task queue. Use Dashboard for today and supplier Meetings for one supplier only.',
+            actions: [
+              if (_selectedTaskIds.isNotEmpty) ...[
+                FilledButton.icon(
+                  onPressed: _completeSelected,
+                  icon: const Icon(Icons.task_alt),
+                  label: Text('Complete ${_selectedTaskIds.length}'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: _postponeSelected,
+                  icon: const Icon(Icons.snooze_outlined),
+                  label: const Text('Tomorrow'),
+                ),
+                TextButton(
+                  onPressed: () => setState(() => _selectedTaskIds.clear()),
+                  child: const Text('Clear selection'),
+                ),
+              ] else
+                const Text('Hold a task to select multiple items.'),
+            ],
             children: [
               _followUpPackSection(),
               const SizedBox(height: 16),
@@ -392,10 +452,22 @@ class _FollowUpScreenState extends State<FollowUpScreen> {
                             color: Colors.white),
                       ),
                       child: Card(
+                        color: _selectedTaskIds.contains(m.id)
+                            ? Theme.of(context).colorScheme.secondaryContainer
+                            : null,
                         child: ListTile(
+                          onLongPress: () => _toggleTaskSelection(m),
+                          onTap: _selectedTaskIds.isEmpty
+                              ? null
+                              : () => _toggleTaskSelection(m),
                           contentPadding: const EdgeInsets.symmetric(
                               horizontal: 14, vertical: 8),
-                          leading: Container(
+                          leading: _selectedTaskIds.isNotEmpty
+                              ? Checkbox(
+                                  value: _selectedTaskIds.contains(m.id),
+                                  onChanged: (_) => _toggleTaskSelection(m),
+                                )
+                              : Container(
                             width: 40,
                             height: 40,
                             decoration: BoxDecoration(

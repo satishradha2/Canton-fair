@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -78,6 +79,7 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
       'decision_reason': reason,
       'shortlisted': decision == 'Shortlist' ? 1 : 0,
     });
+    await HapticFeedback.selectionClick();
     if (mounted) setState(() => _decision = decision);
   }
 
@@ -1586,11 +1588,72 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
         icon: icon,
       );
 
+  Future<void> _openMoreSection(String title, Widget child) =>
+      showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        showDragHandle: true,
+        builder: (context) => SafeArea(
+          child: SizedBox(
+            height: MediaQuery.sizeOf(context).height * 0.84,
+            child: Column(children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
+                child: Row(children: [
+                  Expanded(child: Text(title,
+                      style: Theme.of(context).textTheme.titleLarge)),
+                  IconButton(
+                      tooltip: 'Close',
+                      onPressed: () => Navigator.pop(context),
+                      icon: const Icon(Icons.close)),
+                ]),
+              ),
+              const Divider(),
+              Expanded(child: child),
+            ]),
+          ),
+        ),
+      );
+
+  Widget _moreTab() => ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          const Text('Supplier tools', style: TextStyle(color: AppColors.muted)),
+          const SizedBox(height: 8),
+          _moreTile('Verification & certificates',
+              'Compliance, risk, and certificates', Icons.verified_outlined,
+              () => _openMoreSection('Verification & certificates', _verificationTab())),
+          _moreTile('Samples', 'Requests, shipping, testing, and approval',
+              Icons.inventory_2_outlined,
+              () => _openMoreSection('Samples', _samplesTab())),
+          _moreTile('Purchase readiness', 'Quotes, handover, and purchasing',
+              Icons.shopping_bag_outlined,
+              () => _openMoreSection('Purchase readiness', _purchaseTab())),
+          _moreTile('Supplier scorecard', 'Quality, trust, and sourcing fit',
+              Icons.score_outlined,
+              () => _openMoreSection('Supplier scorecard', _scorecard(widget.supplier))),
+          _moreTile('Supplier timeline', 'Complete record history', Icons.history_outlined,
+              () => _openMoreSection('Supplier timeline', _timelineTab())),
+        ],
+      );
+
+  Widget _moreTile(String title, String subtitle, IconData icon, VoidCallback onTap) =>
+      Card(
+        margin: const EdgeInsets.only(bottom: 10),
+        child: ListTile(
+          leading: Icon(icon, color: AppColors.teal),
+          title: Text(title),
+          subtitle: Text(subtitle),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: onTap,
+        ),
+      );
+
   @override
   Widget build(BuildContext context) {
     final supplier = widget.supplier;
     return DefaultTabController(
-      length: 10,
+      length: 6,
       child: Scaffold(
         appBar: AppBar(
           title:
@@ -1608,13 +1671,9 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
               Tab(text: 'Overview'),
               Tab(text: 'Contacts'),
               Tab(text: 'Products'),
-              Tab(text: 'Meetings'),
+              Tab(text: 'Activity'),
               Tab(text: 'Files'),
-              Tab(text: 'Verification'),
-              Tab(text: 'Samples'),
-              Tab(text: 'Purchase'),
-              Tab(text: 'Scorecard'),
-              Tab(text: 'Timeline'),
+              Tab(text: 'More'),
             ],
           ),
         ),
@@ -1625,11 +1684,7 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
             _productsTab(),
             _meetingsTab(),
             _filesTab(),
-            _verificationTab(),
-            _samplesTab(),
-            _purchaseTab(),
-            _scorecard(supplier),
-            _timelineTab(),
+            _moreTab(),
           ],
         ),
       ),
@@ -1881,6 +1936,43 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
   Widget _overview(Exhibitor supplier) => ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.primaryContainer,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+            ),
+            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Container(
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.primary,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(Icons.storefront_outlined,
+                    color: Theme.of(context).colorScheme.onPrimary),
+              ),
+              const SizedBox(width: 12),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(supplier.name, style: Theme.of(context).textTheme.titleLarge,
+                    maxLines: 2, overflow: TextOverflow.ellipsis),
+                const SizedBox(height: 4),
+                Text([
+                  if (supplier.category.isNotEmpty) supplier.category,
+                  if (supplier.country.isNotEmpty) supplier.country,
+                  if (supplier.booth.isNotEmpty) 'Booth ${supplier.booth}',
+                ].join(' · '), style: Theme.of(context).textTheme.bodySmall),
+              ])),
+              const SizedBox(width: 8),
+              Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                Text('${supplier.rating}/5', style: Theme.of(context).textTheme.titleMedium),
+                const Text('rating', style: TextStyle(fontSize: 11, color: AppColors.muted)),
+              ]),
+            ]),
+          ),
+          const SizedBox(height: 12),
           Wrap(
             spacing: 8,
             runSpacing: 8,
@@ -1923,9 +2015,11 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
                         : AppColors.amber,
               ),
               _verificationChip(),
-            ],
+          ],
           ),
           const SizedBox(height: 18),
+          _quickActions(supplier),
+          const SizedBox(height: 16),
           SectionPanel(
             title: 'Supplier decision',
             subtitle:
@@ -2022,6 +2116,53 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
             ),
           ),
         ],
+      );
+
+  Widget _quickActions(Exhibitor supplier) => SectionPanel(
+        title: 'Quick actions',
+        subtitle: 'Continue the supplier conversation without hunting through sections.',
+        child: FutureBuilder<List<Contact>>(
+          future: _contacts,
+          builder: (context, snapshot) {
+            final contact = (snapshot.data ?? const <Contact>[]).cast<Contact?>().firstWhere(
+                  (item) => item != null &&
+                      (item.phone.isNotEmpty || item.whatsapp.isNotEmpty),
+                  orElse: () => null,
+                );
+            return Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                if (contact?.phone.isNotEmpty == true)
+                  OutlinedButton.icon(
+                    onPressed: () => _openPhone(contact!.phone),
+                    icon: const Icon(Icons.call_outlined),
+                    label: const Text('Call'),
+                  ),
+                if (contact != null &&
+                    (contact.whatsapp.isNotEmpty || contact.phone.isNotEmpty))
+                  OutlinedButton.icon(
+                    onPressed: () => _openPhone(
+                      contact.whatsapp.isNotEmpty ? contact.whatsapp : contact.phone,
+                      whatsapp: true,
+                    ),
+                    icon: const Icon(Icons.chat_outlined),
+                    label: const Text('WhatsApp'),
+                  ),
+                OutlinedButton.icon(
+                  onPressed: _scheduleFactoryVisit,
+                  icon: const Icon(Icons.event_available_outlined),
+                  label: const Text('Schedule visit'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: _editSupplierProfile,
+                  icon: const Icon(Icons.edit_outlined),
+                  label: const Text('Edit'),
+                ),
+              ],
+            );
+          },
+        ),
       );
 
   Widget _contactsTab() => FutureBuilder<List<Contact>>(

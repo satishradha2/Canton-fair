@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import '../data/product_score.dart';
 
 import '../data/database.dart';
+import '../data/onboarding_service.dart';
+import '../data/sync_status_service.dart';
 import '../models/models.dart';
 import '../theme/app_theme.dart';
 import '../widgets/enterprise_widgets.dart';
@@ -34,6 +36,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   late Future<List<Product>> _futureTopShortlist;
   late Future<List<_TodayAtFairItem>> _futureTodayAtFair;
   late Future<List<Sample>> _futureSampleAlerts;
+  late Future<_OnboardingProgress> _futureOnboarding;
+  final _onboarding = OnboardingService();
+  bool _showFairOverview = false;
 
   @override
   void initState() {
@@ -47,6 +52,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _futureTopShortlist = _loadTopShortlist();
     _futureTodayAtFair = _loadTodayAtFair();
     _futureSampleAlerts = _loadSampleAlerts();
+    _futureOnboarding = _loadOnboarding();
+  }
+
+  Future<_OnboardingProgress> _loadOnboarding() async {
+    final results = await Future.wait([
+      db.getTrips(),
+      db.getExhibitors(null),
+      _onboarding.isHidden(),
+      SyncStatusService().load(),
+    ]);
+    return _OnboardingProgress(
+      hasTrip: (results[0] as List<Trip>).isNotEmpty,
+      hasSupplier: (results[1] as List<Exhibitor>).isNotEmpty,
+      hidden: results[2] as bool,
+      hasSynced: (results[3] as SyncStatus).lastSyncedAt != null,
+    );
   }
 
   void _reload() => setState(_reloadFutures);
@@ -157,45 +178,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             subtitle:
                 'Your priorities, supplier conversations, and follow-ups in one place.',
             children: [
-              SectionPanel(
-                title: 'Record a conversation',
-                subtitle: 'Choose the fastest way to record a supplier.',
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    final compact = constraints.maxWidth < 390;
-                    return Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        SizedBox(
-                          width: compact ? double.infinity : 150,
-                          child: ElevatedButton.icon(
-                            onPressed: widget.onCapture,
-                            icon: const Icon(Icons.add_business_outlined),
-                            label: const Text('Add supplier'),
-                          ),
-                        ),
-                        SizedBox(
-                          width: compact ? double.infinity : 120,
-                          child: OutlinedButton.icon(
-                            onPressed: widget.onScanQr,
-                            icon: const Icon(Icons.qr_code_scanner),
-                            label: const Text('Scan QR'),
-                          ),
-                        ),
-                        SizedBox(
-                          width: compact ? double.infinity : 130,
-                          child: OutlinedButton.icon(
-                            onPressed: widget.onScanCard,
-                            icon: const Icon(Icons.document_scanner_outlined),
-                            label: const Text('Scan card details'),
-                          ),
-                        ),
-                      ],
-                    );
-                  },
-                ),
-              ),
+              _fieldCommandCenter(),
               const SizedBox(height: 16),
               _todayAtFairSection(),
               const SizedBox(height: 16),
@@ -267,51 +250,75 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
               ),
               const SizedBox(height: 16),
-              if (stats.every((item) => (item['value'] as int? ?? 0) == 0)) ...[
-                SectionPanel(
-                  title: 'Get started',
-                  subtitle:
-                      'A short path to a useful shared sourcing workspace.',
-                  child: Column(
-                    children: [
-                      const ListTile(
-                        dense: true,
-                        contentPadding: EdgeInsets.zero,
-                        leading: Icon(Icons.looks_one_outlined),
-                        title: Text('Create your first trip'),
-                        subtitle: Text(
-                            'Organize suppliers by fair visit or sourcing trip.'),
+              FutureBuilder<_OnboardingProgress>(
+                future: _futureOnboarding,
+                builder: (context, onboardingSnapshot) {
+                  final progress = onboardingSnapshot.data;
+                  if (progress == null || progress.hidden || progress.complete) {
+                    return const SizedBox.shrink();
+                  }
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 16),
+                    child: SectionPanel(
+                      title: 'Get started',
+                      subtitle: '${progress.completedSteps} of 3 workspace steps complete',
+                      trailing: IconButton(
+                        tooltip: 'Hide getting started guide',
+                        icon: const Icon(Icons.close),
+                        onPressed: () async {
+                          await _onboarding.hide();
+                          if (mounted) _reload();
+                        },
                       ),
-                      const ListTile(
-                        dense: true,
-                        contentPadding: EdgeInsets.zero,
-                        leading: Icon(Icons.looks_two_outlined),
-                        title: Text('Capture a supplier'),
-                        subtitle: Text(
-                            'Record booth, contacts, products, and next steps.'),
-                      ),
-                      const ListTile(
-                        dense: true,
-                        contentPadding: EdgeInsets.zero,
-                        leading: Icon(Icons.looks_3_outlined),
-                        title: Text('Invite a teammate and sync'),
-                        subtitle: Text(
-                            'Use Settings when you are ready to share the workspace.'),
-                      ),
-                      const SizedBox(height: 8),
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton.icon(
-                          onPressed: widget.onCapture,
-                          icon: const Icon(Icons.add_business_outlined),
-                          label: const Text('Capture first supplier'),
+                      child: Column(children: [
+                        _onboardingStep(
+                          complete: progress.hasTrip,
+                          icon: Icons.looks_one_outlined,
+                          title: 'Create your first trip',
+                          detail: 'Organize suppliers by fair visit or sourcing trip.',
                         ),
-                      ),
-                    ],
-                  ),
+                        _onboardingStep(
+                          complete: progress.hasSupplier,
+                          icon: Icons.looks_two_outlined,
+                          title: 'Capture a supplier',
+                          detail: 'Record booth, contacts, products, and next steps.',
+                        ),
+                        _onboardingStep(
+                          complete: progress.hasSynced,
+                          icon: Icons.looks_3_outlined,
+                          title: 'Sync your workspace',
+                          detail: 'Keep the team record backed up and available.',
+                        ),
+                        const SizedBox(height: 8),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            onPressed: progress.hasSupplier ? widget.onSync : widget.onCapture,
+                            icon: Icon(progress.hasSupplier ? Icons.sync : Icons.add_business_outlined),
+                            label: Text(progress.hasSupplier ? 'Open sync' : 'Capture first supplier'),
+                          ),
+                        ),
+                      ]),
+                    ),
+                  );
+                },
+              ),
+              SectionPanel(
+                title: 'Fair overview',
+                subtitle: _showFairOverview
+                    ? 'Trip progress, sourcing metrics, and ranked shortlist.'
+                    : 'Open reports only when you need them during field work.',
+                trailing: IconButton(
+                  tooltip: _showFairOverview ? 'Hide fair overview' : 'Show fair overview',
+                  icon: Icon(_showFairOverview ? Icons.expand_less : Icons.expand_more),
+                  onPressed: () => setState(() => _showFairOverview = !_showFairOverview),
                 ),
-                const SizedBox(height: 16),
-              ],
+                child: Text(_showFairOverview
+                    ? 'Operational summary is expanded below.'
+                    : 'Your route, capture actions, and due tasks stay at the top.'),
+              ),
+              if (_showFairOverview) ...[
+              const SizedBox(height: 16),
               LayoutBuilder(
                 builder: (context, constraints) {
                   final width = constraints.maxWidth;
@@ -484,12 +491,76 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   },
                 ),
               ),
+              ],
             ],
           );
         },
       ),
     );
   }
+
+  Widget _fieldCommandCenter() => LayoutBuilder(
+        builder: (context, constraints) {
+          final colors = Theme.of(context).colorScheme;
+          final compact = constraints.maxWidth < 390;
+          return Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: colors.primaryContainer,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: colors.outlineVariant),
+            ),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    color: colors.primary,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(Icons.add_business_outlined, color: colors.onPrimary),
+                ),
+                const SizedBox(width: 12),
+                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text('Capture at the Fair', style: Theme.of(context).textTheme.titleMedium),
+                  const SizedBox(height: 2),
+                  Text('Start with a supplier, badge, or business card.',
+                      style: Theme.of(context).textTheme.bodySmall),
+                ])),
+              ]),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: widget.onCapture,
+                  icon: const Icon(Icons.add),
+                  label: const Text('Capture supplier'),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Wrap(spacing: 8, runSpacing: 8, children: [
+                SizedBox(
+                  width: compact ? double.infinity : 132,
+                  child: OutlinedButton.icon(
+                    onPressed: widget.onScanQr,
+                    icon: const Icon(Icons.qr_code_scanner),
+                    label: const Text('Scan QR'),
+                  ),
+                ),
+                SizedBox(
+                  width: compact ? double.infinity : 172,
+                  child: OutlinedButton.icon(
+                    onPressed: widget.onScanCard,
+                    icon: const Icon(Icons.document_scanner_outlined),
+                    label: const Text('Scan card'),
+                  ),
+                ),
+              ]),
+            ]),
+          );
+        },
+      );
 
   Widget _todayAtFairSection() {
     return SectionPanel(
@@ -583,6 +654,40 @@ class _DashboardScreenState extends State<DashboardScreen> {
           },
         ),
       );
+
+  Widget _onboardingStep({
+    required bool complete,
+    required IconData icon,
+    required String title,
+    required String detail,
+  }) => ListTile(
+        dense: true,
+        contentPadding: EdgeInsets.zero,
+        leading: Icon(
+          complete ? Icons.check_circle : icon,
+          color: complete ? AppColors.teal : AppColors.muted,
+        ),
+        title: Text(title),
+        subtitle: Text(detail),
+      );
+}
+
+class _OnboardingProgress {
+  final bool hasTrip;
+  final bool hasSupplier;
+  final bool hidden;
+  final bool hasSynced;
+
+  const _OnboardingProgress({
+    required this.hasTrip,
+    required this.hasSupplier,
+    required this.hidden,
+    required this.hasSynced,
+  });
+
+  int get completedSteps =>
+      (hasTrip ? 1 : 0) + (hasSupplier ? 1 : 0) + (hasSynced ? 1 : 0);
+  bool get complete => hasTrip && hasSupplier && hasSynced;
 }
 
 enum _TodayItemKind { visit, meeting, followUp, priority }

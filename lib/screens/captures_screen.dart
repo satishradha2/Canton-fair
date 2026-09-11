@@ -2,9 +2,9 @@ import 'dart:io';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../data/product_score.dart';
 
-import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -19,6 +19,7 @@ import '../data/sync_status_service.dart';
 import '../data/team_workspace_service.dart';
 import '../data/language_service.dart';
 import '../data/reminder_service.dart';
+import '../data/quick_capture_draft_service.dart';
 import '../models/models.dart';
 import '../theme/app_theme.dart';
 import '../widgets/enterprise_widgets.dart';
@@ -31,7 +32,7 @@ import 'supplier_profile_screen.dart';
 import 'photo_annotation_screen.dart';
 import 'hall_route_screen.dart';
 
-enum CaptureQuickAction { manual, qr, card }
+enum CaptureQuickAction { quick, manual, qr, card }
 
 class CapturesScreen extends StatefulWidget {
   final ValueNotifier<CaptureQuickAction?>? quickAction;
@@ -106,6 +107,9 @@ class _CapturesScreenState extends State<CapturesScreen> {
     if (action == null || !mounted) return;
     widget.quickAction?.value = null;
     switch (action) {
+      case CaptureQuickAction.quick:
+        _openQuickCapture();
+        break;
       case CaptureQuickAction.manual:
         _openAddExhibitorSheet();
         break;
@@ -115,6 +119,146 @@ class _CapturesScreenState extends State<CapturesScreen> {
       case CaptureQuickAction.card:
         _openOcrCapture();
         break;
+    }
+  }
+
+  Future<void> _openQuickCapture() async {
+    final trips = await _trips;
+    if (!mounted) return;
+    if (trips.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Create a trip before capturing a supplier.')),
+      );
+      return;
+    }
+    final draftService = QuickCaptureDraftService();
+    final draft = await draftService.load();
+    if (!mounted) return;
+    var tripId = int.tryParse(draft['trip_id'] ?? '') ?? trips.first.id!;
+    final name = TextEditingController(text: draft['name'] ?? '');
+    final booth = TextEditingController(text: draft['booth'] ?? '');
+    final contact = TextEditingController(text: draft['contact'] ?? '');
+    final category = TextEditingController(text: draft['category'] ?? '');
+    var saving = false;
+    Future<void> saveDraft() => draftService.save({
+          'trip_id': '$tripId',
+          'name': name.text,
+          'booth': booth.text,
+          'contact': contact.text,
+          'category': category.text,
+        });
+    name.addListener(saveDraft);
+    booth.addListener(saveDraft);
+    contact.addListener(saveDraft);
+    category.addListener(saveDraft);
+    final saved = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setSheetState) => Padding(
+          padding: EdgeInsets.fromLTRB(20, 4, 20,
+              20 + MediaQuery.viewInsetsOf(context).bottom),
+          child: SafeArea(
+            top: false,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text('Quick capture', style: Theme.of(context).textTheme.titleLarge),
+                  const SizedBox(height: 6),
+                  const Text('Save the essentials now. Add products, photos, and scoring later.',
+                      style: TextStyle(color: AppColors.muted)),
+                  const SizedBox(height: 20),
+                  DropdownButtonFormField<int>(
+                    initialValue: trips.any((trip) => trip.id == tripId) ? tripId : trips.first.id,
+                    decoration: const InputDecoration(labelText: 'Trip'),
+                    items: trips.map((trip) => DropdownMenuItem(
+                        value: trip.id, child: Text(trip.name))).toList(),
+                    onChanged: saving ? null : (value) {
+                      tripId = value ?? tripId;
+                      saveDraft();
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(controller: name, enabled: !saving,
+                    textCapitalization: TextCapitalization.words,
+                    autofocus: name.text.isEmpty,
+                    decoration: const InputDecoration(labelText: 'Supplier name *', prefixIcon: Icon(Icons.business_outlined))),
+                  const SizedBox(height: 12),
+                  TextField(controller: booth, enabled: !saving,
+                    decoration: const InputDecoration(labelText: 'Booth / hall', prefixIcon: Icon(Icons.place_outlined))),
+                  const SizedBox(height: 12),
+                  TextField(controller: contact, enabled: !saving,
+                    textCapitalization: TextCapitalization.words,
+                    decoration: const InputDecoration(labelText: 'Person met', prefixIcon: Icon(Icons.person_outline))),
+                  const SizedBox(height: 12),
+                  TextField(controller: category, enabled: !saving,
+                    decoration: const InputDecoration(labelText: 'Category', prefixIcon: Icon(Icons.category_outlined))),
+                  const SizedBox(height: 20),
+                  FilledButton.icon(
+                    onPressed: saving ? null : () async {
+                      if (name.text.trim().isEmpty) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Enter a supplier name to save.')),
+                        );
+                        return;
+                      }
+                      setSheetState(() => saving = true);
+                      try {
+                        final supplierId = await db.insert('exhibitors', Exhibitor(
+                          tripId: tripId,
+                          name: name.text.trim(),
+                          booth: booth.text.trim(),
+                          hall: '',
+                          category: category.text.trim(),
+                          country: '',
+                        ).toMap()..remove('id'));
+                        if (contact.text.trim().isNotEmpty) {
+                          await db.insert('contacts', Contact(
+                            exhibitorId: supplierId,
+                            name: contact.text.trim(),
+                          ).toMap()..remove('id'));
+                        }
+                        await db.logAudit('Quick captured supplier', name.text.trim());
+                        await draftService.clear();
+                        await HapticFeedback.mediumImpact();
+                        if (context.mounted) Navigator.pop(context, true);
+                      } catch (_) {
+                        setSheetState(() => saving = false);
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Could not save yet. Your draft is kept.')),
+                          );
+                        }
+                      }
+                    },
+                    icon: saving ? const SizedBox(width: 18, height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.check),
+                    label: Text(saving ? 'Saving...' : 'Save locally'),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text('Your unfinished entries are kept on this device.',
+                      textAlign: TextAlign.center, style: TextStyle(color: AppColors.muted, fontSize: 12)),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    name.dispose();
+    booth.dispose();
+    contact.dispose();
+    category.dispose();
+    if (saved == true && mounted) {
+      _load();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: const Text('Saved locally'), action: SnackBarAction(
+          label: 'Sync now', onPressed: () => _syncAfterSave(),
+        )),
+      );
     }
   }
 
@@ -865,10 +1009,12 @@ class _CapturesScreenState extends State<CapturesScreen> {
               Navigator.pop(ctx);
               _load();
               } catch (_) {
-                if (ctx.mounted) update(() {
-                  saving = false;
-                  error = 'Could not save the trip. Your entries are kept; please retry.';
-                });
+                if (ctx.mounted) {
+                  update(() {
+                    saving = false;
+                    error = 'Could not save the trip. Your entries are kept; please retry.';
+                  });
+                }
               }
             },
           ),
@@ -3412,17 +3558,7 @@ class _CapturesScreenState extends State<CapturesScreen> {
         child: ExpansionTile(
           tilePadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
           childrenPadding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
-          leading: IconButton(
-            tooltip: 'Open supplier workspace',
-            icon: const Icon(Icons.open_in_new_outlined),
-            onPressed: () async {
-              await Navigator.of(context).push(
-                MaterialPageRoute(
-                    builder: (_) => SupplierDetailScreen(supplier: e)),
-              );
-              if (mounted) _load();
-            },
-          ),
+          leading: _supplierThumbnail(e),
           title: Text(e.name,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -3466,7 +3602,17 @@ class _CapturesScreenState extends State<CapturesScreen> {
               ],
             ),
           ),
-          trailing: _exhibitorActions(e),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                tooltip: 'Add follow-up',
+                icon: const Icon(Icons.event_note_outlined),
+                onPressed: () => _openMeetingSheet(e.id!),
+              ),
+              _exhibitorActions(e),
+            ],
+          ),
           children: [
             FutureBuilder<List<Contact>>(
               future: db.getContacts(e.id!),
@@ -3588,4 +3734,41 @@ class _CapturesScreenState extends State<CapturesScreen> {
       ),
     );
   }
+
+  Widget _supplierThumbnail(Exhibitor supplier) => FutureBuilder<List<Attachment>>(
+        future: db.getAttachments('exhibitor', supplier.id!),
+        builder: (context, snapshot) {
+          final image = (snapshot.data ?? const <Attachment>[]).cast<Attachment?>().firstWhere(
+                (item) => item != null && item.kind == 'image' && File(item.path).existsSync(),
+                orElse: () => null,
+              );
+          return Semantics(
+            button: true,
+            label: 'Open ${supplier.name}',
+            child: InkWell(
+              borderRadius: BorderRadius.circular(8),
+              onTap: () async {
+                await Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => SupplierDetailScreen(supplier: supplier),
+                ));
+                if (mounted) _load();
+              },
+              child: Ink(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.secondaryContainer,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: image == null
+                    ? const Icon(Icons.storefront_outlined)
+                    : ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: Image.file(File(image.path), fit: BoxFit.cover),
+                      ),
+              ),
+            ),
+          );
+        },
+      );
 }

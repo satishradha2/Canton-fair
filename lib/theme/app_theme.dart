@@ -33,16 +33,16 @@ ThemeData buildAppTheme() {
     outline: Color(0xFF84959F),
     outlineVariant: AppColors.line,
   );
-  final shape = RoundedRectangleBorder(borderRadius: BorderRadius.circular(12));
+  final shape = RoundedRectangleBorder(borderRadius: BorderRadius.circular(8));
   final input = OutlineInputBorder(
-    borderRadius: BorderRadius.circular(10),
+    borderRadius: BorderRadius.circular(8),
     borderSide: const BorderSide(color: Color(0xFFB6C3CA)),
   );
   const typography = TextTheme(
-    headlineLarge: TextStyle(fontSize: 32, height: 1.2, fontWeight: FontWeight.w700, letterSpacing: -1),
-    headlineMedium: TextStyle(fontSize: 28, height: 1.25, fontWeight: FontWeight.w700, letterSpacing: -0.8),
-    headlineSmall: TextStyle(fontSize: 24, height: 1.3, fontWeight: FontWeight.w700, letterSpacing: -0.5),
-    titleLarge: TextStyle(fontSize: 20, height: 1.3, fontWeight: FontWeight.w700, letterSpacing: -0.3),
+    headlineLarge: TextStyle(fontSize: 32, height: 1.2, fontWeight: FontWeight.w700),
+    headlineMedium: TextStyle(fontSize: 28, height: 1.25, fontWeight: FontWeight.w700),
+    headlineSmall: TextStyle(fontSize: 24, height: 1.3, fontWeight: FontWeight.w700),
+    titleLarge: TextStyle(fontSize: 20, height: 1.3, fontWeight: FontWeight.w700),
     titleMedium: TextStyle(fontSize: 16, height: 1.4, fontWeight: FontWeight.w600),
     titleSmall: TextStyle(fontSize: 14, height: 1.4, fontWeight: FontWeight.w600),
     bodyLarge: TextStyle(fontSize: 16, height: 1.5),
@@ -50,7 +50,7 @@ ThemeData buildAppTheme() {
     bodySmall: TextStyle(fontSize: 12, height: 1.5, color: AppColors.muted),
     labelLarge: TextStyle(fontSize: 14, height: 1.2, fontWeight: FontWeight.w600),
     labelMedium: TextStyle(fontSize: 12, height: 1.3, fontWeight: FontWeight.w600),
-    labelSmall: TextStyle(fontSize: 11, height: 1.3, fontWeight: FontWeight.w600, letterSpacing: 0.4),
+    labelSmall: TextStyle(fontSize: 11, height: 1.3, fontWeight: FontWeight.w600),
   );
   return ThemeData(
     useMaterial3: true,
@@ -71,12 +71,12 @@ ThemeData buildAppTheme() {
       toolbarHeight: 64,
       titleSpacing: 20,
       titleTextStyle: TextStyle(fontFamily: 'PublicSans', color: AppColors.ink,
-          fontSize: 20, fontWeight: FontWeight.w700, letterSpacing: -0.4),
+          fontSize: 20, fontWeight: FontWeight.w700),
     ),
     cardTheme: CardThemeData(
       color: Colors.white, surfaceTintColor: Colors.transparent, elevation: 0,
       margin: EdgeInsets.zero,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8),
           side: const BorderSide(color: AppColors.line)),
     ),
     dividerTheme: const DividerThemeData(color: AppColors.line, thickness: 1, space: 1),
@@ -163,20 +163,20 @@ ThemeData buildAppTheme() {
     ),
     dialogTheme: DialogThemeData(
       backgroundColor: Colors.white, surfaceTintColor: Colors.transparent,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       titleTextStyle: typography.titleLarge?.copyWith(fontFamily: 'PublicSans', color: AppColors.ink),
       contentTextStyle: typography.bodyMedium?.copyWith(fontFamily: 'PublicSans', color: AppColors.muted),
     ),
     bottomSheetTheme: const BottomSheetThemeData(
       backgroundColor: Colors.white, surfaceTintColor: Colors.transparent,
       showDragHandle: true,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(12))),
     ),
     snackBarTheme: SnackBarThemeData(
       behavior: SnackBarBehavior.floating, backgroundColor: AppColors.ink,
       contentTextStyle: const TextStyle(fontFamily: 'PublicSans', color: Colors.white),
       actionTextColor: const Color(0xFFA8DED2),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
     ),
     listTileTheme: const ListTileThemeData(
       iconColor: AppColors.muted, textColor: AppColors.ink,
@@ -197,6 +197,70 @@ ThemeData buildAppTheme() {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(color: AppColors.ink, borderRadius: BorderRadius.circular(8)),
       textStyle: const TextStyle(fontFamily: 'PublicSans', color: Colors.white, fontSize: 12),
+    ),
+  );
+}
+
+ThemeData buildDarkAppTheme() {
+  const scheme = ColorScheme.dark(
+    primary: Color(0xFF8CCEC2),
+    onPrimary: Color(0xFF082B2B),
+    secondary: Color(0xFF9ED9CC),
+    onSecondary: Color(0xFF082B2B),
+    surface: Color(0xFF14232B),
+    onSurface: Color(0xFFE7EEF0),
+    surfaceContainerHighest: Color(0xFF22343D),
+    onSurfaceVariant: Color(0xFFB7C6CB),
+    outline: Color(0xFF81949B),
+    outlineVariant: Color(0xFF344852),
+    error: Color(0xFFFFB4AB),
+    onError: Color(0xFF690005),
+  );
+  final base = buildAppTheme();
+  final input = OutlineInputBorder(
+    borderRadius: BorderRadius.circular(8),
+    borderSide: const BorderSide(color: Color(0xFF536872)),
+  );
+  return base.copyWith(
+    brightness: Brightness.dark,
+    colorScheme: scheme,
+    scaffoldBackgroundColor: const Color(0xFF0E1A20),
+    appBarTheme: base.appBarTheme.copyWith(
+      backgroundColor: const Color(0xFF0E1A20),
+      foregroundColor: scheme.onSurface,
+    ),
+    cardTheme: base.cardTheme.copyWith(
+      color: const Color(0xFF14232B),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: const BorderSide(color: Color(0xFF344852)),
+      ),
+    ),
+    inputDecorationTheme: base.inputDecorationTheme.copyWith(
+      fillColor: const Color(0xFF14232B),
+      border: input,
+      enabledBorder: input,
+      focusedBorder: input.copyWith(
+        borderSide: const BorderSide(color: Color(0xFF8CCEC2), width: 2),
+      ),
+    ),
+    navigationBarTheme: base.navigationBarTheme.copyWith(
+      backgroundColor: const Color(0xFF14232B),
+      indicatorColor: const Color(0xFF294A49),
+    ),
+    navigationRailTheme: base.navigationRailTheme.copyWith(
+      backgroundColor: const Color(0xFF14232B),
+      indicatorColor: const Color(0xFF294A49),
+    ),
+    dividerTheme: const DividerThemeData(color: Color(0xFF344852)),
+    bottomSheetTheme: const BottomSheetThemeData(
+      backgroundColor: Color(0xFF14232B),
+      surfaceTintColor: Colors.transparent,
+      showDragHandle: true,
+    ),
+    dialogTheme: base.dialogTheme.copyWith(
+      backgroundColor: const Color(0xFF14232B),
+      surfaceTintColor: Colors.transparent,
     ),
   );
 }

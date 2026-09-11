@@ -19,12 +19,15 @@ class HallRouteScreen extends StatefulWidget {
   State<HallRouteScreen> createState() => _HallRouteScreenState();
 }
 
+enum _RouteView { route, map }
+
 class _HallRouteScreenState extends State<HallRouteScreen> {
   static const _mapPathKey = 'hall_route_map_path';
   final _db = TradeDatabase.instance;
   final _storage = const FlutterSecureStorage();
   int? _tripId;
   String? _mapPath;
+  var _routeView = _RouteView.route;
   late Future<List<Trip>> _trips;
   late Future<List<Exhibitor>> _suppliers;
 
@@ -152,14 +155,54 @@ class _HallRouteScreenState extends State<HallRouteScreen> {
                           ? 'Import official hall map'
                           : 'Replace hall map'),
                     ),
-                    if (_mapPath != null && File(_mapPath!).existsSync()) ...[
+                    const SizedBox(height: 12),
+                    SegmentedButton<_RouteView>(
+                      segments: const [
+                        ButtonSegment(
+                          value: _RouteView.route,
+                          icon: Icon(Icons.format_list_bulleted),
+                          label: Text('Route list'),
+                        ),
+                        ButtonSegment(
+                          value: _RouteView.map,
+                          icon: Icon(Icons.map_outlined),
+                          label: Text('Hall map'),
+                        ),
+                      ],
+                      selected: {_routeView},
+                      onSelectionChanged: (value) =>
+                          setState(() => _routeView = value.first),
+                    ),
+                    if (_routeView == _RouteView.map) ...[
                       const SizedBox(height: 12),
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: Image.file(File(_mapPath!),
-                            height: 190, fit: BoxFit.cover),
-                      ),
+                      if (_mapPath != null && File(_mapPath!).existsSync())
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: Image.file(File(_mapPath!),
+                              height: 260, width: double.infinity, fit: BoxFit.cover),
+                        )
+                      else
+                        const EmptyState(
+                          icon: Icons.map_outlined,
+                          title: 'No hall map imported',
+                          message: 'Import the official Canton Fair map to review it alongside your planned booth route.',
+                        ),
+                      if (halls.isNotEmpty) ...[
+                        const SizedBox(height: 16),
+                        Text('Planned hall stops', style: Theme.of(context).textTheme.titleMedium),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: halls.map((hall) => InfoChip(
+                            label: 'Hall $hall · ${grouped[hall]!.length}',
+                            icon: Icons.place_outlined,
+                            color: AppColors.teal,
+                          )).toList(),
+                        ),
+                      ],
                     ],
+                    if (_routeView == _RouteView.route) ...[
                     const SizedBox(height: 18),
                     if (halls.isEmpty)
                       const EmptyState(
@@ -213,6 +256,7 @@ class _HallRouteScreenState extends State<HallRouteScreen> {
                               }).toList(),
                             ),
                           )),
+                    ],
                   ],
                 );
               },

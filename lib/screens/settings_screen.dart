@@ -10,6 +10,7 @@ import '../data/language_service.dart';
 import '../data/team_workspace_service.dart';
 import '../data/cloud_sync_service.dart';
 import '../data/sync_status_service.dart';
+import '../data/appearance_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/enterprise_widgets.dart';
 import 'team_setup_screen.dart';
@@ -43,6 +44,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _appLockEnabled = false;
   bool _syncing = false;
   String _language = 'en';
+  ThemeMode _themeMode = ThemeMode.system;
   String? _teamName;
 
   Future<void> _createBackup() async {
@@ -65,6 +67,41 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _loadAppLock();
     _loadLanguage();
     _loadTeamWorkspace();
+    _loadAppearance();
+  }
+
+  Future<void> _loadAppearance() async {
+    final mode = await AppearanceService().load();
+    if (mounted) setState(() => _themeMode = mode);
+  }
+
+  Future<void> _chooseAppearance() async {
+    final mode = await showDialog<ThemeMode>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: const Text('Appearance'),
+        children: [
+          RadioGroup<ThemeMode>(
+            groupValue: _themeMode,
+            onChanged: (selected) => Navigator.pop(context, selected),
+            child: Column(children: [
+              for (final value in ThemeMode.values)
+                RadioListTile<ThemeMode>(
+                  value: value,
+                  title: Text(switch (value) {
+                    ThemeMode.system => 'Use device setting',
+                    ThemeMode.light => 'Light',
+                    ThemeMode.dark => 'Dark',
+                  }),
+                ),
+            ]),
+          ),
+        ],
+      ),
+    );
+    if (mode == null) return;
+    await AppearanceService().save(mode);
+    if (mounted) setState(() => _themeMode = mode);
   }
 
   Future<void> _loadTeamWorkspace() async {
@@ -466,6 +503,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 }[_language]!,
                 trailing: const Icon(Icons.chevron_right),
                 onTap: _chooseLanguage,
+              ),
+              _settingTile(
+                icon: _themeMode == ThemeMode.dark
+                    ? Icons.dark_mode_outlined
+                    : Icons.light_mode_outlined,
+                title: 'Appearance',
+                subtitle: switch (_themeMode) {
+                  ThemeMode.system => 'Use device setting',
+                  ThemeMode.light => 'Light theme',
+                  ThemeMode.dark => 'Dark theme',
+                },
+                trailing: const Icon(Icons.chevron_right),
+                onTap: _chooseAppearance,
               ),
               _settingTile(
                 icon: Icons.settings_backup_restore,

@@ -3,6 +3,8 @@ import 'package:url_launcher/url_launcher.dart';
 import 'data/update_service.dart';
 import 'data/language_service.dart';
 import 'data/sync_status_service.dart';
+import 'data/database.dart';
+import 'models/models.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/captures_screen.dart';
 import 'screens/shortlist_screen.dart';
@@ -14,6 +16,7 @@ import 'screens/account_profile_screen.dart';
 import 'screens/activity_feed_screen.dart';
 import 'screens/sourcing_briefs_screen.dart';
 import 'screens/procurement_workspace_screen.dart';
+import 'screens/supplier_detail_screen.dart';
 import 'widgets/enterprise_widgets.dart';
 import 'theme/app_theme.dart';
 
@@ -84,6 +87,51 @@ class _CantonFairAppState extends State<CantonFairApp> {
     });
   }
 
+  Future<void> _openCaptureMenu() async {
+    final action = await showModalBottomSheet<CaptureQuickAction>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            ListTile(
+              leading: const Icon(Icons.bolt_outlined),
+              title: Text(tr(context, 'quickCapture')),
+              subtitle: const Text('Supplier, booth, contact, and category'),
+              onTap: () => Navigator.pop(context, CaptureQuickAction.quick),
+            ),
+            ListTile(
+              leading: const Icon(Icons.add_business_outlined),
+              title: Text(tr(context, 'fullSupplierCapture')),
+              subtitle: const Text('Products, photos, commercial terms, and next actions'),
+              onTap: () => Navigator.pop(context, CaptureQuickAction.manual),
+            ),
+            ListTile(
+              leading: const Icon(Icons.document_scanner_outlined),
+              title: Text(tr(context, 'scanBusinessCard')),
+              subtitle: const Text('Extract supplier and contact details'),
+              onTap: () => Navigator.pop(context, CaptureQuickAction.card),
+            ),
+            ListTile(
+              leading: const Icon(Icons.qr_code_scanner_outlined),
+              title: Text(tr(context, 'scanQr')),
+              onTap: () => Navigator.pop(context, CaptureQuickAction.qr),
+            ),
+          ]),
+        ),
+      ),
+    );
+    if (action != null && mounted) _openCapture(action);
+  }
+
+  void _openSupplierSearch() {
+    showSearch<void>(
+      context: context,
+      delegate: _SupplierSearchDelegate(),
+    );
+  }
+
   Future<void> _checkForStartupUpdate() async {
     if (_checkedStartupUpdate) return;
     _checkedStartupUpdate = true;
@@ -133,7 +181,7 @@ class _CantonFairAppState extends State<CantonFairApp> {
   }
 
   static const _destinations = [0, 1, 2, 3, 9];
-  static const _labels = ['Today', 'Suppliers', 'Shortlist', 'Tasks', 'Workspace'];
+  static const _labelKeys = ['today', 'suppliers', 'shortlist', 'tasks', 'workspace'];
   static const _icons = [
     Icons.dashboard_outlined, Icons.storefront_outlined, Icons.star_border_rounded,
     Icons.checklist_rounded, Icons.grid_view_rounded,
@@ -144,6 +192,8 @@ class _CantonFairAppState extends State<CantonFairApp> {
   ];
 
   int get _navigationIndex => _index <= 3 ? _index : 4;
+  List<String> _labels(BuildContext context) =>
+      _labelKeys.map((key) => tr(context, key)).toList();
   void _selectDestination(int index) => setState(() => _index = _destinations[index]);
 
   Widget _workspaceHub() => EnterprisePage(
@@ -175,8 +225,11 @@ class _CantonFairAppState extends State<CantonFairApp> {
 
   Widget _toolGroup(String title, List<(String, String, IconData, VoidCallback)> tools) =>
       Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(title, style: const TextStyle(color: AppColors.muted,
-            fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 1.3)),
+        Text(title, style: TextStyle(
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+        )),
         const SizedBox(height: 12),
         LayoutBuilder(builder: (context, constraints) {
           final columns = constraints.maxWidth >= 900 ? 3 : constraints.maxWidth >= 560 ? 2 : 1;
@@ -188,7 +241,10 @@ class _CantonFairAppState extends State<CantonFairApp> {
                 padding: const EdgeInsets.all(20),
                 child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Container(padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(color: const Color(0xFFECF2F2), borderRadius: BorderRadius.circular(12)),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.secondaryContainer,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
                     child: Icon(tool.$3, size: 22, color: AppColors.primary)),
                   const SizedBox(width: 14),
                   Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -214,10 +270,10 @@ class _CantonFairAppState extends State<CantonFairApp> {
         final syncing = SyncStatusService.isSyncing.value;
         final attention = snapshot.hasError || status.lastError != null || status.conflicts > 0;
         final color = attention ? AppColors.danger : AppColors.teal;
-        final label = syncing ? 'Sync in progress'
-            : attention ? 'Sync needs attention'
-            : status.lastSyncedAt == null ? 'Saved on this device' : 'Last sync completed';
-        return Material(color: Colors.white, child: InkWell(
+        final label = syncing ? tr(context, 'syncInProgress')
+            : attention ? tr(context, 'syncAttention')
+            : status.lastSyncedAt == null ? tr(context, 'savedOnDevice') : tr(context, 'lastSyncCompleted');
+        return Material(color: Theme.of(context).colorScheme.surface, child: InkWell(
           onTap: () => setState(() => _index = 6),
           child: Semantics(button: true, label: '$label. Open sync settings.',
             excludeSemantics: true, child: Padding(
@@ -227,7 +283,7 @@ class _CantonFairAppState extends State<CantonFairApp> {
                     size: 15, color: color),
                 const SizedBox(width: 8),
                 Expanded(child: Text(label, style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.w600))),
-                const Text('Sync settings', style: TextStyle(fontSize: 11, color: AppColors.muted)),
+                Text(tr(context, 'syncSettings'), style: const TextStyle(fontSize: 11, color: AppColors.muted)),
                 const SizedBox(width: 4),
                 const Icon(Icons.chevron_right, size: 16, color: AppColors.muted),
               ]),
@@ -261,13 +317,13 @@ class _CantonFairAppState extends State<CantonFairApp> {
                           Icon(Icons.business_center_outlined, color: AppColors.teal),
                           SizedBox(width: 12),
                           Text('CANTON FAIR', style: TextStyle(
-                              fontSize: 12, letterSpacing: 1.8, fontWeight: FontWeight.w800)),
+                              fontSize: 12, fontWeight: FontWeight.w800)),
                         ])
                       : const Icon(Icons.business_center_outlined, color: AppColors.teal),
                 ),
-                destinations: List.generate(_labels.length, (index) => NavigationRailDestination(
+                destinations: List.generate(_labels(context).length, (index) => NavigationRailDestination(
                   icon: Icon(_icons[index]), selectedIcon: Icon(_selectedIcons[index]),
-                  label: Text(_labels[index]),
+                  label: Text(_labels(context)[index]),
                 )),
               )),
               const VerticalDivider(width: 1),
@@ -286,13 +342,256 @@ class _CantonFairAppState extends State<CantonFairApp> {
           bottomNavigationBar: wide ? null : NavigationBar(
             selectedIndex: _navigationIndex,
             onDestinationSelected: _selectDestination,
-            destinations: List.generate(_labels.length, (index) => NavigationDestination(
+            destinations: List.generate(_labels(context).length, (index) => NavigationDestination(
               icon: Icon(_icons[index]), selectedIcon: Icon(_selectedIcons[index]),
-              label: _labels[index],
+              label: _labels(context)[index],
             )),
           ),
+          floatingActionButton: !wide && _index != 1
+              ? Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Semantics(
+                      button: true,
+                      label: 'Search suppliers',
+                      child: FloatingActionButton.small(
+                        heroTag: 'supplierSearch',
+                        tooltip: 'Search suppliers',
+                        onPressed: _openSupplierSearch,
+                        child: const Icon(Icons.search),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    FloatingActionButton.extended(
+                      heroTag: 'quickCapture',
+                      onPressed: _openCaptureMenu,
+                      icon: const Icon(Icons.add),
+                      label: const Text('Capture'),
+                    ),
+                  ],
+                )
+              : null,
         );
       }),
     );
   }
+}
+
+class _SupplierSearchDelegate extends SearchDelegate<void> {
+  _SupplierSearchDelegate()
+      : super(
+          searchFieldLabel: 'Search supplier, booth, hall, or category',
+          searchFieldStyle: const TextStyle(fontSize: 16),
+        );
+
+  final TradeDatabase _db = TradeDatabase.instance;
+
+  @override
+  List<Widget>? buildActions(BuildContext context) => [
+        if (query.isNotEmpty)
+          IconButton(
+            tooltip: 'Clear search',
+            icon: const Icon(Icons.clear),
+            onPressed: () => query = '',
+          ),
+      ];
+
+  @override
+  Widget? buildLeading(BuildContext context) => IconButton(
+        tooltip: 'Close search',
+        icon: const Icon(Icons.arrow_back),
+        onPressed: () => close(context, null),
+      );
+
+  @override
+  Widget buildResults(BuildContext context) => _results(context);
+
+  @override
+  Widget buildSuggestions(BuildContext context) => query.trim().isEmpty
+      ? const Center(child: Text('Search suppliers by name, booth, hall, or category.'))
+      : _results(context);
+
+  Widget _results(BuildContext context) => FutureBuilder<_WorkspaceSearch>(
+        future: _loadWorkspace(),
+        builder: (context, snapshot) {
+          if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+          final needle = query.trim().toLowerCase();
+          final workspace = snapshot.data!;
+          final suppliers = workspace.suppliers.where((supplier) {
+            return [supplier.name, supplier.booth, supplier.hall, supplier.category, supplier.country]
+                .any((value) => value.toLowerCase().contains(needle));
+          }).toList();
+          final products = workspace.products.where((entry) => [
+                entry.product.name,
+                entry.product.modelCode,
+                entry.product.specs,
+              ].any((value) => value.toLowerCase().contains(needle))).toList();
+          final contacts = workspace.contacts.where((entry) => [
+                entry.contact.name,
+                entry.contact.designation,
+                entry.contact.email,
+                entry.contact.phone,
+                entry.contact.whatsapp,
+              ].any((value) => value.toLowerCase().contains(needle))).toList();
+          final tasks = workspace.meetings.where((entry) => [
+                entry.meeting.outcome,
+                entry.meeting.notes,
+                entry.meeting.assigneeEmail,
+                entry.supplier.name,
+              ].any((value) => value.toLowerCase().contains(needle))).toList();
+          final trips = workspace.trips.where((trip) => [trip.name, trip.city, trip.notes]
+              .any((value) => value.toLowerCase().contains(needle))).toList();
+          if (suppliers.isEmpty && products.isEmpty && contacts.isEmpty && tasks.isEmpty && trips.isEmpty) {
+            return const Center(child: Text('No matching supplier found.'));
+          }
+          return ListView(
+            padding: const EdgeInsets.all(12),
+            children: [
+              if (suppliers.isNotEmpty) ...[
+                const _SearchGroupLabel('SUPPLIERS'),
+                ...suppliers.map((supplier) => _supplierResult(context, supplier)),
+              ],
+              if (products.isNotEmpty) ...[
+                const _SearchGroupLabel('PRODUCTS'),
+                ...products.map((entry) => _supplierResult(
+                  context,
+                  entry.supplier,
+                  icon: Icons.inventory_2_outlined,
+                  title: entry.product.name,
+                  detail: 'Product at ${entry.supplier.name}',
+                )),
+              ],
+              if (contacts.isNotEmpty) ...[
+                const _SearchGroupLabel('CONTACTS'),
+                ...contacts.map((entry) => _supplierResult(
+                  context,
+                  entry.supplier,
+                  icon: Icons.person_outline,
+                  title: entry.contact.name,
+                  detail: '${entry.contact.designation.isEmpty ? 'Contact' : entry.contact.designation} | ${entry.supplier.name}',
+                )),
+              ],
+              if (tasks.isNotEmpty) ...[
+                const _SearchGroupLabel('FOLLOW-UPS'),
+                ...tasks.map((entry) => _supplierResult(
+                  context,
+                  entry.supplier,
+                  icon: entry.meeting.completed ? Icons.task_alt : Icons.event_note_outlined,
+                  title: entry.meeting.outcome.isEmpty ? 'Supplier follow-up' : entry.meeting.outcome,
+                  detail: entry.supplier.name,
+                )),
+              ],
+              if (trips.isNotEmpty) ...[
+                const _SearchGroupLabel('TRIPS'),
+                ...trips.map((trip) => Card(child: ListTile(
+                  leading: const Icon(Icons.flight_takeoff_outlined),
+                  title: Text(trip.name),
+                  subtitle: Text(trip.city.isEmpty ? 'Trip record' : trip.city),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => close(context, null),
+                ))),
+              ],
+            ],
+          );
+        },
+      );
+
+  Widget _supplierResult(
+    BuildContext context,
+    Exhibitor supplier, {
+    IconData icon = Icons.storefront_outlined,
+    String? title,
+    String? detail,
+  }) => Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Card(child: ListTile(
+          leading: Icon(icon),
+          title: Text(title ?? supplier.name),
+          subtitle: Text(detail ?? [
+            if (supplier.booth.isNotEmpty) 'Booth ${supplier.booth}',
+            if (supplier.hall.isNotEmpty) supplier.hall,
+            if (supplier.category.isNotEmpty) supplier.category,
+          ].join(' | ')),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => Navigator.of(context).push(MaterialPageRoute(
+            builder: (_) => SupplierDetailScreen(supplier: supplier),
+          )),
+        )),
+      );
+
+  Future<_WorkspaceSearch> _loadWorkspace() async {
+    final trips = await _db.getTrips();
+    final suppliers = await _db.getExhibitors(null);
+    final meetings = await _db.getMeetings();
+    final supplierById = {for (final item in suppliers) item.id!: item};
+    final records = await Future.wait(suppliers.map((supplier) async {
+      final contacts = await _db.getContacts(supplier.id!);
+      final products = await _db.getProducts(supplier.id!);
+      return (supplier: supplier, contacts: contacts, products: products);
+    }));
+    return _WorkspaceSearch(
+      trips: trips,
+      suppliers: suppliers,
+      contacts: [
+        for (final item in records)
+          for (final contact in item.contacts)
+            _SearchContact(contact, item.supplier),
+      ],
+      products: [
+        for (final item in records)
+          for (final product in item.products)
+            _SearchProduct(product, item.supplier),
+      ],
+      meetings: [
+        for (final meeting in meetings)
+          if (supplierById[meeting.exhibitorId] case final supplier?)
+            _SearchMeeting(meeting, supplier),
+      ],
+    );
+  }
+}
+
+class _SearchGroupLabel extends StatelessWidget {
+  final String label;
+  const _SearchGroupLabel(this.label);
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.fromLTRB(4, 12, 4, 8),
+    child: Text(label, style: Theme.of(context).textTheme.labelMedium),
+  );
+}
+
+class _WorkspaceSearch {
+  final List<Trip> trips;
+  final List<Exhibitor> suppliers;
+  final List<_SearchContact> contacts;
+  final List<_SearchProduct> products;
+  final List<_SearchMeeting> meetings;
+  const _WorkspaceSearch({
+    required this.trips,
+    required this.suppliers,
+    required this.contacts,
+    required this.products,
+    required this.meetings,
+  });
+}
+
+class _SearchContact {
+  final Contact contact;
+  final Exhibitor supplier;
+  const _SearchContact(this.contact, this.supplier);
+}
+
+class _SearchProduct {
+  final Product product;
+  final Exhibitor supplier;
+  const _SearchProduct(this.product, this.supplier);
+}
+
+class _SearchMeeting {
+  final Meeting meeting;
+  final Exhibitor supplier;
+  const _SearchMeeting(this.meeting, this.supplier);
 }
