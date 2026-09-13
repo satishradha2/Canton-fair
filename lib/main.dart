@@ -5,6 +5,8 @@ import 'screens/auth_gate.dart';
 import 'data/reminder_service.dart';
 import 'data/team_workspace_service.dart';
 import 'data/appearance_service.dart';
+import 'data/auto_sync_service.dart';
+import 'data/background_sync_service.dart';
 import 'theme/app_theme.dart';
 import 'widgets/app_lock_gate.dart';
 
@@ -27,6 +29,8 @@ Future<void> main() async {
     publishableKey: supabaseAnonKey,
   );
   await ReminderService.initialize();
+  await BackgroundSyncService.initialize(
+      enabled: await AutoSyncService.instance.enabled);
   runApp(const CantonFairRoot());
 }
 

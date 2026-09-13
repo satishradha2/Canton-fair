@@ -5,6 +5,7 @@ import '../data/product_score.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:csv/csv.dart';
+import 'package:excel_community/excel_community.dart' as xls;
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import '../data/database.dart';
@@ -29,6 +30,43 @@ class _ExportScreenState extends State<ExportScreen> {
     final csvData = const ListToCsvConverter().convert(rows);
     await file.writeAsString(csvData, encoding: utf8);
     return file.path;
+  }
+
+  Future<void> _exportExcelWorkbook() async {
+    final workbook = xls.Excel.createExcel();
+    workbook.rename('Sheet1', 'Suppliers');
+    final exports = <String, List<Map<String, dynamic>>>{
+      'Suppliers': await db.queryAll('exhibitors'),
+      'Contacts': await db.queryAll('contacts'),
+      'Products': await db.queryAll('products'),
+      'Meetings': await db.queryAll('meetings'),
+      'Quotes': await db.queryAll('quotes'),
+      'Samples': await db.queryAll('samples'),
+    };
+    for (final entry in exports.entries) {
+      final sheet = workbook[entry.key];
+      if (entry.value.isEmpty) {
+        sheet.appendRow([xls.TextCellValue('No records')]);
+        continue;
+      }
+      final columns =
+          entry.value.expand((row) => row.keys).toSet().toList(growable: false);
+      sheet.appendRow(columns.map(xls.TextCellValue.new).toList());
+      for (final row in entry.value) {
+        sheet.appendRow(columns
+            .map((column) => xls.TextCellValue(row[column]?.toString() ?? ''))
+            .toList());
+      }
+    }
+    final bytes = workbook.save();
+    if (bytes == null) throw StateError('Could not create Excel workbook.');
+    final directory = await getTemporaryDirectory();
+    final file = File('${directory.path}/canton_fair_workspace.xlsx');
+    await file.writeAsBytes(bytes, flush: true);
+    await SharePlus.instance.share(ShareParams(
+      files: [XFile(file.path)],
+      text: 'Canton Fair CRM Excel workbook',
+    ));
   }
 
   Future<void> _exportAllExhibitors() async {
@@ -547,6 +585,11 @@ class _ExportScreenState extends State<ExportScreen> {
             children: [
               _card('All suppliers', 'Captured supplier details in CSV',
                   Icons.business, _exportAllExhibitors),
+              _card(
+                  'Excel workspace',
+                  'Suppliers, contacts, products, meetings, quotes and samples in one workbook',
+                  Icons.table_view_outlined,
+                  _exportExcelWorkbook),
               _card('Shortlist CSV', 'Shortlisted suppliers and products',
                   Icons.star, _exportShortlist),
               _card(

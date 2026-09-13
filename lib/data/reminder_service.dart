@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/data/latest.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
@@ -5,12 +6,13 @@ import 'package:timezone/timezone.dart' as tz;
 class ReminderService {
   static final FlutterLocalNotificationsPlugin _plugin =
       FlutterLocalNotificationsPlugin();
+  static final ValueNotifier<String?> selectedPayload = ValueNotifier(null);
   static bool _ready = false;
 
   static Future<void> initialize() async {
     if (_ready) return;
     tz.initializeTimeZones();
-    tz.setLocalLocation(tz.getLocation('Asia/Dubai'));
+    tz.setLocalLocation(tz.UTC);
 
     const AndroidInitializationSettings android =
         AndroidInitializationSettings('@mipmap/ic_launcher');
@@ -24,7 +26,9 @@ class ReminderService {
 
     await _plugin.initialize(
       settings,
-      onDidReceiveNotificationResponse: (response) {},
+      onDidReceiveNotificationResponse: (response) {
+        selectedPayload.value = response.payload;
+      },
     );
 
     const AndroidNotificationChannel channel = AndroidNotificationChannel(
@@ -38,7 +42,21 @@ class ReminderService {
         .resolvePlatformSpecificImplementation<
             AndroidFlutterLocalNotificationsPlugin>()
         ?.createNotificationChannel(channel);
+    final launch = await _plugin.getNotificationAppLaunchDetails();
+    if (launch?.didNotificationLaunchApp == true) {
+      selectedPayload.value = launch?.notificationResponse?.payload;
+    }
     _ready = true;
+  }
+
+  static Future<bool> requestPermissions() async {
+    final android = _plugin.resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin>();
+    final notifications = await android?.requestNotificationsPermission();
+    if (await android?.canScheduleExactNotifications() == false) {
+      await android?.requestExactAlarmsPermission();
+    }
+    return notifications ?? true;
   }
 
   static Future<void> scheduleFollowUp({
@@ -46,13 +64,19 @@ class ReminderService {
     required String title,
     required String body,
     required DateTime at,
+    String? payload,
   }) async {
     if (at.isBefore(DateTime.now())) return;
+    final android = _plugin.resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin>();
+    await android?.requestNotificationsPermission();
+    final canScheduleExactly =
+        await android?.canScheduleExactNotifications() ?? true;
     await _plugin.zonedSchedule(
       id,
       title,
       body,
-      tz.TZDateTime.from(at, tz.local),
+      tz.TZDateTime.from(at.toUtc(), tz.UTC),
       const NotificationDetails(
         android: AndroidNotificationDetails(
           'followup_channel',
@@ -63,8 +87,11 @@ class ReminderService {
         ),
         iOS: DarwinNotificationDetails(presentSound: true, presentAlert: true),
       ),
-      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+      androidScheduleMode: canScheduleExactly
+          ? AndroidScheduleMode.exactAllowWhileIdle
+          : AndroidScheduleMode.inexactAllowWhileIdle,
       matchDateTimeComponents: null,
+      payload: payload ?? 'followup:$id',
       uiLocalNotificationDateInterpretation:
           UILocalNotificationDateInterpretation.absoluteTime,
     );

@@ -831,9 +831,10 @@ class _FieldCaptureChecklistDialogState
             productKey: category == 'product' ? _productKey : null)));
       }
     } catch (_) {
-      if (mounted)
+      if (mounted) {
         setState(() => _error =
             'Could not add the photo. Existing entries are unchanged; please retry.');
+      }
     } finally {
       if (mounted) setState(() => _capturing = false);
     }
@@ -941,8 +942,9 @@ class _FieldCaptureChecklistDialogState
         _productShortlisted ||
         _bestSeller ||
         _newProduct;
-    if (!hasInput && !_products.any((product) => product.key == _productKey))
+    if (!hasInput && !_products.any((product) => product.key == _productKey)) {
       return true;
+    }
     if (fields['name']!.isEmpty) {
       setState(() => _error =
           'Enter a name for this product, or clear its details and photos.');

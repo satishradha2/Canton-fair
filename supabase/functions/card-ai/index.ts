@@ -50,6 +50,8 @@ function validResult(data: any): boolean {
 Deno.serve(async (request) => {
   if (request.method === "OPTIONS") return new Response(null, { headers: cors });
   if (request.method !== "POST") return reply(405, { error: "Use POST." });
+  const health = await request.clone().json().catch(() => null);
+  if (health?.action === "health") return reply(200, { ok: true, function: "card-ai" });
   const url = Deno.env.get("SUPABASE_URL");
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   const apiKey = Deno.env.get("OPENAI_API_KEY");

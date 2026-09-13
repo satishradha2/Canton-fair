@@ -8,6 +8,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'cloud_sync_service.dart';
 import 'reminder_service.dart';
 import 'team_workspace_service.dart';
+import 'background_sync_service.dart';
 
 class AutoSyncService with WidgetsBindingObserver {
   AutoSyncService._();
@@ -31,6 +32,7 @@ class AutoSyncService with WidgetsBindingObserver {
 
   Future<void> setEnabled(bool value) async {
     await _storage.write(key: _enabledKey, value: value.toString());
+    await BackgroundSyncService.setEnabled(value);
     changes.value++;
     if (value) unawaited(syncIfPossible());
   }

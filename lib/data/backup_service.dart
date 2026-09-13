@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 import 'package:crypto/crypto.dart';
+import 'package:cryptography/cryptography.dart' as cryptography;
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -61,6 +63,42 @@ class BackupService {
     ));
   }
 
+  Future<void> createAndShareEncryptedBackup(String password) async {
+    if (password.length < 8) {
+      throw const FormatException(
+          'Use a backup password of at least 8 characters.');
+    }
+    final source = await createBackup();
+    final clearText = await source.readAsBytes();
+    final random = Random.secure();
+    final salt = List<int>.generate(16, (_) => random.nextInt(256));
+    final kdf = cryptography.Pbkdf2(
+      macAlgorithm: cryptography.Hmac.sha256(),
+      iterations: 210000,
+      bits: 256,
+    );
+    final key =
+        await kdf.deriveKeyFromPassword(password: password, nonce: salt);
+    final cipher = cryptography.AesGcm.with256bits();
+    final box = await cipher.encrypt(clearText, secretKey: key);
+    final envelope = {
+      'format': 'canton-fair-crm-encrypted-backup',
+      'version': 1,
+      'kdf': 'pbkdf2-hmac-sha256',
+      'iterations': 210000,
+      'salt': base64Encode(salt),
+      'nonce': base64Encode(box.nonce),
+      'ciphertext': base64Encode(box.cipherText),
+      'mac': base64Encode(box.mac.bytes),
+    };
+    final target = File(source.path.replaceFirst('.json', '.encrypted.json'));
+    await target.writeAsString(jsonEncode(envelope), flush: true);
+    await SharePlus.instance.share(ShareParams(
+      files: [XFile(target.path)],
+      text: 'Password-encrypted Canton Fair CRM backup',
+    ));
+  }
+
   Future<BackupPreview?> selectBackup() async {
     final path = await _backupChannel.invokeMethod<String>('pickBackup');
     if (path == null) return null;
@@ -68,7 +106,40 @@ class BackupService {
     if (await file.length() > _maxBytes * 2) {
       throw const FormatException('Backup exceeds the supported size limit.');
     }
-    return _decodeBackup(await file.readAsString());
+    final content = await file.readAsString();
+    final decoded = jsonDecode(content);
+    if (decoded is Map &&
+        decoded['format'] == 'canton-fair-crm-encrypted-backup') {
+      throw BackupPasswordRequired(file, Map<String, dynamic>.from(decoded));
+    }
+    return _decodeBackup(content);
+  }
+
+  Future<BackupPreview> unlockBackup(
+      BackupPasswordRequired request, String password) async {
+    try {
+      final data = request.envelope;
+      final salt = base64Decode(data['salt'] as String);
+      final kdf = cryptography.Pbkdf2(
+        macAlgorithm: cryptography.Hmac.sha256(),
+        iterations: data['iterations'] as int? ?? 210000,
+        bits: 256,
+      );
+      final key =
+          await kdf.deriveKeyFromPassword(password: password, nonce: salt);
+      final clearText = await cryptography.AesGcm.with256bits().decrypt(
+        cryptography.SecretBox(
+          base64Decode(data['ciphertext'] as String),
+          nonce: base64Decode(data['nonce'] as String),
+          mac: cryptography.Mac(base64Decode(data['mac'] as String)),
+        ),
+        secretKey: key,
+      );
+      return _decodeBackup(utf8.decode(clearText));
+    } catch (_) {
+      throw const FormatException(
+          'Incorrect password or damaged encrypted backup.');
+    }
   }
 
   Future<int> restoreReplacingLocalData(BackupPreview backup) =>
@@ -259,4 +330,10 @@ class BackupPreview {
       this.files = const {}});
   int get recordCount =>
       tables.values.fold(0, (total, rows) => total + rows.length);
+}
+
+class BackupPasswordRequired implements Exception {
+  final File file;
+  final Map<String, dynamic> envelope;
+  const BackupPasswordRequired(this.file, this.envelope);
 }

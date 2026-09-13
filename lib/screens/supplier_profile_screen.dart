@@ -67,8 +67,9 @@ class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
       final contacts =
           await TradeDatabase.instance.getContacts(widget.supplierId);
       if (supplier == null) throw StateError('Supplier no longer exists.');
-      if (await TeamWorkspaceService().scopeKey() != _scope)
+      if (await TeamWorkspaceService().scopeKey() != _scope) {
         throw StateError('Workspace changed. Please reopen.');
+      }
       if (!mounted) return;
       _supplier = supplier;
       _contacts = contacts;
@@ -196,10 +197,11 @@ class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
           card: widget.card);
       if (mounted) Navigator.pop(context, saved);
     } catch (error) {
-      if (mounted)
+      if (mounted) {
         setState(() => _error = error is StateError
             ? error.message.toString()
             : 'Save failed. Your edits are still on this screen.');
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -373,22 +375,25 @@ class _CardSupplierPickerState extends State<_CardSupplierPicker> {
               child: FutureBuilder<List<Exhibitor>>(
                   future: _suppliers,
                   builder: (context, snapshot) {
-                    if (snapshot.hasError)
+                    if (snapshot.hasError) {
                       return const Center(
                           child: Text(
                               'Could not load suppliers. Reopen this screen to retry.'));
-                    if (!snapshot.hasData)
+                    }
+                    if (!snapshot.hasData) {
                       return const Center(child: CircularProgressIndicator());
+                    }
                     final matches = snapshot.data!
                         .where((supplier) =>
                             '${supplier.name} ${supplier.booth} ${supplier.country}'
                                 .toLowerCase()
                                 .contains(_query))
                         .toList();
-                    if (matches.isEmpty)
+                    if (matches.isEmpty) {
                       return const Center(
                           child: Text(
                               'No matching suppliers. Try another search or go back to create a new supplier.'));
+                    }
                     return ListView.builder(
                         itemCount: matches.length,
                         itemBuilder: (context, index) {

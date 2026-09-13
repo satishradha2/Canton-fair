@@ -41,8 +41,9 @@ class CardAiService {
 
     Future<Map<String, dynamic>> perform() async {
       final workspace = TeamWorkspaceService();
-      if (await workspace.scopeKey() != draft.scope)
+      if (await workspace.scopeKey() != draft.scope) {
         throw StateError('Workspace changed. Reopen the draft.');
+      }
       checkDeadline();
       final team = await workspace.load();
       checkDeadline();
@@ -61,8 +62,9 @@ class CardAiService {
         });
         checkDeadline();
       }
-      if (await workspace.scopeKey() != draft.scope)
+      if (await workspace.scopeKey() != draft.scope) {
         throw StateError('Workspace changed. Nothing was uploaded.');
+      }
       checkDeadline();
       try {
         submitted = true;
@@ -75,12 +77,14 @@ class CardAiService {
           'consent': true,
           'pages': pages,
         }).timeout(const Duration(seconds: 90));
-        if (await workspace.scopeKey() != draft.scope)
+        if (await workspace.scopeKey() != draft.scope) {
           throw StateError('Workspace changed. Reopen the original workspace.');
+        }
         checkDeadline();
         final data = Map<String, dynamic>.from(response.data as Map);
-        if (response.status != 200 || data['error'] != null)
+        if (response.status != 200 || data['error'] != null) {
           throw StateError('Cloud service could not complete this card.');
+        }
         return data;
       } on FunctionException catch (error) {
         final details = error.details;

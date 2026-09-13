@@ -16,6 +16,8 @@ import '../widgets/enterprise_widgets.dart';
 import 'team_setup_screen.dart';
 import 'sync_status_screen.dart';
 import 'account_profile_screen.dart';
+import 'cloud_health_screen.dart';
+import 'data_privacy_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   final Future<void> Function()? onAppLockChanged;
@@ -49,9 +51,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String? _teamName;
 
   Future<void> _createBackup() async {
+    final password =
+        await _askBackupPassword(title: 'Protect backup', confirm: true);
+    if (password == null) return;
     setState(() => _creatingBackup = true);
     try {
-      await _backup.createAndShareBackup();
+      await _backup.createAndShareEncryptedBackup(password);
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -60,6 +65,61 @@ class _SettingsScreenState extends State<SettingsScreen> {
     } finally {
       if (mounted) setState(() => _creatingBackup = false);
     }
+  }
+
+  Future<String?> _askBackupPassword(
+      {required String title, bool confirm = false}) async {
+    final password = TextEditingController();
+    final confirmation = TextEditingController();
+    String? error;
+    final result = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text(title),
+          content: Column(mainAxisSize: MainAxisSize.min, children: [
+            TextField(
+              controller: password,
+              obscureText: true,
+              autofocus: true,
+              decoration: const InputDecoration(labelText: 'Backup password'),
+            ),
+            if (confirm)
+              TextField(
+                controller: confirmation,
+                obscureText: true,
+                decoration:
+                    const InputDecoration(labelText: 'Confirm password'),
+              ),
+            if (error != null) ...[
+              const SizedBox(height: 8),
+              Text(error!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error)),
+            ],
+          ]),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('Cancel')),
+            FilledButton(
+              onPressed: () {
+                if (password.text.length < 8) {
+                  setDialogState(() => error = 'Use at least 8 characters.');
+                } else if (confirm && password.text != confirmation.text) {
+                  setDialogState(() => error = 'Passwords do not match.');
+                } else {
+                  Navigator.pop(dialogContext, password.text);
+                }
+              },
+              child: const Text('Continue'),
+            ),
+          ],
+        ),
+      ),
+    );
+    password.dispose();
+    confirmation.dispose();
+    return result;
   }
 
   @override
@@ -285,14 +345,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _restoreBackup() async {
     setState(() => _restoringBackup = true);
     try {
-      final preview = await _backup.selectBackup();
+      BackupPreview? preview;
+      try {
+        preview = await _backup.selectBackup();
+      } on BackupPasswordRequired catch (request) {
+        if (!mounted) return;
+        final password = await _askBackupPassword(title: 'Unlock backup');
+        if (password == null) return;
+        preview = await _backup.unlockBackup(request, password);
+      }
       if (!mounted || preview == null) return;
+      final selectedBackup = preview;
       final confirmed = await showDialog<bool>(
             context: context,
             builder: (context) => AlertDialog(
               title: const Text('Replace local data?'),
               content: Text(
-                'This backup contains ${preview.recordCount} records. Restore is available in Personal workspace only and replaces its business records, samples, sourcing briefs, closeouts, files and activity history. A pre-restore recovery backup is retained. Shared team data is not replaced.',
+                'This backup contains ${selectedBackup.recordCount} records. Restore is available in Personal workspace only and replaces its business records, samples, sourcing briefs, closeouts, files and activity history. A pre-restore recovery backup is retained. Shared team data is not replaced.',
               ),
               actions: [
                 TextButton(
@@ -308,7 +377,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ) ??
           false;
       if (!confirmed || !mounted) return;
-      final count = await _backup.restoreReplacingLocalData(preview);
+      final count = await _backup.restoreReplacingLocalData(selectedBackup);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Backup restored: $count records imported.')),
@@ -475,7 +544,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 icon: Icons.cloud_sync_outlined,
                 title: 'Automatic sync',
                 subtitle:
-                    'Sync when the app opens, reconnects, and periodically while in use',
+                    'Sync when the app opens, reconnects, and periodically in the background',
                 trailing: Switch.adaptive(
                   value: _automaticSync,
                   onChanged: (value) async {
@@ -498,6 +567,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     context,
                     MaterialPageRoute(
                         builder: (_) => const SyncStatusScreen())),
+              ),
+              _settingTile(
+                icon: Icons.cloud_done_outlined,
+                title: 'Cloud readiness',
+                subtitle: 'Verify database, storage and server-side functions',
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const CloudHealthScreen()),
+                ),
               ),
               _settingTile(
                 icon: Icons.system_update,
@@ -526,7 +605,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   icon: Icons.cloud_upload,
                   title: 'Export backup',
                   subtitle:
-                      'Create a shareable local JSON backup of your records',
+                      'Create a password-encrypted portable backup of records and files',
                   trailing: _creatingBackup
                       ? const SizedBox(
                           width: 22,
@@ -579,9 +658,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 onTap: _showAuditHistory,
               ),
               _settingTile(
-                  icon: Icons.delete_forever,
-                  title: 'Delete data',
-                  subtitle: 'Planned: export-before-delete workflow'),
+                icon: Icons.delete_forever,
+                title: 'Data and privacy',
+                subtitle: 'Export-first deletion by trip or personal workspace',
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const DataPrivacyScreen()),
+                ),
+              ),
             ],
           ),
         ),

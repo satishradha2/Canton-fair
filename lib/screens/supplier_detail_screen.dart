@@ -15,6 +15,7 @@ import '../data/camera_capture_service.dart';
 import '../data/reminder_service.dart';
 import '../data/device_contacts_service.dart';
 import '../data/edit_lock_service.dart';
+import '../data/location_capture_service.dart';
 import '../models/models.dart';
 import '../theme/app_theme.dart';
 import '../widgets/enterprise_widgets.dart';
@@ -42,6 +43,7 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
   late Future<List<Attachment>> _files;
   late Future<List<Sample>> _samples;
   final _editLocks = EditLockService();
+  final _locationCapture = LocationCaptureService();
   EditLock? _editLock;
   String? _lockRecordId;
 
@@ -701,6 +703,25 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
       return value is Map ? Map<String, dynamic>.from(value) : const {};
     } catch (_) {
       return const {};
+    }
+  }
+
+  Future<void> _captureBoothLocation() async {
+    try {
+      final location = await _locationCapture.capture();
+      final data = _fieldCapture(widget.supplier);
+      data['booth_location'] = location.toJson();
+      final encoded = jsonEncode(data);
+      await _db.update(
+          'exhibitors', widget.supplier.id!, {'field_capture_json': encoded});
+      if (!mounted) return;
+      setState(() => _fieldCaptureJson = encoded);
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Booth location saved with the supplier record.')));
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(error.toString())));
     }
   }
 
@@ -1572,7 +1593,10 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
 
   Widget _fieldCapturePanel(Exhibitor supplier) {
     final capture = _fieldCapture(supplier);
-    if (capture.isEmpty) return const SizedBox.shrink();
+    final rawLocation = capture['booth_location'];
+    final boothLocation = rawLocation is Map
+        ? Map<String, dynamic>.from(rawLocation)
+        : <String, dynamic>{};
     final checklist = (capture['checklist'] as List? ?? const [])
         .whereType<String>()
         .toList();
@@ -1629,9 +1653,30 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
                       .toList(),
                 ),
               ],
-              if (details.isEmpty && checklist.isEmpty)
+              if (boothLocation.isNotEmpty) ...[
+                if (details.isNotEmpty || checklist.isNotEmpty)
+                  const SizedBox(height: 12),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.location_on_outlined),
+                  title: const Text('Booth location recorded'),
+                  subtitle: Text(
+                    '${boothLocation['latitude']}, ${boothLocation['longitude']} '
+                    '(accuracy ${((boothLocation['accuracy_metres'] as num?) ?? 0).round()} m)',
+                  ),
+                ),
+              ],
+              if (details.isEmpty && checklist.isEmpty && boothLocation.isEmpty)
                 const Text(
-                    'The field checklist was started without additional details.'),
+                    'No structured on-site details have been captured yet.'),
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                onPressed: _captureBoothLocation,
+                icon: const Icon(Icons.my_location_outlined),
+                label: Text(boothLocation.isEmpty
+                    ? 'Tag current booth location'
+                    : 'Update booth location'),
+              ),
             ],
           ),
         ),

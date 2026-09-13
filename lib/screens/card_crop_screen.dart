@@ -47,9 +47,10 @@ class _CardCropScreenState extends State<CardCropScreen> {
             .toList();
       });
     } catch (_) {
-      if (mounted)
+      if (mounted) {
         setState(() => _error =
             'Automatic edge detection is unavailable. Keep the original and continue OCR.');
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -67,9 +68,10 @@ class _CardCropScreenState extends State<CardCropScreen> {
       });
       if (mounted) Navigator.pop(context, path);
     } catch (_) {
-      if (mounted)
+      if (mounted) {
         setState(() => _error =
             'Corners must form a non-crossing card outline. Adjust them or keep the original.');
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }

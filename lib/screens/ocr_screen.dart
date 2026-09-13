@@ -122,9 +122,10 @@ class _OcrScreenState extends State<OcrScreen> {
       draft.pendingSide = side;
       await draft.save();
       if (Platform.isAndroid && source == ImageSource.camera) {
-        if (mounted)
+        if (mounted) {
           setState(() => _status =
               'Opening live card scanner. Review the detected edges before accepting.');
+        }
         final token = '${draft.id}_$side';
         final scan = await CameraCaptureService.capture(
             () => _scanner.invokeMethod<String>('scan', {'token': token}));
@@ -137,8 +138,9 @@ class _OcrScreenState extends State<OcrScreen> {
         draft.sides[side]!['capture_method'] = 'live_scanner';
         await draft.save();
         await _scanner.invokeMethod<void>('discard', {'token': token});
-        if (mounted)
+        if (mounted) {
           setState(() => _status = 'Reading the accepted $side card scan...');
+        }
         await draft.readSide(side);
         if (mounted) setState(_populate);
         return;
@@ -158,9 +160,10 @@ class _OcrScreenState extends State<OcrScreen> {
       await draft.readSide(side);
       if (mounted) setState(_populate);
     } on PlatformException catch (error) {
-      if (mounted)
+      if (mounted) {
         setState(() => _error = error.message ??
             'Live card scanning is unavailable. Existing images are unchanged.');
+      }
     } catch (_) {
       if (mounted) {
         setState(() => _error =
@@ -237,17 +240,19 @@ class _OcrScreenState extends State<OcrScreen> {
         if (mounted) setState(_populate);
       }
     } catch (_) {
-      if (mounted)
+      if (mounted) {
         setState(() =>
             _error = 'Could not crop the card. The original is preserved.');
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
   }
 
   Future<void> _useDetails({bool existing = false}) async {
-    if (_busy || _draft == null || ModalRoute.of(context)?.isCurrent != true)
+    if (_busy || _draft == null || ModalRoute.of(context)?.isCurrent != true) {
       return;
+    }
     final draft = _draft!;
     if (!draft.sides.containsKey('front') ||
         (!draft.sides.containsKey('back') && !draft.backBlank)) {
@@ -348,9 +353,10 @@ class _OcrScreenState extends State<OcrScreen> {
                     try {
                       await draft.save();
                     } catch (_) {
-                      if (mounted)
+                      if (mounted) {
                         setState(() =>
                             _error = 'Could not save the draft. Please retry.');
+                      }
                     }
                   },
           ),
@@ -513,11 +519,12 @@ class _OcrScreenState extends State<OcrScreen> {
               draft: draft,
               enabled: !_busy,
               onBusyChanged: (value) {
-                if (mounted)
+                if (mounted) {
                   setState(() {
                     _busy = value;
                     _status = 'Reading with OpenAI...';
                   });
+                }
               },
               onChanged: () {
                 if (mounted) setState(_populate);
@@ -567,9 +574,10 @@ class _OcrScreenState extends State<OcrScreen> {
                             try {
                               await draft.save();
                             } catch (_) {
-                              if (mounted)
+                              if (mounted) {
                                 setState(() => _error =
                                     'Could not save the reading preference.');
+                              }
                             }
                           },
                   ),

@@ -167,9 +167,10 @@ class SupplierProfile {
           'notes',
           'field_capture_json'
         ]) {
-          if (row[key] != before[key])
+          if (row[key] != before[key]) {
             throw StateError(
                 'Supplier details changed elsewhere. Reopen and review before saving.');
+          }
         }
         final capture = object(row['field_capture_json'] as String? ?? '{}');
         capture['supplier_details'] = {
@@ -192,9 +193,10 @@ class SupplierProfile {
                     card.readingPath(side),
             };
             for (final entry in files.entries) {
-              if (!await File(entry.value).exists())
+              if (!await File(entry.value).exists()) {
                 throw StateError(
                     'Card image missing. Recapture it before saving.');
+              }
               final linked = await txn.query('attachments',
                   where: 'path = ?', whereArgs: [entry.value]);
               if (linked.any((item) =>

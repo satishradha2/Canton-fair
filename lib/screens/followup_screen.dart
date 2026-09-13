@@ -50,8 +50,9 @@ class _FollowUpScreenState extends State<FollowUpScreen> {
     if (meeting.id == null) return;
     HapticFeedback.selectionClick();
     setState(() {
-      if (!_selectedTaskIds.add(meeting.id!))
+      if (!_selectedTaskIds.add(meeting.id!)) {
         _selectedTaskIds.remove(meeting.id!);
+      }
     });
   }
 

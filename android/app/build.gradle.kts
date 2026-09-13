@@ -41,7 +41,10 @@ android {
 
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.example.canton_fair_crm"
+        // Keep the current ID so existing installations continue to receive APK updates.
+        // A future store migration can pass -PAPP_APPLICATION_ID=com.company.app.
+        applicationId = providers.gradleProperty("APP_APPLICATION_ID")
+            .orElse("com.example.canton_fair_crm").get()
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion

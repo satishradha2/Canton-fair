@@ -6,6 +6,7 @@ import 'data/language_service.dart';
 import 'data/sync_status_service.dart';
 import 'data/database.dart';
 import 'data/auto_sync_service.dart';
+import 'data/reminder_service.dart';
 import 'models/models.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/captures_screen.dart';
@@ -69,6 +70,7 @@ class _CantonFairAppState extends State<CantonFairApp>
     WidgetsBinding.instance.addObserver(this);
     _loadLanguage();
     AutoSyncService.instance.start();
+    ReminderService.selectedPayload.addListener(_openReminderPayload);
     WidgetsBinding.instance
         .addPostFrameCallback((_) => _checkForStartupUpdate());
     WidgetsBinding.instance.addPostFrameCallback((_) => _takeQuickAction());
@@ -105,7 +107,15 @@ class _CantonFairAppState extends State<CantonFairApp>
     WidgetsBinding.instance.removeObserver(this);
     _captureQuickAction.dispose();
     AutoSyncService.instance.stop();
+    ReminderService.selectedPayload.removeListener(_openReminderPayload);
     super.dispose();
+  }
+
+  void _openReminderPayload() {
+    final payload = ReminderService.selectedPayload.value;
+    if (payload == null || !payload.startsWith('followup:')) return;
+    ReminderService.selectedPayload.value = null;
+    if (mounted) setState(() => _index = 3);
   }
 
   @override

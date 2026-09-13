@@ -15,7 +15,8 @@ Business Bay, Dubai - UAE
 prasanth@cordelialine.com   www.cordelialine.com
 ''';
 
-  test('retains every phone, email, website, address and country candidate', () {
+  test('retains every phone, email, website, address and country candidate',
+      () {
     final values = BusinessCardParser.candidates(cordeliaCard);
 
     expect(values['phone'], hasLength(2));

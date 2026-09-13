@@ -123,9 +123,10 @@ class _BusinessCardArchiveScreenState extends State<BusinessCardArchiveScreen> {
         FutureBuilder<List<Attachment>>(
           future: _images,
           builder: (context, snapshot) {
-            if (snapshot.hasError)
+            if (snapshot.hasError) {
               return const Text(
                   'Could not load card attachments. Reopen this screen to retry.');
+            }
             if (!snapshot.hasData) return const LinearProgressIndicator();
             return Column(children: [
               for (final side in ['front', 'back'])
@@ -134,11 +135,12 @@ class _BusinessCardArchiveScreenState extends State<BusinessCardArchiveScreen> {
                     final matches = snapshot.data!.where((image) =>
                         image.note ==
                         'Business card $side | ${widget.archive['id']}');
-                    if (matches.isEmpty)
+                    if (matches.isEmpty) {
                       return ListTile(
                           title: Text('$side image'),
                           subtitle: const Text(
                               'Attachment not available locally. Check sync.'));
+                    }
                     final image = matches.first;
                     return Card(
                         child: Padding(

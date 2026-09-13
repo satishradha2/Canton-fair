@@ -314,8 +314,9 @@ class BusinessCardCapture {
         if (entry.key is! String || entry.value is! String) continue;
         final key = entry.key as String;
         final value = (entry.value as String).trim();
-        if (edited.contains(key) || value.isEmpty || fields[key] == value)
+        if (edited.contains(key) || value.isEmpty || fields[key] == value) {
           continue;
+        }
         fields[key] = value;
         count++;
       }

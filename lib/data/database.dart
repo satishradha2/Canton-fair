@@ -1311,6 +1311,35 @@ class TradeDatabase {
     });
   }
 
+  Future<int> deleteAllPersonalData() async {
+    if (await TeamWorkspaceService().load() != null) {
+      throw StateError(
+          'Switch to Personal workspace before deleting all device data.');
+    }
+    final db = await database;
+    final attachments = await db.query('attachments');
+    var deleted = 0;
+    await db.transaction((txn) async {
+      for (final table in backupTables.reversed) {
+        deleted += await txn.delete(table);
+      }
+      await txn.delete('sync_deletions');
+      await txn.delete('cloud_sync_conflicts');
+      await txn.delete('cloud_links');
+    });
+    for (final attachment in attachments) {
+      final path = attachment['path'] as String?;
+      if (path == null) continue;
+      try {
+        final file = File(path);
+        if (await file.exists()) await file.delete();
+      } catch (_) {}
+    }
+    await logAudit('Personal data deleted',
+        'Deleted $deleted records after creating a recovery backup.');
+    return deleted;
+  }
+
   Future<int> addAttachment(Attachment a) async {
     return insert('attachments', a.toMap()..remove('id'));
   }

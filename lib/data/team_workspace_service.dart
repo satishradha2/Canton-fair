@@ -63,8 +63,9 @@ class TeamWorkspaceService {
         .eq('team_id', workspace.id)
         .eq('user_id', user)
         .maybeSingle();
-    if (membership == null)
+    if (membership == null) {
       throw StateError('You no longer belong to this team.');
+    }
     if (user != userId) throw StateError('Account changed. Please retry.');
     await _storage.write(
         key: 'workspace_v2_$user',
@@ -79,8 +80,9 @@ class TeamWorkspaceService {
   }
 
   static Future<T> exclusive<T>(Future<T> Function() action) async {
-    if (busy.value)
+    if (busy.value) {
       throw StateError('Another data operation is already running.');
+    }
     busy.value = true;
     try {
       return await action();

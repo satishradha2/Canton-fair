@@ -25,6 +25,10 @@ function page(title: string, content: string) {
 
 Deno.serve(async (request) => {
   if (request.method === "OPTIONS") return new Response(null, { headers: cors });
+  if (request.method === "POST") {
+    const health = await request.clone().json().catch(() => null);
+    if (health?.action === "health") return json(200, { ok: true, function: "external-share" });
+  }
   const url = Deno.env.get("SUPABASE_URL");
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   if (!url || !serviceKey) return json(503, { error: "Sharing service is not configured." });

@@ -14,6 +14,9 @@ class AuthGate extends StatelessWidget {
             return const Scaffold(
                 body: Center(child: CircularProgressIndicator()));
           }
+          if (snapshot.data?.event == AuthChangeEvent.passwordRecovery) {
+            return const UpdatePasswordScreen();
+          }
           return Supabase.instance.client.auth.currentSession == null
               ? const SignInScreen()
               : ValueListenableBuilder<int>(
@@ -41,6 +44,36 @@ class _SignInScreenState extends State<SignInScreen> {
   bool _busy = false;
   String? _error;
 
+  Future<void> _resetPassword() async {
+    final email = _email.text.trim();
+    if (email.isEmpty) {
+      setState(() => _error = 'Enter your work email first.');
+      return;
+    }
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await Supabase.instance.client.auth.resetPasswordForEmail(
+        email,
+        redirectTo: 'cantonfair://auth-callback',
+      );
+      if (mounted) {
+        setState(() => _error =
+            'Password recovery email sent. Open the link in your inbox.');
+      }
+    } on AuthException catch (error) {
+      if (mounted) setState(() => _error = error.message);
+    } catch (_) {
+      if (mounted) {
+        setState(() => _error = 'Could not send recovery email. Try again.');
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   Future<void> _submit() async {
     setState(() {
       _busy = true;
@@ -54,7 +87,7 @@ class _SignInScreenState extends State<SignInScreen> {
         );
         if (mounted) {
           setState(() => _error =
-              'Account created. You can now sign in with your email and password.');
+              'Account created. Check your email if confirmation is required, then sign in.');
         }
       } else {
         await Supabase.instance.client.auth.signInWithPassword(
@@ -160,6 +193,14 @@ class _SignInScreenState extends State<SignInScreen> {
                   helperText: _creating ? 'Use at least 6 characters' : null,
                   prefixIcon: const Icon(Icons.lock_outline_rounded)),
             ),
+            if (!_creating)
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: _busy ? null : _resetPassword,
+                  child: const Text('Forgot password?'),
+                ),
+              ),
             if (_error != null) ...[
               const SizedBox(height: 16),
               Semantics(
@@ -238,6 +279,104 @@ class _SignInScreenState extends State<SignInScreen> {
               ),
             ),
           )),
+        ),
+      );
+}
+
+class UpdatePasswordScreen extends StatefulWidget {
+  const UpdatePasswordScreen({super.key});
+
+  @override
+  State<UpdatePasswordScreen> createState() => _UpdatePasswordScreenState();
+}
+
+class _UpdatePasswordScreenState extends State<UpdatePasswordScreen> {
+  final _password = TextEditingController();
+  final _confirmation = TextEditingController();
+  bool _busy = false;
+  String? _error;
+
+  Future<void> _update() async {
+    if (_password.text.length < 8) {
+      setState(() => _error = 'Use at least 8 characters.');
+      return;
+    }
+    if (_password.text != _confirmation.text) {
+      setState(() => _error = 'Passwords do not match.');
+      return;
+    }
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await Supabase.instance.client.auth
+          .updateUser(UserAttributes(password: _password.text));
+      await Supabase.instance.client.auth.signOut();
+    } on AuthException catch (error) {
+      if (mounted) setState(() => _error = error.message);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  void dispose() {
+    _password.dispose();
+    _confirmation.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        body: SafeArea(
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(24),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 460),
+                child: Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Text('Choose a new password',
+                            style: Theme.of(context).textTheme.headlineSmall),
+                        const SizedBox(height: 24),
+                        TextField(
+                          controller: _password,
+                          obscureText: true,
+                          decoration:
+                              const InputDecoration(labelText: 'New password'),
+                        ),
+                        const SizedBox(height: 16),
+                        TextField(
+                          controller: _confirmation,
+                          obscureText: true,
+                          onSubmitted: (_) => _busy ? null : _update(),
+                          decoration: const InputDecoration(
+                              labelText: 'Confirm new password'),
+                        ),
+                        if (_error != null) ...[
+                          const SizedBox(height: 12),
+                          Text(_error!,
+                              style: TextStyle(
+                                  color: Theme.of(context).colorScheme.error)),
+                        ],
+                        const SizedBox(height: 24),
+                        FilledButton(
+                          onPressed: _busy ? null : _update,
+                          child:
+                              Text(_busy ? 'Updating...' : 'Update password'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
         ),
       );
 }

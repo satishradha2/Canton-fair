@@ -127,9 +127,10 @@ class _CardAiPanelState extends State<CardAiPanel>
       await widget.draft.save();
       if (mounted) widget.onChanged();
     } catch (_) {
-      if (mounted)
+      if (mounted) {
         setState(() =>
             _error = 'Could not persist the suggestions. Check local storage.');
+      }
     }
   }
 

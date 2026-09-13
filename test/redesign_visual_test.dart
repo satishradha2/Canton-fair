@@ -125,11 +125,8 @@ void main() {
   });
 
   testWidgets('settings dark theme remains readable', (tester) async {
-    await render(
-        tester,
-        SettingsScreen(workspaceLoader: () async => null),
-        'settings-dark-small-phone',
-        const Size(360, 800),
+    await render(tester, SettingsScreen(workspaceLoader: () async => null),
+        'settings-dark-small-phone', const Size(360, 800),
         dark: true);
     expect(find.text('Settings'), findsOneWidget);
   });

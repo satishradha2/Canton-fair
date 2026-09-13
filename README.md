@@ -1,60 +1,91 @@
-# Canton Fair Trade CRM (Android)
+# Canton Fair CRM
 
-This is a full-feature starter app for Canton Fair supplier discovery, communication capture, and shortlisting.
+Offline-first Android sourcing workspace for capturing suppliers, contacts,
+products, commercial terms, evidence, meetings, tasks, samples, risk, and
+purchase handoffs during trade fairs.
 
-## Included feature modules
+## Main workflows
 
-- Trip / visit planning
-- Exhibitor and product capture
-- Multiple contacts per exhibitor
-- Product quote and follow-up notes
-- Shortlisting for suppliers and products
-- Follow-up reminder dataset (with overdue highlighting)
-- Search and filters while capturing
-- Dashboard KPIs and analytics cards
-- Export center (CSV output, share sheet)
-- Placeholder integration points for:
-  - OCR/QR/card scan (implemented: QR/barcode and OCR capture screens)
-  - Document templates and team sync
-  - Team sync and team permissions
-  - Biometrics/PIN
-  - PDF report + cloud backup
+- Dashboard agenda, KPIs, first-run checklist, quick capture, QR and card scan
+- Guided supplier capture with multiple contacts, products, quotes and files
+- OCR-assisted business-card review with country-aware phone normalization
+- Supplier workspace tabs for overview, contacts, products, meetings and files
+- Structured company, factory, certificate, risk and compliance records
+- Samples, RFQs, negotiation, due diligence and purchase-order handoff
+- Assigned follow-ups with priority, date/time, reminders and completion status
+- Hall/day booth routes, visit timers, missed booths and GPS booth evidence
+- Shortlisting, comparison, daily debrief, analytics and team activity
+- CSV, PDF and multi-sheet Excel export
+- Password-encrypted portable backups with restore validation
 
-## Current implemented premium features
+## Cloud and offline behavior
 
-- QR/barcode scanning and OCR business-card capture
-- Supplier duplicate detector on capture
-- Contact actions: Call, WhatsApp, Email, Copy
-- Photo attachments for exhibitor/product records and quick open
-- Message templates with WhatsApp/email/copy quick actions
-- Follow-up reminders via local notifications
-- Shortlist + comparison table
-- Export:
-  - CSV for all exhibitors, shortlist, and follow-ups
-- PDF shortlist report
+SQLite remains the field source of truth. Supabase provides email/password
+authentication, shared teams, row-level security, attachment storage, realtime
+notifications and conflict-aware sync. Sync runs on app open, network reconnect,
+realtime team changes, every five minutes while active, and periodically through
+Android WorkManager when the app is backgrounded. Android controls the exact
+background execution time.
 
-## Intelligence and logistics
+The app never requires cloud access to capture records. The shell reports
+`Saved on this device`, `Sync in progress`, `Last sync completed`, or
+`Sync needs attention`.
 
-- Supplier-linked communication inbox and local natural-language record search
-- Multi-page catalogue image/PDF rendering, OCR, and reviewable product drafts
-- Team booth check-ins, duplicate-visit warnings, and dynamic route replanning
-- HS-code review profiles and destination-market readiness checklists
-- Dated ECB reference-rate quote normalization
-- Carton/container capacity planning and AQL inspection guidance
-- Post-order supplier performance and corrective-action tracking
-- Compressed offline supplier transfer between phones by QR
-- Shared fair terminology glossary and pre-fair device/data readiness checks
+## Build
 
-## Run
+```powershell
+cd "D:\Canton Fair"
+flutter pub get
+flutter analyze --no-fatal-infos
+flutter test
+flutter build apk --release `
+  --dart-define=SUPABASE_URL=https://YOUR_PROJECT.supabase.co `
+  --dart-define=SUPABASE_ANON_KEY=YOUR_ANON_PUBLIC_KEY
+```
 
-1. Create a Flutter app shell in this folder if needed:
-   - `flutter create .` (if the platform folders are missing)
-2. Install packages:
-   - `flutter pub get`
-3. Run on Android:
-   - `flutter run`
+The APK is written to
+`build\app\outputs\flutter-apk\app-release.apk`.
 
-## Notes
+Keep the current Android application ID unless you deliberately plan a signed
+package migration. Existing installations only accept updates with the same
+application ID and signing key. A future migration can pass
+`-PAPP_APPLICATION_ID=com.company.app`.
 
-- This is a baseline offline-first architecture using local SQLite.
-- UI and business logic are intentionally separated so future features can be added without rewrite.
+## Supabase deployment
+
+1. Run `server/sql/001_*.sql` through `server/sql/017_cloud_health.sql` in order.
+2. Create the private `team-attachments` storage bucket and apply its policies.
+3. Deploy `card-ai`, `meeting-ai`, and `external-share` from
+   `supabase/functions`.
+4. Add `cantonfair://auth-callback` to the Supabase Auth redirect URL allow-list.
+5. Open **Settings > Cloud readiness** in the app. Every check must pass.
+
+Never commit a service-role key, Firebase service account, signing keystore, or
+local `.env` file. The Supabase anon/publishable key is intended for clients;
+security must be enforced by row-level policies.
+
+## Release automation
+
+Pushes to `main` run analysis and tests, create a signed release APK, and publish
+it as a GitHub Release. Configure these repository secrets:
+
+- `ANDROID_KEYSTORE_BASE64`
+- `ANDROID_KEYSTORE_PASSWORD`
+- `ANDROID_KEY_PASSWORD`
+- `ANDROID_KEY_ALIAS`
+- `SUPABASE_URL`
+- `SUPABASE_ANON_KEY`
+
+Increase `version:` in `pubspec.yaml` before publishing. Installed builds check
+GitHub Releases and offer the newer APK when its version is greater.
+
+## Security notes
+
+- App lock protects casual device access with PIN/biometrics.
+- Exported backups use AES-256-GCM with a password-derived key.
+- Deletion creates a recovery backup first and is restricted to Personal scope.
+- Local live SQLite and attachment files rely on Android device encryption. A
+  future SQLCipher migration requires a tested in-place migration and must not
+  silently replace existing databases.
+- WhatsApp and email histories cannot be scraped by another Android app. Users
+  can record or share relevant communication into supplier records explicitly.
