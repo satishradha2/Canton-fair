@@ -56,9 +56,10 @@ class _SupplierComparisonScreenState extends State<SupplierComparisonScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          const Text(
+          Text(
             'Compare selected suppliers side by side. Start with a Sourcing brief when you need to define buying requirements first.',
-            style: TextStyle(color: AppColors.muted),
+            style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant),
           ),
           const SizedBox(height: 16),
           ...widget.suppliers.map((supplier) => Padding(
@@ -203,8 +204,8 @@ class _SupplierComparisonScreenState extends State<SupplierComparisonScreen> {
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: DataTable(
-          headingRowColor:
-              WidgetStatePropertyAll(AppColors.primary.withValues(alpha: 0.06)),
+          headingRowColor: WidgetStatePropertyAll(
+              Theme.of(context).colorScheme.surfaceContainerHigh),
           columns: [
             const DataColumn(label: Text('Factor')),
             ...widget.suppliers.map((supplier) => DataColumn(

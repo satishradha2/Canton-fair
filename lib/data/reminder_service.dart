@@ -73,4 +73,25 @@ class ReminderService {
   static Future<void> cancel(int id) async {
     await _plugin.cancel(id);
   }
+
+  static Future<void> showTeamUpdate({
+    required String title,
+    required String body,
+  }) async {
+    await _plugin.show(
+      DateTime.now().millisecondsSinceEpoch.remainder(2147483647),
+      title,
+      body,
+      const NotificationDetails(
+        android: AndroidNotificationDetails(
+          'followup_channel',
+          'Follow-up reminders',
+          channelDescription: 'Supplier tasks and team workspace updates',
+          importance: Importance.defaultImportance,
+          priority: Priority.defaultPriority,
+        ),
+        iOS: DarwinNotificationDetails(presentSound: true, presentAlert: true),
+      ),
+    );
+  }
 }

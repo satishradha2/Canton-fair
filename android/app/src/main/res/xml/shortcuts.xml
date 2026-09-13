@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="scan_card"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/shortcut_scan_card"
+        android:shortcutLongLabel="@string/shortcut_scan_card_long">
+        <intent android:action="android.intent.action.VIEW" android:data="cantonfair://capture/card" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="add_supplier"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/shortcut_add_supplier"
+        android:shortcutLongLabel="@string/shortcut_add_supplier_long">
+        <intent android:action="android.intent.action.VIEW" android:data="cantonfair://capture/supplier" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="scan_qr"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/shortcut_scan_qr"
+        android:shortcutLongLabel="@string/shortcut_scan_qr_long">
+        <intent android:action="android.intent.action.VIEW" android:data="cantonfair://capture/qr" />
+    </shortcut>
+</shortcuts>

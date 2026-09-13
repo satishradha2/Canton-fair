@@ -119,19 +119,19 @@ class _QuoteApprovalScreenState extends State<QuoteApprovalScreen> {
     final reviewer =
         Supabase.instance.client.auth.currentUser?.email ?? 'Local team member';
     try {
-    await _db.update('quotes', quote['id'] as int, {
-      'approval_status': result.$1,
-      'approval_comment': result.$2,
-      'approved_by': isFinal ? reviewer : '',
-      'approved_at': isFinal ? DateTime.now().toIso8601String() : null,
-    });
-    await _db.logAudit('Quote ${result.$1.toLowerCase()}',
-        '${quote['supplier_name'] ?? 'Supplier'} | ${quote['product_name'] ?? 'Product'}');
-    if (mounted) setState(_load);
+      await _db.update('quotes', quote['id'] as int, {
+        'approval_status': result.$1,
+        'approval_comment': result.$2,
+        'approved_by': isFinal ? reviewer : '',
+        'approved_at': isFinal ? DateTime.now().toIso8601String() : null,
+      });
+      await _db.logAudit('Quote ${result.$1.toLowerCase()}',
+          '${quote['supplier_name'] ?? 'Supplier'} | ${quote['product_name'] ?? 'Product'}');
+      if (mounted) setState(_load);
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Review not saved: $error')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Review not saved: $error')));
       }
     }
   }
@@ -176,9 +176,10 @@ class _QuoteApprovalScreenState extends State<QuoteApprovalScreen> {
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              const Text(
+              Text(
                   'Members submit quotes; team admins approve, reject, or request changes. Team reviews require a connection.',
-                  style: TextStyle(color: AppColors.muted)),
+                  style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant)),
               const SizedBox(height: 12),
               Wrap(
                 spacing: 8,

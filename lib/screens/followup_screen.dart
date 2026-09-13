@@ -50,7 +50,8 @@ class _FollowUpScreenState extends State<FollowUpScreen> {
     if (meeting.id == null) return;
     HapticFeedback.selectionClick();
     setState(() {
-      if (!_selectedTaskIds.add(meeting.id!)) _selectedTaskIds.remove(meeting.id!);
+      if (!_selectedTaskIds.add(meeting.id!))
+        _selectedTaskIds.remove(meeting.id!);
     });
   }
 
@@ -65,7 +66,9 @@ class _FollowUpScreenState extends State<FollowUpScreen> {
     setState(() => _selectedTaskIds.clear());
     _refresh();
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('${selected.length} follow-up${selected.length == 1 ? '' : 's'} completed.')),
+      SnackBar(
+          content: Text(
+              '${selected.length} follow-up${selected.length == 1 ? '' : 's'} completed.')),
     );
   }
 
@@ -73,14 +76,17 @@ class _FollowUpScreenState extends State<FollowUpScreen> {
     final selected = _selectedTaskIds.toList();
     final tomorrow = DateTime.now().add(const Duration(days: 1));
     for (final id in selected) {
-      await db.update('meetings', id, {'follow_up_date': tomorrow.toIso8601String()});
+      await db.update(
+          'meetings', id, {'follow_up_date': tomorrow.toIso8601String()});
     }
     await HapticFeedback.selectionClick();
     if (!mounted) return;
     setState(() => _selectedTaskIds.clear());
     _refresh();
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('${selected.length} follow-up${selected.length == 1 ? '' : 's'} moved to tomorrow.')),
+      SnackBar(
+          content: Text(
+              '${selected.length} follow-up${selected.length == 1 ? '' : 's'} moved to tomorrow.')),
     );
   }
 
@@ -468,20 +474,21 @@ class _FollowUpScreenState extends State<FollowUpScreen> {
                                   onChanged: (_) => _toggleTaskSelection(m),
                                 )
                               : Container(
-                            width: 40,
-                            height: 40,
-                            decoration: BoxDecoration(
-                              color:
-                                  (overdue ? AppColors.danger : AppColors.teal)
-                                      .withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Icon(
-                                overdue ? Icons.warning : Icons.schedule,
-                                color: overdue
-                                    ? AppColors.danger
-                                    : AppColors.teal),
-                          ),
+                                  width: 40,
+                                  height: 40,
+                                  decoration: BoxDecoration(
+                                    color: (overdue
+                                            ? AppColors.danger
+                                            : AppColors.teal)
+                                        .withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Icon(
+                                      overdue ? Icons.warning : Icons.schedule,
+                                      color: overdue
+                                          ? AppColors.danger
+                                          : AppColors.teal),
+                                ),
                           title: FutureBuilder<Exhibitor?>(
                             future: db.getExhibitorById(m.exhibitorId),
                             builder: (context, supplierSnapshot) => Text(
@@ -592,7 +599,7 @@ class _FollowUpScreenState extends State<FollowUpScreen> {
                             : Icons.playlist_add_check,
                         color: candidate.supplier.shortlisted
                             ? AppColors.amber
-                            : AppColors.primary,
+                            : Theme.of(context).colorScheme.primary,
                       ),
                       title: Text(candidate.supplier.name,
                           maxLines: 1, overflow: TextOverflow.ellipsis),
@@ -633,7 +640,10 @@ class _FollowUpScreenState extends State<FollowUpScreen> {
                     alignment: Alignment.centerLeft,
                     child: Text(
                         '${candidates.length - 5} more suppliers need follow-up.',
-                        style: const TextStyle(color: AppColors.muted)),
+                        style: TextStyle(
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSurfaceVariant)),
                   ),
               ],
             );

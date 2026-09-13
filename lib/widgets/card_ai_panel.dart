@@ -7,8 +7,12 @@ import '../data/card_ai_service.dart';
 import '../data/supplier_profile.dart';
 
 class CardAiPanel extends StatefulWidget {
-  const CardAiPanel({super.key, required this.draft, required this.enabled,
-    required this.onBusyChanged, required this.onChanged});
+  const CardAiPanel(
+      {super.key,
+      required this.draft,
+      required this.enabled,
+      required this.onBusyChanged,
+      required this.onChanged});
   final BusinessCardCapture draft;
   final bool enabled;
   final ValueChanged<bool> onBusyChanged;
@@ -28,24 +32,36 @@ class _CardAiPanelState extends State<CardAiPanel>
 
   Future<void> _request(bool translateOnly) async {
     if (!widget.enabled || _working) return;
-    final consent = await showDialog<bool>(context: context, builder: (context) => AlertDialog(
-      title: Text(translateOnly ? 'Translate with OpenAI?' : 'Read this card with OpenAI?'),
-      content: Text(translateOnly
-          ? 'The original-language card text will be sent to OpenAI through your secured server for translation into $_language. No images are sent for this action. API charges may apply. The translation is a suggestion and does not replace the original.'
-          : 'Copies of the front/back images and recognized text will be sent to OpenAI through your secured server. API charges may apply. Only send cards you are authorized to process. OpenAI data-retention policies apply. Originals and manual edits are preserved.'),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Keep offline')),
-        FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Send to OpenAI')),
-      ],
-    ));
+    final consent = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+              title: Text(translateOnly
+                  ? 'Translate with OpenAI?'
+                  : 'Read this card with OpenAI?'),
+              content: Text(translateOnly
+                  ? 'The original-language card text will be sent to OpenAI through your secured server for translation into $_language. No images are sent for this action. API charges may apply. The translation is a suggestion and does not replace the original.'
+                  : 'Copies of the front/back images and recognized text will be sent to OpenAI through your secured server. API charges may apply. Only send cards you are authorized to process. OpenAI data-retention policies apply. Originals and manual edits are preserved.'),
+              actions: [
+                TextButton(
+                    onPressed: () => Navigator.pop(context, false),
+                    child: const Text('Keep offline')),
+                FilledButton(
+                    onPressed: () => Navigator.pop(context, true),
+                    child: const Text('Send to OpenAI')),
+              ],
+            ));
     if (!mounted || consent != true || !widget.enabled) return;
     final draft = widget.draft;
     final inputs = draft.imageIdentities;
     final onBusyChanged = widget.onBusyChanged;
-    setState(() { _working = true; _error = null; });
+    setState(() {
+      _working = true;
+      _error = null;
+    });
     onBusyChanged(true);
     try {
-      final result = await CardAiService.read(draft, translateOnly: translateOnly, language: _language);
+      final result = await CardAiService.read(draft,
+          translateOnly: translateOnly, language: _language);
       result['input_files'] = inputs;
       draft.aiReadings.add(result);
       if (!translateOnly) draft.applyLatestAi();
@@ -53,13 +69,15 @@ class _CardAiPanelState extends State<CardAiPanel>
       try {
         await draft.save().timeout(const Duration(seconds: 15));
       } on TimeoutException {
-        throw StateError('AI reading finished, but saving the local draft is taking too long. The result is shown below; check free storage before leaving. Do not repeat the paid request.');
+        throw StateError(
+            'AI reading finished, but saving the local draft is taking too long. The result is shown below; check free storage before leaving. Do not repeat the paid request.');
       }
       if (mounted) widget.onChanged();
     } catch (error) {
       if (mounted) {
         setState(() => _error = error is StateError
-            ? error.message.toString() : 'Cloud reading is unavailable. Your local card is unchanged.');
+            ? error.message.toString()
+            : 'Cloud reading is unavailable. Your local card is unchanged.');
       }
     } finally {
       if (mounted) {
@@ -74,21 +92,32 @@ class _CardAiPanelState extends State<CardAiPanel>
   Future<void> _apply(Map<String, dynamic> reading, {String? field}) async {
     if (!widget.enabled || !widget.draft.matchesAi(reading)) return;
     final suggestions = reading['fields'] as Map? ?? {};
-    if (field != null && (widget.draft.fields[field]?.trim().isNotEmpty ?? false)) {
-      final replace = await showDialog<bool>(context: context, builder: (context) => AlertDialog(
-        title: const Text('Replace this reviewed field?'),
-        content: Text('Current: ${widget.draft.fields[field]}\n\nAI suggestion: ${suggestions[field]}'),
-        actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Keep current')),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Use suggestion'))],
-      ));
+    if (field != null &&
+        (widget.draft.fields[field]?.trim().isNotEmpty ?? false)) {
+      final replace = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+                title: const Text('Replace this reviewed field?'),
+                content: Text(
+                    'Current: ${widget.draft.fields[field]}\n\nAI suggestion: ${suggestions[field]}'),
+                actions: [
+                  TextButton(
+                      onPressed: () => Navigator.pop(context, false),
+                      child: const Text('Keep current')),
+                  FilledButton(
+                      onPressed: () => Navigator.pop(context, true),
+                      child: const Text('Use suggestion'))
+                ],
+              ));
       if (!mounted || replace != true) return;
     }
     for (final entry in suggestions.entries) {
       final key = entry.key as String;
       final value = entry.value as String;
       if (value.trim().isEmpty || (field != null && key != field)) continue;
-      if (field == null && (widget.draft.edited.contains(key) ||
-          (widget.draft.fields[key]?.trim().isNotEmpty ?? false))) {
+      if (field == null &&
+          (widget.draft.edited.contains(key) ||
+              (widget.draft.fields[key]?.trim().isNotEmpty ?? false))) {
         continue;
       }
       widget.draft.fields[key] = value;
@@ -98,7 +127,9 @@ class _CardAiPanelState extends State<CardAiPanel>
       await widget.draft.save();
       if (mounted) widget.onChanged();
     } catch (_) {
-      if (mounted) setState(() => _error = 'Could not persist the suggestions. Check local storage.');
+      if (mounted)
+        setState(() =>
+            _error = 'Could not persist the suggestions. Check local storage.');
     }
   }
 
@@ -108,61 +139,129 @@ class _CardAiPanelState extends State<CardAiPanel>
     final history = widget.draft.aiReadings;
     final latest = history.isEmpty ? null : history.last;
     final current = latest != null && widget.draft.matchesAi(latest);
-    return Card(child: Padding(padding: const EdgeInsets.all(16), child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text('Extract supplier details', style: Theme.of(context).textTheme.titleMedium),
-        const SizedBox(height: 8),
-        const Text('Auto-fill from your card. Manual edits stay unchanged.'),
-        const SizedBox(height: 12),
-        FilledButton.icon(onPressed: widget.enabled && widget.draft.sides.isNotEmpty ? () => _request(false) : null,
-          icon: const Icon(Icons.auto_awesome_outlined),
-          label: Text(current && latest['operation'] == 'extract' ? 'Extract again' : 'Extract details')),
-        Text('Online processing with your confirmation. API charges may apply.',
-          style: Theme.of(context).textTheme.bodySmall),
-        ExpansionTile(tilePadding: EdgeInsets.zero,
-          title: const Text('Translation options'), children: [
-          DropdownButtonFormField<String>(initialValue: _language, isExpanded: true,
-          decoration: const InputDecoration(labelText: 'Translate into'),
-          items: CardAiService.languages.map((language) => DropdownMenuItem(value: language, child: Text(language))).toList(),
-          onChanged: widget.enabled ? (value) => setState(() => _language = value ?? _language) : null),
-        const SizedBox(height: 12),
-        Wrap(spacing: 8, runSpacing: 8, children: [
-          OutlinedButton(onPressed: widget.enabled && widget.draft.sides.keys.any((side) => widget.draft.translationSource(side).trim().isNotEmpty)
-              ? () => _request(true) : null, child: const Text('Translate text only')),
-        ]),
-        ]),
-        if (_working) const Padding(padding: EdgeInsets.only(top: 12), child: Text('Waiting for OpenAI. Requests are not retried automatically.')),
-        if (_error != null) Padding(padding: const EdgeInsets.only(top: 12), child: Semantics(liveRegion: true, child: Text(_error!))),
-        if (latest != null) ...[
-          const Divider(),
-          if (current && latest['operation'] == 'extract')
-            const Text('Details filled. Review below before saving.'),
-          if (!current) const Text('The images have changed since this reading. Run AI extraction again before applying suggestions.'),
-          if (latest['operation'] == 'extract') ...[
-            ExpansionTile(title: const Text('Compare extracted suggestions'), children: [
-              TextButton(onPressed: widget.enabled && current ? () => _apply(latest) : null, child: const Text('Fill remaining blank fields')),
-              for (final entry in (latest['fields'] as Map).entries)
-                if (entry.value.toString().trim().isNotEmpty) ListTile(
-                  title: Text(SupplierProfile.companyFields[entry.key] ?? SupplierProfile.contactFields[entry.key] ?? entry.key.toString()), subtitle: SelectableText(entry.value.toString()),
-                  trailing: TextButton(onPressed: widget.enabled && current ? () => _apply(latest, field: entry.key as String) : null,
-                    child: const Text('Use')),
-                ),
-              for (final item in latest['extra_details'] as List? ?? [])
-                ListTile(title: Text(item['label'] as String), subtitle: SelectableText(item['value'] as String)),
-            ]),
-          ],
-          ExpansionTile(title: const Text('Reading notes, transcript and translation'), children: [
-            ListTile(title: Text('Engine: ${latest['model']} / ${latest['target_language']}'),
-              subtitle: Text('${history.length} cloud readings retained.')),
-            for (final warning in latest['warnings'] as List? ?? [])
-              ListTile(subtitle: Text(warning.toString())),
-            for (final side in widget.draft.sides.keys) ListTile(
-              title: Text(side), subtitle: SelectableText(
-                'Original:\n${(latest['transcript'] as Map)[side] ?? ''}\n\nTranslation:\n${(latest['translation'] as Map)[side] ?? ''}'),
-            ),
-          ]),
-        ],
-      ],
-    )));
+    return Card(
+        child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Extract supplier details',
+                    style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: 8),
+                const Text(
+                    'Auto-fill from your card. Manual edits stay unchanged.'),
+                const SizedBox(height: 12),
+                FilledButton.icon(
+                    onPressed: widget.enabled && widget.draft.sides.isNotEmpty
+                        ? () => _request(false)
+                        : null,
+                    icon: const Icon(Icons.auto_awesome_outlined),
+                    label: Text(current && latest['operation'] == 'extract'
+                        ? 'Extract again'
+                        : 'Extract details')),
+                Text(
+                    'Online processing with your confirmation. API charges may apply.',
+                    style: Theme.of(context).textTheme.bodySmall),
+                ExpansionTile(
+                    tilePadding: EdgeInsets.zero,
+                    title: const Text('Translation options'),
+                    children: [
+                      DropdownButtonFormField<String>(
+                          initialValue: _language,
+                          isExpanded: true,
+                          decoration: const InputDecoration(
+                              labelText: 'Translate into'),
+                          items: CardAiService.languages
+                              .map((language) => DropdownMenuItem(
+                                  value: language, child: Text(language)))
+                              .toList(),
+                          onChanged: widget.enabled
+                              ? (value) =>
+                                  setState(() => _language = value ?? _language)
+                              : null),
+                      const SizedBox(height: 12),
+                      Wrap(spacing: 8, runSpacing: 8, children: [
+                        OutlinedButton(
+                            onPressed: widget.enabled &&
+                                    widget.draft.sides.keys.any((side) => widget
+                                        .draft
+                                        .translationSource(side)
+                                        .trim()
+                                        .isNotEmpty)
+                                ? () => _request(true)
+                                : null,
+                            child: const Text('Translate text only')),
+                      ]),
+                    ]),
+                if (_working)
+                  const Padding(
+                      padding: EdgeInsets.only(top: 12),
+                      child: Text(
+                          'Waiting for OpenAI. Requests are not retried automatically.')),
+                if (_error != null)
+                  Padding(
+                      padding: const EdgeInsets.only(top: 12),
+                      child: Semantics(liveRegion: true, child: Text(_error!))),
+                if (latest != null) ...[
+                  const Divider(),
+                  if (current && latest['operation'] == 'extract')
+                    const Text('Details filled. Review below before saving.'),
+                  if (!current)
+                    const Text(
+                        'The images have changed since this reading. Run AI extraction again before applying suggestions.'),
+                  if (latest['operation'] == 'extract') ...[
+                    ExpansionTile(
+                        title: const Text('Compare extracted suggestions'),
+                        children: [
+                          TextButton(
+                              onPressed: widget.enabled && current
+                                  ? () => _apply(latest)
+                                  : null,
+                              child: const Text('Fill remaining blank fields')),
+                          for (final entry in (latest['fields'] as Map).entries)
+                            if (entry.value.toString().trim().isNotEmpty)
+                              ListTile(
+                                title: Text(SupplierProfile
+                                        .companyFields[entry.key] ??
+                                    SupplierProfile.contactFields[entry.key] ??
+                                    entry.key.toString()),
+                                subtitle:
+                                    SelectableText(entry.value.toString()),
+                                trailing: TextButton(
+                                    onPressed: widget.enabled && current
+                                        ? () => _apply(latest,
+                                            field: entry.key as String)
+                                        : null,
+                                    child: const Text('Use')),
+                              ),
+                          for (final item
+                              in latest['extra_details'] as List? ?? [])
+                            ListTile(
+                                title: Text(item['label'] as String),
+                                subtitle:
+                                    SelectableText(item['value'] as String)),
+                        ]),
+                  ],
+                  ExpansionTile(
+                      title: const Text(
+                          'Reading notes, transcript and translation'),
+                      children: [
+                        ListTile(
+                            title: Text(
+                                'Engine: ${latest['model']} / ${latest['target_language']}'),
+                            subtitle: Text(
+                                '${history.length} cloud readings retained.')),
+                        for (final warning in latest['warnings'] as List? ?? [])
+                          ListTile(subtitle: Text(warning.toString())),
+                        for (final side in widget.draft.sides.keys)
+                          ListTile(
+                            title: Text(side),
+                            subtitle: SelectableText(
+                                'Original:\n${(latest['transcript'] as Map)[side] ?? ''}\n\nTranslation:\n${(latest['translation'] as Map)[side] ?? ''}'),
+                          ),
+                      ]),
+                ],
+              ],
+            )));
   }
 }

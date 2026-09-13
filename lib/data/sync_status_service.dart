@@ -43,7 +43,8 @@ class SyncStatusService {
   }
 
   Future<SyncStatus> load() async {
-    final value = await _storage.read(key: '${_key}_${await TeamWorkspaceService().scopeKey()}');
+    final value = await _storage.read(
+        key: '${_key}_${await TeamWorkspaceService().scopeKey()}');
     if (value == null) return const SyncStatus();
     try {
       return SyncStatus.fromJson(jsonDecode(value) as Map<String, dynamic>);
@@ -77,7 +78,9 @@ class SyncStatusService {
   }
 
   Future<void> _save(Map<String, Object?> value) async {
-    await _storage.write(key: '${_key}_${await TeamWorkspaceService().scopeKey()}', value: jsonEncode(value));
+    await _storage.write(
+        key: '${_key}_${await TeamWorkspaceService().scopeKey()}',
+        value: jsonEncode(value));
     changes.value++;
   }
 }

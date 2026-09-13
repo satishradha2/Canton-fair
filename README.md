@@ -31,7 +31,19 @@ This is a full-feature starter app for Canton Fair supplier discovery, communica
 - Shortlist + comparison table
 - Export:
   - CSV for all exhibitors, shortlist, and follow-ups
-  - PDF shortlist report
+- PDF shortlist report
+
+## Intelligence and logistics
+
+- Supplier-linked communication inbox and local natural-language record search
+- Multi-page catalogue image/PDF rendering, OCR, and reviewable product drafts
+- Team booth check-ins, duplicate-visit warnings, and dynamic route replanning
+- HS-code review profiles and destination-market readiness checklists
+- Dated ECB reference-rate quote normalization
+- Carton/container capacity planning and AQL inspection guidance
+- Post-order supplier performance and corrective-action tracking
+- Compressed offline supplier transfer between phones by QR
+- Shared fair terminology glossary and pre-fair device/data readiness checks
 
 ## Run
 

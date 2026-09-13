@@ -146,7 +146,9 @@ class _ShortlistScreenState extends State<ShortlistScreen> {
       case _ProductSortField.price:
         final aPrice = a.quotedPrice ?? double.infinity;
         final bPrice = b.quotedPrice ?? double.infinity;
-        cmp = a.priceCurrency.toUpperCase().compareTo(b.priceCurrency.toUpperCase());
+        cmp = a.priceCurrency
+            .toUpperCase()
+            .compareTo(b.priceCurrency.toUpperCase());
         if (cmp == 0) cmp = aPrice.compareTo(bPrice);
         break;
       case _ProductSortField.moq:
@@ -458,7 +460,9 @@ class _ShortlistScreenState extends State<ShortlistScreen> {
 
   void _applyMinScoreFilter(String value) {
     final parsed = double.tryParse(value.trim());
-    _minScore = parsed == null || !parsed.isFinite ? 0.0 : parsed.clamp(0.0, 100.0).toDouble();
+    _minScore = parsed == null || !parsed.isFinite
+        ? 0.0
+        : parsed.clamp(0.0, 100.0).toDouble();
     _load();
     setState(() {});
   }
@@ -595,8 +599,8 @@ class _ShortlistScreenState extends State<ShortlistScreen> {
                         controller: _minScoreController,
                         keyboardType: const TextInputType.numberWithOptions(
                             decimal: true),
-                        decoration:
-                            const InputDecoration(helperText: 'Rating x 20', helperMaxLines: 2),
+                        decoration: const InputDecoration(
+                            helperText: 'Rating x 20', helperMaxLines: 2),
                         onChanged: _applyMinScoreFilter,
                       ),
                     ),
@@ -794,9 +798,9 @@ class _ShortlistScreenState extends State<ShortlistScreen> {
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(0xFFFAFBFD),
+        color: Theme.of(context).colorScheme.surfaceContainerLow,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppColors.line),
+        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,

@@ -11,7 +11,6 @@ import '../data/database.dart';
 import '../data/daily_debrief_service.dart';
 import '../data/language_service.dart';
 import '../models/models.dart';
-import '../theme/app_theme.dart';
 import '../widgets/enterprise_widgets.dart';
 
 class ExportScreen extends StatefulWidget {
@@ -510,9 +509,9 @@ class _ExportScreenState extends State<ExportScreen> {
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
-        color: const Color(0xFFFAFBFD),
+        color: Theme.of(context).colorScheme.surfaceContainerLow,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppColors.line),
+        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
       ),
       child: ListTile(
         contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
@@ -520,10 +519,11 @@ class _ExportScreenState extends State<ExportScreen> {
           width: 40,
           height: 40,
           decoration: BoxDecoration(
-            color: AppColors.primary.withValues(alpha: 0.1),
+            color: Theme.of(context).colorScheme.primaryContainer,
             borderRadius: BorderRadius.circular(8),
           ),
-          child: Icon(icon, color: AppColors.primary),
+          child: Icon(icon,
+              color: Theme.of(context).colorScheme.onPrimaryContainer),
         ),
         title: Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
         subtitle: Text(subtitle),

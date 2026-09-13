@@ -11,20 +11,27 @@ class CardCropTextCheck {
     required Map<String, dynamic> cropped,
     required Set<String> requiredScripts,
   }) {
-    String normalize(String text) => text.toLowerCase().replaceAll(RegExp(r'\s+'), '');
+    String normalize(String text) =>
+        text.toLowerCase().replaceAll(RegExp(r'\s+'), '');
     String combined(Map<String, dynamic> passes) => normalize(passes.values
-        .map((pass) => (pass as Map)['text'] as String? ?? '').join('\n'));
+        .map((pass) => (pass as Map)['text'] as String? ?? '')
+        .join('\n'));
     final cropText = combined(cropped);
     final sourceLines = <String>{
       for (final pass in originals.values)
-        for (final line in ((pass as Map)['text'] as String? ?? '').split(RegExp(r'[\r\n]+')))
+        for (final line in ((pass as Map)['text'] as String? ?? '')
+            .split(RegExp(r'[\r\n]+')))
           if (normalize(line).isNotEmpty) normalize(line),
     };
-    final missing = sourceLines.where((line) => !cropText.contains(line)).toList();
-    final complete = requiredScripts.isNotEmpty && requiredScripts.every(
-        (script) => originals.containsKey(script) && cropped.containsKey(script));
-    final verified = complete && combined(originals).length >= 20 &&
-        cropText.length >= 20 && missing.isEmpty;
+    final missing =
+        sourceLines.where((line) => !cropText.contains(line)).toList();
+    final complete = requiredScripts.isNotEmpty &&
+        requiredScripts.every((script) =>
+            originals.containsKey(script) && cropped.containsKey(script));
+    final verified = complete &&
+        combined(originals).length >= 20 &&
+        cropText.length >= 20 &&
+        missing.isEmpty;
     return CardCropTextCheck._(complete, verified, List.unmodifiable(missing));
   }
 }

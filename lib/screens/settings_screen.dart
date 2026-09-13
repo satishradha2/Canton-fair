@@ -11,7 +11,7 @@ import '../data/team_workspace_service.dart';
 import '../data/cloud_sync_service.dart';
 import '../data/sync_status_service.dart';
 import '../data/appearance_service.dart';
-import '../theme/app_theme.dart';
+import '../data/auto_sync_service.dart';
 import '../widgets/enterprise_widgets.dart';
 import 'team_setup_screen.dart';
 import 'sync_status_screen.dart';
@@ -43,6 +43,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _restoringBackup = false;
   bool _appLockEnabled = false;
   bool _syncing = false;
+  bool _automaticSync = true;
   String _language = 'en';
   ThemeMode _themeMode = ThemeMode.system;
   String? _teamName;
@@ -68,6 +69,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _loadLanguage();
     _loadTeamWorkspace();
     _loadAppearance();
+    _loadAutomaticSync();
+  }
+
+  Future<void> _loadAutomaticSync() async {
+    final enabled = await AutoSyncService.instance.enabled;
+    if (mounted) setState(() => _automaticSync = enabled);
   }
 
   Future<void> _loadAppearance() async {
@@ -105,7 +112,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _loadTeamWorkspace() async {
-    final workspace = await (widget.workspaceLoader ?? TeamWorkspaceService().load)();
+    final workspace =
+        await (widget.workspaceLoader ?? TeamWorkspaceService().load)();
     if (mounted) setState(() => _teamName = workspace?.name);
   }
 
@@ -342,12 +350,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text('Device diagnostic history',
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.w800, color: AppColors.ink)),
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleLarge
+                        ?.copyWith(fontWeight: FontWeight.w800)),
                 const SizedBox(height: 4),
-                const Text(
+                Text(
                     'Technical local history. Use Team activity for the shared field feed.',
-                    style: TextStyle(color: AppColors.muted)),
+                    style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant)),
                 const SizedBox(height: 12),
                 Expanded(
                   child: records.isEmpty
@@ -371,8 +382,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                     ? ''
                                     : '${timestamp.day.toString().padLeft(2, '0')}/${timestamp.month.toString().padLeft(2, '0')}\n${timestamp.hour.toString().padLeft(2, '0')}:${timestamp.minute.toString().padLeft(2, '0')}',
                                 textAlign: TextAlign.right,
-                                style: const TextStyle(
-                                    color: AppColors.muted, fontSize: 12),
+                                style: TextStyle(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSurfaceVariant,
+                                    fontSize: 12),
                               ),
                             );
                           },
@@ -406,12 +420,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
         SectionPanel(
           title: 'Account',
           child: Column(children: [
-            _settingTile(icon: Icons.person_outline, title: 'My profile',
-              subtitle: 'Signed-in user and workspace details', trailing: const Icon(Icons.chevron_right),
-              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AccountProfileScreen()))),
-            _settingTile(icon: Icons.logout, title: 'Log out',
-              subtitle: 'Sign out of this device without deleting offline data',
-              onTap: _syncing || _creatingBackup || _restoringBackup ? null : () => confirmAccountLogout(context)),
+            _settingTile(
+                icon: Icons.person_outline,
+                title: 'My profile',
+                subtitle: 'Signed-in user and workspace details',
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                    builder: (_) => const AccountProfileScreen()))),
+            _settingTile(
+                icon: Icons.logout,
+                title: 'Log out',
+                subtitle:
+                    'Sign out of this device without deleting offline data',
+                onTap: _syncing || _creatingBackup || _restoringBackup
+                    ? null
+                    : () => confirmAccountLogout(context)),
           ]),
         ),
         const SizedBox(height: 16),
@@ -447,6 +470,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         child: CircularProgressIndicator(strokeWidth: 2))
                     : const Icon(Icons.chevron_right),
                 onTap: _syncing || _teamName == null ? null : _syncCloudData,
+              ),
+              _settingTile(
+                icon: Icons.cloud_sync_outlined,
+                title: 'Automatic sync',
+                subtitle:
+                    'Sync when the app opens, reconnects, and periodically while in use',
+                trailing: Switch.adaptive(
+                  value: _automaticSync,
+                  onChanged: (value) async {
+                    await AutoSyncService.instance.setEnabled(value);
+                    if (mounted) setState(() => _automaticSync = value);
+                  },
+                ),
+                onTap: () async {
+                  final value = !_automaticSync;
+                  await AutoSyncService.instance.setEnabled(value);
+                  if (mounted) setState(() => _automaticSync = value);
+                },
               ),
               _settingTile(
                 icon: Icons.sync_problem_outlined,

@@ -3,7 +3,8 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class AppearanceService {
   static const _key = 'appearance_theme_mode';
-  static final ValueNotifier<ThemeMode> changes = ValueNotifier(ThemeMode.system);
+  static final ValueNotifier<ThemeMode> changes =
+      ValueNotifier(ThemeMode.system);
   final FlutterSecureStorage _storage = const FlutterSecureStorage();
 
   Future<ThemeMode> load() async {

@@ -33,6 +33,7 @@ void main() {
     Size size, {
     double textScale = 1,
     double keyboardHeight = 0,
+    bool dark = false,
   }) async {
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = size;
@@ -42,6 +43,8 @@ void main() {
     await tester.pumpWidget(MaterialApp(
       debugShowCheckedModeBanner: false,
       theme: buildAppTheme(),
+      darkTheme: buildDarkAppTheme(),
+      themeMode: dark ? ThemeMode.dark : ThemeMode.light,
       builder: (context, child) => MediaQuery(
         data: MediaQuery.of(context).copyWith(
           textScaler: TextScaler.linear(textScale),
@@ -73,7 +76,8 @@ void main() {
     'tablet': const Size(1280, 800),
   }.entries) {
     testWidgets('sign-in layout ${viewport.key}', (tester) async {
-      await render(tester, const SignInScreen(), 'signin-${viewport.key}', viewport.value);
+      await render(tester, const SignInScreen(), 'signin-${viewport.key}',
+          viewport.value);
       expect(find.text('Welcome back'), findsOneWidget);
       expect(find.text('Sign in'), findsOneWidget);
     });
@@ -90,9 +94,11 @@ void main() {
     });
   }
 
-  testWidgets('sign-in remains usable with keyboard and large text', (tester) async {
+  testWidgets('sign-in remains usable with keyboard and large text',
+      (tester) async {
     await render(tester, const SignInScreen(), 'signin-keyboard-large-text',
-        const Size(360, 800), textScale: 1.5, keyboardHeight: 300);
+        const Size(360, 800),
+        textScale: 1.5, keyboardHeight: 300);
     await tester.ensureVisible(find.text('Sign in'));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
@@ -101,7 +107,31 @@ void main() {
 
   testWidgets('settings supports large text', (tester) async {
     await render(tester, SettingsScreen(workspaceLoader: () async => null),
-        'settings-large-text', const Size(360, 800), textScale: 1.5);
+        'settings-large-text', const Size(360, 800),
+        textScale: 1.5);
+  });
+
+  testWidgets('sign-in dark theme remains readable', (tester) async {
+    await render(tester, const SignInScreen(), 'signin-dark-small-phone',
+        const Size(360, 800),
+        dark: true);
+    expect(find.text('Welcome back'), findsOneWidget);
+  });
+
+  testWidgets('shared components dark theme remains readable', (tester) async {
+    await render(tester, const _ComponentPreview(),
+        'components-dark-small-phone', const Size(360, 800),
+        dark: true);
+  });
+
+  testWidgets('settings dark theme remains readable', (tester) async {
+    await render(
+        tester,
+        SettingsScreen(workspaceLoader: () async => null),
+        'settings-dark-small-phone',
+        const Size(360, 800),
+        dark: true);
+    expect(find.text('Settings'), findsOneWidget);
   });
 }
 
@@ -113,40 +143,66 @@ class _ComponentPreview extends StatelessWidget {
   Widget build(BuildContext context) => Scaffold(
         body: EnterprisePage(
           title: 'Visual review',
-          subtitle: 'Design-system fixture: form controls, metrics and empty states.',
+          subtitle:
+              'Design-system fixture: form controls, metrics and empty states.',
           children: [
             const SizedBox(
               height: 156,
               child: Row(children: [
-                Expanded(child: StatCard(label: 'Suppliers', value: 0,
-                    icon: Icons.storefront_outlined, color: AppColors.primary)),
+                Expanded(
+                    child: StatCard(
+                        label: 'Suppliers',
+                        value: 0,
+                        icon: Icons.storefront_outlined,
+                        color: AppColors.primary)),
                 SizedBox(width: 12),
-                Expanded(child: StatCard(label: 'Shortlisted', value: 0,
-                    icon: Icons.star_outline, color: AppColors.teal)),
+                Expanded(
+                    child: StatCard(
+                        label: 'Shortlisted',
+                        value: 0,
+                        icon: Icons.star_outline,
+                        color: AppColors.teal)),
               ]),
             ),
             const SizedBox(height: 16),
             SectionPanel(
               title: 'Supplier details',
               subtitle: 'Keep key information clear and easy to scan.',
-              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                const TextField(decoration: InputDecoration(
-                    labelText: 'Company name', hintText: 'Enter supplier name')),
-                const SizedBox(height: 16),
-                Wrap(spacing: 8, runSpacing: 8, children: [
-                  ChoiceChip(label: const Text('All suppliers'), selected: true, onSelected: (_) {}),
-                  ChoiceChip(label: const Text('Shortlisted'), selected: false, onSelected: (_) {}),
-                  const InfoChip(label: 'Saved on this device', icon: Icons.check_circle_outline,
-                      color: AppColors.teal),
-                ]),
-                const SizedBox(height: 16),
-                FilledButton.icon(onPressed: () {}, icon: const Icon(Icons.add),
-                    label: const Text('Add supplier')),
-              ]),
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const TextField(
+                        decoration: InputDecoration(
+                            labelText: 'Company name',
+                            hintText: 'Enter supplier name')),
+                    const SizedBox(height: 16),
+                    Wrap(spacing: 8, runSpacing: 8, children: [
+                      ChoiceChip(
+                          label: const Text('All suppliers'),
+                          selected: true,
+                          onSelected: (_) {}),
+                      ChoiceChip(
+                          label: const Text('Shortlisted'),
+                          selected: false,
+                          onSelected: (_) {}),
+                      const InfoChip(
+                          label: 'Saved on this device',
+                          icon: Icons.check_circle_outline,
+                          color: AppColors.teal),
+                    ]),
+                    const SizedBox(height: 16),
+                    FilledButton.icon(
+                        onPressed: () {},
+                        icon: const Icon(Icons.add),
+                        label: const Text('Add supplier')),
+                  ]),
             ),
             const SizedBox(height: 16),
-            const EmptyState(icon: Icons.inventory_2_outlined, title: 'No products yet',
-                message: 'Add product details after your first supplier conversation.'),
+            const EmptyState(
+                icon: Icons.inventory_2_outlined,
+                title: 'No products yet',
+                message:
+                    'Add product details after your first supplier conversation.'),
           ],
         ),
       );

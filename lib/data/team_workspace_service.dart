@@ -25,14 +25,17 @@ class TeamWorkspaceService {
     final raw = await _storage.read(key: 'workspace_v2_$userId');
     if (raw == null) return null;
     final data = jsonDecode(raw) as Map;
-    return TeamWorkspace(id: data['id'] as String, name: data['name'] as String);
+    return TeamWorkspace(
+        id: data['id'] as String, name: data['name'] as String);
   }
 
   Future<String> scopeKey() async {
     final user = userId;
     final team = await load();
     if (user != userId) throw StateError('Account changed. Please retry.');
-    return sha256.convert(utf8.encode('$user:${team?.id ?? "personal"}')).toString();
+    return sha256
+        .convert(utf8.encode('$user:${team?.id ?? "personal"}'))
+        .toString();
   }
 
   Future<String> databaseName() async {
@@ -54,11 +57,17 @@ class TeamWorkspaceService {
   Future<void> save(TeamWorkspace workspace) async {
     if (busy.value) throw StateError('Wait for the current data operation.');
     final user = userId;
-    final membership = await Supabase.instance.client.from('team_members')
-        .select('role').eq('team_id', workspace.id).eq('user_id', user).maybeSingle();
-    if (membership == null) throw StateError('You no longer belong to this team.');
+    final membership = await Supabase.instance.client
+        .from('team_members')
+        .select('role')
+        .eq('team_id', workspace.id)
+        .eq('user_id', user)
+        .maybeSingle();
+    if (membership == null)
+      throw StateError('You no longer belong to this team.');
     if (user != userId) throw StateError('Account changed. Please retry.');
-    await _storage.write(key: 'workspace_v2_$user',
+    await _storage.write(
+        key: 'workspace_v2_$user',
         value: jsonEncode({'id': workspace.id, 'name': workspace.name}));
     changes.value++;
   }
@@ -70,7 +79,8 @@ class TeamWorkspaceService {
   }
 
   static Future<T> exclusive<T>(Future<T> Function() action) async {
-    if (busy.value) throw StateError('Another data operation is already running.');
+    if (busy.value)
+      throw StateError('Another data operation is already running.');
     busy.value = true;
     try {
       return await action();

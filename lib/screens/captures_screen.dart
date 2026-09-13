@@ -171,9 +171,11 @@ class _CapturesScreenState extends State<CapturesScreen> {
                   Text('Quick capture',
                       style: Theme.of(context).textTheme.titleLarge),
                   const SizedBox(height: 6),
-                  const Text(
+                  Text(
                       'Save the essentials now. Add products, photos, and scoring later.',
-                      style: TextStyle(color: AppColors.muted)),
+                      style: TextStyle(
+                          color:
+                              Theme.of(context).colorScheme.onSurfaceVariant)),
                   const SizedBox(height: 20),
                   DropdownButtonFormField<int>(
                     initialValue: trips.any((trip) => trip.id == tripId)
@@ -282,9 +284,11 @@ class _CapturesScreenState extends State<CapturesScreen> {
                     label: Text(saving ? 'Saving...' : 'Save locally'),
                   ),
                   const SizedBox(height: 8),
-                  const Text('Your unfinished entries are kept on this device.',
+                  Text('Your unfinished entries are kept on this device.',
                       textAlign: TextAlign.center,
-                      style: TextStyle(color: AppColors.muted, fontSize: 12)),
+                      style: TextStyle(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          fontSize: 12)),
                 ],
               ),
             ),
@@ -409,9 +413,10 @@ class _CapturesScreenState extends State<CapturesScreen> {
                     style:
                         TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
                 const SizedBox(height: 6),
-                const Text(
+                Text(
                     'Use these only when you need to narrow a large supplier list.',
-                    style: TextStyle(color: AppColors.muted)),
+                    style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant)),
                 const SizedBox(height: 18),
                 TextField(
                   decoration:
@@ -1646,78 +1651,13 @@ class _CapturesScreenState extends State<CapturesScreen> {
   }
 
   Future<void> _openEditContactSheet(Contact c) async {
-    final formKey = GlobalKey<FormState>();
-    String name = c.name;
-    String designation = c.designation;
-    String phone = c.phone;
-    String email = c.email;
-    String whatsapp = c.whatsapp;
-    String wechat = c.wechat;
-    await showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Edit Contact'),
-        content: Form(
-          key: formKey,
-          child: SingleChildScrollView(
-            child: Column(
-              children: [
-                TextFormField(
-                    initialValue: name,
-                    decoration:
-                        const InputDecoration(labelText: 'Contact Name'),
-                    onSaved: (v) => name = v?.trim() ?? name),
-                TextFormField(
-                    initialValue: designation,
-                    decoration: const InputDecoration(labelText: 'Designation'),
-                    onSaved: (v) => designation = v?.trim() ?? ''),
-                TextFormField(
-                    initialValue: phone,
-                    decoration: const InputDecoration(labelText: 'Phone'),
-                    onSaved: (v) => phone = v?.trim() ?? ''),
-                TextFormField(
-                    initialValue: email,
-                    decoration: const InputDecoration(labelText: 'Email'),
-                    onSaved: (v) => email = v?.trim() ?? ''),
-                TextFormField(
-                    initialValue: whatsapp,
-                    decoration: const InputDecoration(labelText: 'WhatsApp'),
-                    onSaved: (v) => whatsapp = v?.trim() ?? ''),
-                TextFormField(
-                    initialValue: wechat,
-                    decoration: const InputDecoration(labelText: 'WeChat'),
-                    onSaved: (v) => wechat = v?.trim() ?? ''),
-              ],
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          ElevatedButton(
-            child: const Text('Save changes'),
-            onPressed: () async {
-              formKey.currentState?.save();
-              await db.update(
-                'contacts',
-                c.id!,
-                {
-                  'name': name,
-                  'designation': designation,
-                  'phone': phone,
-                  'email': email,
-                  'whatsapp': whatsapp,
-                  'wechat': wechat,
-                },
-              );
-              _load();
-              if (!ctx.mounted) return;
-              Navigator.pop(ctx);
-            },
-          ),
-        ],
+    await Navigator.of(context).push<Exhibitor>(MaterialPageRoute(
+      builder: (_) => SupplierProfileScreen(
+        supplierId: c.exhibitorId,
+        contactId: c.id,
       ),
-    );
+    ));
+    _load();
   }
 
   Future<void> _openEditProductSheet(Product p) async {
@@ -1802,8 +1742,10 @@ class _CapturesScreenState extends State<CapturesScreen> {
                       alignment: Alignment.centerLeft,
                       child: Text(
                         'Live shortlist score: ${_productShortlistScoreForValues(rating: rating, quotedPrice: price, moq: moq, leadTime: lead).toStringAsFixed(2)}',
-                        style: const TextStyle(
-                            fontSize: 12, color: Colors.black54),
+                        style: TextStyle(
+                            fontSize: 12,
+                            color:
+                                Theme.of(context).colorScheme.onSurfaceVariant),
                       ),
                     ),
                   ),
@@ -1854,118 +1796,13 @@ class _CapturesScreenState extends State<CapturesScreen> {
   }
 
   Future<void> _openAddContactSheet(int exhibitorId) async {
-    final formKey = GlobalKey<FormState>();
-    String name = 'Contact';
-    String designation = '';
-    String phone = '';
-    String email = '';
-    String whatsapp = '';
-    String wechat = '';
-    String language = '';
-    String influence = 'Not recorded';
-    String relationshipNote = '';
-    await showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(tr(context, 'addContact')),
-        content: Form(
-          key: formKey,
-          child: SingleChildScrollView(
-            child: Column(
-              children: [
-                TextFormField(
-                    decoration:
-                        const InputDecoration(labelText: 'Contact Name'),
-                    onSaved: (v) => name = v?.trim() ?? name),
-                TextFormField(
-                    decoration: const InputDecoration(labelText: 'Designation'),
-                    onSaved: (v) => designation = v?.trim() ?? ''),
-                TextFormField(
-                    decoration: const InputDecoration(labelText: 'Phone'),
-                    onSaved: (v) => phone = v?.trim() ?? ''),
-                TextFormField(
-                    decoration: const InputDecoration(labelText: 'Email'),
-                    onSaved: (v) => email = v?.trim() ?? ''),
-                TextFormField(
-                    decoration: const InputDecoration(labelText: 'WhatsApp'),
-                    onSaved: (v) => whatsapp = v?.trim() ?? ''),
-                TextFormField(
-                    decoration: const InputDecoration(labelText: 'WeChat'),
-                    onSaved: (v) => wechat = v?.trim() ?? ''),
-                TextFormField(
-                    decoration:
-                        const InputDecoration(labelText: 'Preferred language'),
-                    onSaved: (v) => language = v?.trim() ?? ''),
-                DropdownButtonFormField<String>(
-                  initialValue: influence,
-                  decoration:
-                      const InputDecoration(labelText: 'Decision influence'),
-                  items: const [
-                    'Not recorded',
-                    'Decision-maker',
-                    'Influencer',
-                    'Pricing contact',
-                    'Technical contact',
-                    'Coordinator'
-                  ]
-                      .map((value) =>
-                          DropdownMenuItem(value: value, child: Text(value)))
-                      .toList(),
-                  onChanged: (value) => influence = value ?? influence,
-                ),
-                TextFormField(
-                    decoration:
-                        const InputDecoration(labelText: 'Relationship note'),
-                    maxLines: 2,
-                    onSaved: (v) => relationshipNote = v?.trim() ?? ''),
-              ],
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () async {
-              formKey.currentState?.save();
-              final dbx = await TradeDatabase.instance.database;
-              if (phone.trim().isNotEmpty) {
-                final existing = await dbx.query(
-                  'contacts',
-                  where: 'exhibitor_id = ? AND phone = ?',
-                  whereArgs: [exhibitorId, phone.trim()],
-                );
-                if (existing.isNotEmpty && mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                      content:
-                          Text('Same phone already exists for this supplier')));
-                }
-              }
-              await dbx.insert(
-                  'contacts',
-                  Contact(
-                    exhibitorId: exhibitorId,
-                    name: name,
-                    designation: designation,
-                    phone: phone,
-                    email: email,
-                    whatsapp: whatsapp,
-                    wechat: wechat,
-                    profileJson: jsonEncode({
-                      'language': language,
-                      'influence': influence,
-                      'relationship_note': relationshipNote,
-                    }),
-                  ).toMap());
-              _load();
-              if (!ctx.mounted) return;
-              Navigator.pop(ctx);
-            },
-            child: const Text('Save'),
-          ),
-        ],
+    await Navigator.of(context).push<Exhibitor>(MaterialPageRoute(
+      builder: (_) => SupplierProfileScreen(
+        supplierId: exhibitorId,
+        createContact: true,
       ),
-    );
+    ));
+    _load();
   }
 
   Future<void> _openAddProductSheet(int exhibitorId) async {
@@ -2044,8 +1881,10 @@ class _CapturesScreenState extends State<CapturesScreen> {
                       alignment: Alignment.centerLeft,
                       child: Text(
                         'Live shortlist score: ${_productShortlistScoreForValues(rating: rating, quotedPrice: price, moq: moq, leadTime: lead).toStringAsFixed(2)}',
-                        style: const TextStyle(
-                            fontSize: 12, color: Colors.black54),
+                        style: TextStyle(
+                            fontSize: 12,
+                            color:
+                                Theme.of(context).colorScheme.onSurfaceVariant),
                       ),
                     ),
                   ),
@@ -2770,8 +2609,9 @@ class _CapturesScreenState extends State<CapturesScreen> {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     textAlign: TextAlign.end,
-                    style:
-                        const TextStyle(fontSize: 12, color: AppColors.muted),
+                    style: TextStyle(
+                        fontSize: 12,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant),
                   ),
                 ),
             ],
@@ -2782,7 +2622,9 @@ class _CapturesScreenState extends State<CapturesScreen> {
               details.join('  |  '),
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 12, color: AppColors.muted),
+              style: TextStyle(
+                  fontSize: 12,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant),
             ),
           ],
           const SizedBox(height: 6),
@@ -2882,7 +2724,9 @@ class _CapturesScreenState extends State<CapturesScreen> {
               p.modelCode,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 12, color: AppColors.muted),
+              style: TextStyle(
+                  fontSize: 12,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant),
             ),
           ],
           const SizedBox(height: 6),
@@ -2890,7 +2734,9 @@ class _CapturesScreenState extends State<CapturesScreen> {
             commercialSummary,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 12, color: AppColors.muted),
+            style: TextStyle(
+                fontSize: 12,
+                color: Theme.of(context).colorScheme.onSurfaceVariant),
           ),
           const SizedBox(height: 6),
           Wrap(
@@ -3378,7 +3224,9 @@ class _CapturesScreenState extends State<CapturesScreen> {
                                         ? AppColors.teal
                                         : approval == 'Rejected'
                                             ? AppColors.danger
-                                            : AppColors.primary,
+                                            : Theme.of(context)
+                                                .colorScheme
+                                                .primary,
                                     fontWeight: FontWeight.w800)),
                             if (quote.approvalComment.isNotEmpty) ...[
                               const SizedBox(height: 12),
@@ -3387,8 +3235,10 @@ class _CapturesScreenState extends State<CapturesScreen> {
                             if (quote.approvedBy.isNotEmpty) ...[
                               const SizedBox(height: 12),
                               Text('Reviewed by ${quote.approvedBy}',
-                                  style:
-                                      const TextStyle(color: AppColors.muted)),
+                                  style: TextStyle(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSurfaceVariant)),
                             ],
                           ],
                         ),
@@ -3589,10 +3439,12 @@ class _CapturesScreenState extends State<CapturesScreen> {
               }
               final itinerary = snapshot.data!;
               if (itinerary.isEmpty) {
-                return const Padding(
-                  padding: EdgeInsets.only(top: 8),
+                return Padding(
+                  padding: const EdgeInsets.only(top: 8),
                   child: Text('No supplier visits are scheduled for this day.',
-                      style: TextStyle(color: AppColors.muted)),
+                      style: TextStyle(
+                          color:
+                              Theme.of(context).colorScheme.onSurfaceVariant)),
                 );
               }
               return Column(
@@ -3603,8 +3455,9 @@ class _CapturesScreenState extends State<CapturesScreen> {
                     const Divider(height: 22),
                     Row(
                       children: [
-                        const Icon(Icons.map_outlined,
-                            size: 18, color: AppColors.primary),
+                        Icon(Icons.map_outlined,
+                            size: 18,
+                            color: Theme.of(context).colorScheme.primary),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(entry.key,
@@ -3620,11 +3473,13 @@ class _CapturesScreenState extends State<CapturesScreen> {
                     const SizedBox(height: 4),
                     ...entry.value.map(_scheduledVisitTile),
                     if (nearby.isNotEmpty) ...[
-                      const Padding(
-                        padding: EdgeInsets.only(top: 8, bottom: 2),
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8, bottom: 2),
                         child: Text('Nearby priority suppliers',
                             style: TextStyle(
-                                color: AppColors.muted,
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurfaceVariant,
                                 fontSize: 12,
                                 fontWeight: FontWeight.w700)),
                       ),
@@ -4054,14 +3909,17 @@ class _CapturesScreenState extends State<CapturesScreen> {
                 e.contactCompanyNotes.isEmpty
                     ? 'No supplier notes recorded.'
                     : e.contactCompanyNotes,
-                style: const TextStyle(color: AppColors.muted),
+                style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant),
               ),
             ),
             const SizedBox(height: 8),
             Align(
               alignment: Alignment.centerLeft,
               child: Text(tags.isEmpty ? 'No tags' : tags,
-                  style: const TextStyle(fontSize: 13, color: AppColors.muted)),
+                  style: TextStyle(
+                      fontSize: 13,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant)),
             ),
             const SizedBox(height: 10),
             FutureBuilder<List<Contact>>(

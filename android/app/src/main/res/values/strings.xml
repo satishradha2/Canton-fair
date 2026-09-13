@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="shortcut_scan_card">Scan card</string>
+    <string name="shortcut_scan_card_long">Scan business card</string>
+    <string name="shortcut_add_supplier">Add supplier</string>
+    <string name="shortcut_add_supplier_long">Capture supplier</string>
+    <string name="shortcut_scan_qr">Scan QR</string>
+    <string name="shortcut_scan_qr_long">Scan supplier QR</string>
+</resources>

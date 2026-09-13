@@ -6,7 +6,10 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.graphics.Bitmap
+import android.graphics.pdf.PdfRenderer
 import android.os.Build
+import android.os.ParcelFileDescriptor
 import android.os.PowerManager
 import android.os.SystemClock
 import io.flutter.embedding.android.FlutterFragmentActivity
@@ -19,6 +22,9 @@ class MainActivity : FlutterFragmentActivity() {
     private val backupChannel = "canton_fair_crm/backup"
     private val backupPickerRequestCode = 7231
     private val documentPickerRequestCode = 7232
+    private val quickActionChannel = "canton_fair_crm/quick_action"
+    private val pdfChannel = "canton_fair_crm/pdf"
+    private var pendingQuickAction: String? = null
     private var pendingResult: MethodChannel.Result? = null
     private var pendingPrefix = "backup"
     private var cameraToken: Int? = null
@@ -34,6 +40,12 @@ class MainActivity : FlutterFragmentActivity() {
     override fun onDestroy() {
         if (screenReceiverRegistered) unregisterReceiver(screenReceiver)
         super.onDestroy()
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        pendingQuickAction = intent.data?.toString()
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
@@ -66,6 +78,59 @@ class MainActivity : FlutterFragmentActivity() {
         super.configureFlutterEngine(flutterEngine)
         CardImageProcessor(this).register(flutterEngine)
         cardScanner.register(flutterEngine)
+        pendingQuickAction = intent?.data?.toString()
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, quickActionChannel)
+            .setMethodCallHandler { call, result ->
+                if (call.method == "take") {
+                    val action = pendingQuickAction
+                    pendingQuickAction = null
+                    result.success(action)
+                } else {
+                    result.notImplemented()
+                }
+            }
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, pdfChannel)
+            .setMethodCallHandler { call, result ->
+                if (call.method != "renderPages") {
+                    result.notImplemented()
+                    return@setMethodCallHandler
+                }
+                val source = call.argument<String>("path")
+                val output = call.argument<String>("output")
+                val maxPages = (call.argument<Int>("maxPages") ?: 30).coerceIn(1, 60)
+                if (source == null || output == null) {
+                    result.error("invalid_pdf", "PDF path and output directory are required.", null)
+                    return@setMethodCallHandler
+                }
+                try {
+                    val outputDirectory = File(output).apply { mkdirs() }
+                    val descriptor = ParcelFileDescriptor.open(File(source), ParcelFileDescriptor.MODE_READ_ONLY)
+                    val renderer = PdfRenderer(descriptor)
+                    val pages = mutableListOf<String>()
+                    val count = minOf(renderer.pageCount, maxPages)
+                    for (index in 0 until count) {
+                        renderer.openPage(index).use { page ->
+                            val scale = minOf(2.0f, 1800f / page.width.toFloat())
+                            val width = (page.width * scale).toInt().coerceAtLeast(page.width)
+                            val height = (page.height * scale).toInt().coerceAtLeast(page.height)
+                            val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+                            bitmap.eraseColor(android.graphics.Color.WHITE)
+                            page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                            val target = File(outputDirectory, "page_${index + 1}.png")
+                            target.outputStream().use { stream ->
+                                bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream)
+                            }
+                            bitmap.recycle()
+                            pages.add(target.absolutePath)
+                        }
+                    }
+                    renderer.close()
+                    descriptor.close()
+                    result.success(pages)
+                } catch (error: Exception) {
+                    result.error("pdf_render_failed", error.message, null)
+                }
+            }
         if (!screenReceiverRegistered) {
             val filter = IntentFilter(Intent.ACTION_SCREEN_OFF)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {

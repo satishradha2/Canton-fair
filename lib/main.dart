@@ -46,34 +46,35 @@ class _CantonFairRootState extends State<CantonFairRoot> {
 
   @override
   Widget build(BuildContext context) => ValueListenableBuilder<ThemeMode>(
-    valueListenable: AppearanceService.changes,
-    builder: (context, themeMode, _) => MaterialApp(
-      title: 'Canton Fair CRM',
-      debugShowCheckedModeBanner: false,
-      theme: buildAppTheme(),
-      darkTheme: buildDarkAppTheme(),
-      themeMode: themeMode,
-      home: const AuthGate(),
-      builder: (context, child) => AnnotatedRegion<SystemUiOverlayStyle>(
-        value: Theme.of(context).brightness == Brightness.dark
-            ? SystemUiOverlayStyle.light
-            : SystemUiOverlayStyle.dark,
-        child: AppLockGate(
-          child: ValueListenableBuilder<bool>(
-        valueListenable: TeamWorkspaceService.busy,
-        builder: (context, busy, _) => PopScope(
-          canPop: !busy,
-          child: Stack(children: [
-            if (child != null) child,
-            if (busy) ...[
-              const ModalBarrier(dismissible: false, color: Color(0x55000000)),
-              const Center(child: CircularProgressIndicator()),
-            ],
-          ]),
-        ),
+        valueListenable: AppearanceService.changes,
+        builder: (context, themeMode, _) => MaterialApp(
+          title: 'Canton Fair CRM',
+          debugShowCheckedModeBanner: false,
+          theme: buildAppTheme(),
+          darkTheme: buildDarkAppTheme(),
+          themeMode: themeMode,
+          home: const AuthGate(),
+          builder: (context, child) => AnnotatedRegion<SystemUiOverlayStyle>(
+            value: Theme.of(context).brightness == Brightness.dark
+                ? SystemUiOverlayStyle.light
+                : SystemUiOverlayStyle.dark,
+            child: AppLockGate(
+              child: ValueListenableBuilder<bool>(
+                valueListenable: TeamWorkspaceService.busy,
+                builder: (context, busy, _) => PopScope(
+                  canPop: !busy,
+                  child: Stack(children: [
+                    if (child != null) child,
+                    if (busy) ...[
+                      const ModalBarrier(
+                          dismissible: false, color: Color(0x55000000)),
+                      const Center(child: CircularProgressIndicator()),
+                    ],
+                  ]),
+                ),
+              ),
+            ),
           ),
         ),
-      ),
-    ),
-  );
+      );
 }

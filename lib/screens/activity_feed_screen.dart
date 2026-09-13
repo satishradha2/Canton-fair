@@ -93,8 +93,11 @@ class _ActivityFeedScreenState extends State<ActivityFeedScreen> {
                           ].join('\n')),
                           isThreeLine: details.isNotEmpty,
                           trailing: Text(_when(when),
-                              style: const TextStyle(
-                                  color: AppColors.muted, fontSize: 12)),
+                              style: TextStyle(
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurfaceVariant,
+                                  fontSize: 12)),
                         ),
                       );
                     },

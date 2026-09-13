@@ -5,8 +5,7 @@ class OnboardingService {
   static const _key = 'onboarding_hidden_v1';
   final FlutterSecureStorage _storage = const FlutterSecureStorage();
 
-  Future<bool> isHidden() async =>
-      (await _storage.read(key: _key)) == 'true';
+  Future<bool> isHidden() async => (await _storage.read(key: _key)) == 'true';
 
   Future<void> hide() => _storage.write(key: _key, value: 'true');
 

@@ -17,7 +17,8 @@ class _ScannerScreenState extends State<ScannerScreen> {
       appBar: AppBar(title: const Text('Scan QR / Barcode')),
       body: MobileScanner(
         onDetect: (capture) {
-          if (_resultReturned || !mounted ||
+          if (_resultReturned ||
+              !mounted ||
               ModalRoute.of(context)?.isCurrent != true) {
             return;
           }

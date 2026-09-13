@@ -254,14 +254,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 future: _futureOnboarding,
                 builder: (context, onboardingSnapshot) {
                   final progress = onboardingSnapshot.data;
-                  if (progress == null || progress.hidden || progress.complete) {
+                  if (progress == null ||
+                      progress.hidden ||
+                      progress.complete) {
                     return const SizedBox.shrink();
                   }
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 16),
                     child: SectionPanel(
                       title: 'Get started',
-                      subtitle: '${progress.completedSteps} of 3 workspace steps complete',
+                      subtitle:
+                          '${progress.completedSteps} of 3 workspace steps complete',
                       trailing: IconButton(
                         tooltip: 'Hide getting started guide',
                         icon: const Icon(Icons.close),
@@ -275,27 +278,36 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           complete: progress.hasTrip,
                           icon: Icons.looks_one_outlined,
                           title: 'Create your first trip',
-                          detail: 'Organize suppliers by fair visit or sourcing trip.',
+                          detail:
+                              'Organize suppliers by fair visit or sourcing trip.',
                         ),
                         _onboardingStep(
                           complete: progress.hasSupplier,
                           icon: Icons.looks_two_outlined,
                           title: 'Capture a supplier',
-                          detail: 'Record booth, contacts, products, and next steps.',
+                          detail:
+                              'Record booth, contacts, products, and next steps.',
                         ),
                         _onboardingStep(
                           complete: progress.hasSynced,
                           icon: Icons.looks_3_outlined,
                           title: 'Sync your workspace',
-                          detail: 'Keep the team record backed up and available.',
+                          detail:
+                              'Keep the team record backed up and available.',
                         ),
                         const SizedBox(height: 8),
                         SizedBox(
                           width: double.infinity,
                           child: ElevatedButton.icon(
-                            onPressed: progress.hasSupplier ? widget.onSync : widget.onCapture,
-                            icon: Icon(progress.hasSupplier ? Icons.sync : Icons.add_business_outlined),
-                            label: Text(progress.hasSupplier ? 'Open sync' : 'Capture first supplier'),
+                            onPressed: progress.hasSupplier
+                                ? widget.onSync
+                                : widget.onCapture,
+                            icon: Icon(progress.hasSupplier
+                                ? Icons.sync
+                                : Icons.add_business_outlined),
+                            label: Text(progress.hasSupplier
+                                ? 'Open sync'
+                                : 'Capture first supplier'),
                           ),
                         ),
                       ]),
@@ -309,188 +321,202 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ? 'Trip progress, sourcing metrics, and ranked shortlist.'
                     : 'Open reports only when you need them during field work.',
                 trailing: IconButton(
-                  tooltip: _showFairOverview ? 'Hide fair overview' : 'Show fair overview',
-                  icon: Icon(_showFairOverview ? Icons.expand_less : Icons.expand_more),
-                  onPressed: () => setState(() => _showFairOverview = !_showFairOverview),
+                  tooltip: _showFairOverview
+                      ? 'Hide fair overview'
+                      : 'Show fair overview',
+                  icon: Icon(_showFairOverview
+                      ? Icons.expand_less
+                      : Icons.expand_more),
+                  onPressed: () =>
+                      setState(() => _showFairOverview = !_showFairOverview),
                 ),
                 child: Text(_showFairOverview
                     ? 'Operational summary is expanded below.'
                     : 'Your route, capture actions, and due tasks stay at the top.'),
               ),
               if (_showFairOverview) ...[
-              const SizedBox(height: 16),
-              LayoutBuilder(
-                builder: (context, constraints) {
-                  final width = constraints.maxWidth;
-                  final columns = width >= 900
-                      ? 4
-                      : width >= 620
-                          ? 3
-                          : 2;
-                  return GridView.builder(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: stats.length,
-                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: columns,
-                      crossAxisSpacing: 10,
-                      mainAxisSpacing: 10,
-                      mainAxisExtent: 160 + (MediaQuery.textScalerOf(context).scale(14) - 14).clamp(0, 80).toDouble(),
-                    ),
-                    itemBuilder: (context, i) {
-                      return StatCard(
-                        label: stats[i]['label'].toString(),
-                        value: stats[i]['value'] as int,
-                        icon: icons[i % icons.length],
-                        color: colors[i % colors.length],
+                const SizedBox(height: 16),
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final width = constraints.maxWidth;
+                    final columns = width >= 900
+                        ? 4
+                        : width >= 620
+                            ? 3
+                            : 2;
+                    return GridView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: stats.length,
+                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: columns,
+                        crossAxisSpacing: 10,
+                        mainAxisSpacing: 10,
+                        mainAxisExtent: 160 +
+                            (MediaQuery.textScalerOf(context).scale(14) - 14)
+                                .clamp(0, 80)
+                                .toDouble(),
+                      ),
+                      itemBuilder: (context, i) {
+                        return StatCard(
+                          label: stats[i]['label'].toString(),
+                          value: stats[i]['value'] as int,
+                          icon: icons[i % icons.length],
+                          color: colors[i % colors.length],
+                        );
+                      },
+                    );
+                  },
+                ),
+                const SizedBox(height: 16),
+                SectionPanel(
+                  title: 'Trip closeout status',
+                  subtitle:
+                      'Operational readiness by trip, including capture and shortlist coverage.',
+                  child: FutureBuilder<List<Map<String, dynamic>>>(
+                    future: _futureCloseouts,
+                    builder: (context, closeSnap) {
+                      if (!closeSnap.hasData) {
+                        return const Padding(
+                          padding: EdgeInsets.all(12),
+                          child: Center(child: CircularProgressIndicator()),
+                        );
+                      }
+                      if (closeSnap.data!.isEmpty) {
+                        return const EmptyState(
+                          icon: Icons.event_busy,
+                          title: 'No trip data yet',
+                          message:
+                              'Create a trip and start capturing suppliers to populate this dashboard.',
+                        );
+                      }
+                      return Column(
+                        children: closeSnap.data!.map((trip) {
+                          final isClosed =
+                              (trip['closed_at'] as String).isNotEmpty;
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 10),
+                            child: Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .surfaceContainerLow,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .outlineVariant),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          trip['trip_name']?.toString() ??
+                                              'Trip',
+                                          style: const TextStyle(
+                                              fontWeight: FontWeight.w800),
+                                        ),
+                                      ),
+                                      InfoChip(
+                                        label: isClosed ? 'Closed' : 'Open',
+                                        icon: isClosed
+                                            ? Icons.check_circle
+                                            : Icons.schedule,
+                                        color: isClosed
+                                            ? AppColors.teal
+                                            : AppColors.amber,
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 10),
+                                  Wrap(
+                                    spacing: 8,
+                                    runSpacing: 8,
+                                    children: [
+                                      InfoChip(
+                                          label:
+                                              '${trip['exhibitor_count']} suppliers',
+                                          icon: Icons.business),
+                                      InfoChip(
+                                          label:
+                                              '${trip['product_count']} products',
+                                          icon: Icons.inventory_2,
+                                          color: AppColors.teal),
+                                      InfoChip(
+                                          label:
+                                              '${trip['contact_count']} contacts',
+                                          icon: Icons.contacts,
+                                          color: const Color(0xFF6B4E9B)),
+                                      InfoChip(
+                                          label:
+                                              '${trip['meeting_count']} meetings',
+                                          icon: Icons.event,
+                                          color: AppColors.amber),
+                                      InfoChip(
+                                        label:
+                                            '${trip['shortlisted_exhibitor_count']} / ${trip['shortlisted_product_count']} shortlisted',
+                                        icon: Icons.star,
+                                        color: const Color(0xFF2F855A),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        }).toList(),
                       );
                     },
-                  );
-                },
-              ),
-              const SizedBox(height: 16),
-              SectionPanel(
-                title: 'Trip closeout status',
-                subtitle:
-                    'Operational readiness by trip, including capture and shortlist coverage.',
-                child: FutureBuilder<List<Map<String, dynamic>>>(
-                  future: _futureCloseouts,
-                  builder: (context, closeSnap) {
-                    if (!closeSnap.hasData) {
-                      return const Padding(
-                        padding: EdgeInsets.all(12),
-                        child: Center(child: CircularProgressIndicator()),
-                      );
-                    }
-                    if (closeSnap.data!.isEmpty) {
-                      return const EmptyState(
-                        icon: Icons.event_busy,
-                        title: 'No trip data yet',
-                        message:
-                            'Create a trip and start capturing suppliers to populate this dashboard.',
-                      );
-                    }
-                    return Column(
-                      children: closeSnap.data!.map((trip) {
-                        final isClosed =
-                            (trip['closed_at'] as String).isNotEmpty;
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 10),
-                          child: Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFFAFBFD),
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: AppColors.line),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    Expanded(
-                                      child: Text(
-                                        trip['trip_name']?.toString() ?? 'Trip',
-                                        style: const TextStyle(
-                                            fontWeight: FontWeight.w800),
-                                      ),
-                                    ),
-                                    InfoChip(
-                                      label: isClosed ? 'Closed' : 'Open',
-                                      icon: isClosed
-                                          ? Icons.check_circle
-                                          : Icons.schedule,
-                                      color: isClosed
-                                          ? AppColors.teal
-                                          : AppColors.amber,
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 10),
-                                Wrap(
-                                  spacing: 8,
-                                  runSpacing: 8,
-                                  children: [
-                                    InfoChip(
-                                        label:
-                                            '${trip['exhibitor_count']} suppliers',
-                                        icon: Icons.business),
-                                    InfoChip(
-                                        label:
-                                            '${trip['product_count']} products',
-                                        icon: Icons.inventory_2,
-                                        color: AppColors.teal),
-                                    InfoChip(
-                                        label:
-                                            '${trip['contact_count']} contacts',
-                                        icon: Icons.contacts,
-                                        color: const Color(0xFF6B4E9B)),
-                                    InfoChip(
-                                        label:
-                                            '${trip['meeting_count']} meetings',
-                                        icon: Icons.event,
-                                        color: AppColors.amber),
-                                    InfoChip(
-                                      label:
-                                          '${trip['shortlisted_exhibitor_count']} / ${trip['shortlisted_product_count']} shortlisted',
-                                      icon: Icons.star,
-                                      color: const Color(0xFF2F855A),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      }).toList(),
-                    );
-                  },
+                  ),
                 ),
-              ),
-              const SizedBox(height: 16),
-              SectionPanel(
-                title: 'Top shortlisted products',
-                subtitle:
-                    'Recommendation score blends rating, quote, MOQ, and lead time.',
-                child: FutureBuilder<List<Product>>(
-                  future: _futureTopShortlist,
-                  builder: (context, scoreSnap) {
-                    if (!scoreSnap.hasData) {
-                      return const Padding(
-                        padding: EdgeInsets.all(12),
-                        child: Center(child: CircularProgressIndicator()),
-                      );
-                    }
-                    if (scoreSnap.data!.isEmpty) {
-                      return const EmptyState(
-                        icon: Icons.star_border,
-                        title: 'No shortlisted products',
-                        message:
-                            'Shortlist promising products to see your ranked buying options here.',
-                      );
-                    }
-                    return Column(
-                      children: scoreSnap.data!.map((p) {
-                        return ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          title: Text(p.name,
-                              maxLines: 1, overflow: TextOverflow.ellipsis),
-                          subtitle: Text(
-                            '${p.quotedPrice == null ? "No price" : "${p.quotedPrice} ${p.priceCurrency}"}  |  MOQ ${p.moq ?? "-"}  |  ${p.leadTime.isEmpty ? "No lead time" : p.leadTime}',
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          trailing: InfoChip(
-                            label: _shortlistScore(p).toStringAsFixed(1),
-                            icon: Icons.trending_up,
-                            color: AppColors.primary,
-                          ),
+                const SizedBox(height: 16),
+                SectionPanel(
+                  title: 'Top shortlisted products',
+                  subtitle:
+                      'Recommendation score blends rating, quote, MOQ, and lead time.',
+                  child: FutureBuilder<List<Product>>(
+                    future: _futureTopShortlist,
+                    builder: (context, scoreSnap) {
+                      if (!scoreSnap.hasData) {
+                        return const Padding(
+                          padding: EdgeInsets.all(12),
+                          child: Center(child: CircularProgressIndicator()),
                         );
-                      }).toList(),
-                    );
-                  },
+                      }
+                      if (scoreSnap.data!.isEmpty) {
+                        return const EmptyState(
+                          icon: Icons.star_border,
+                          title: 'No shortlisted products',
+                          message:
+                              'Shortlist promising products to see your ranked buying options here.',
+                        );
+                      }
+                      return Column(
+                        children: scoreSnap.data!.map((p) {
+                          return ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: Text(p.name,
+                                maxLines: 1, overflow: TextOverflow.ellipsis),
+                            subtitle: Text(
+                              '${p.quotedPrice == null ? "No price" : "${p.quotedPrice} ${p.priceCurrency}"}  |  MOQ ${p.moq ?? "-"}  |  ${p.leadTime.isEmpty ? "No lead time" : p.leadTime}',
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            trailing: InfoChip(
+                              label: _shortlistScore(p).toStringAsFixed(1),
+                              icon: Icons.trending_up,
+                              color: AppColors.primary,
+                            ),
+                          );
+                        }).toList(),
+                      );
+                    },
+                  ),
                 ),
-              ),
               ],
             ],
           );
@@ -510,7 +536,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
               borderRadius: BorderRadius.circular(8),
               border: Border.all(color: colors.outlineVariant),
             ),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Row(children: [
                 Container(
                   width: 42,
@@ -519,15 +546,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     color: colors.primary,
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: Icon(Icons.add_business_outlined, color: colors.onPrimary),
+                  child: Icon(Icons.add_business_outlined,
+                      color: colors.onPrimary),
                 ),
                 const SizedBox(width: 12),
-                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text('Capture at the Fair', style: Theme.of(context).textTheme.titleMedium),
-                  const SizedBox(height: 2),
-                  Text('Start with a supplier, badge, or business card.',
-                      style: Theme.of(context).textTheme.bodySmall),
-                ])),
+                Expanded(
+                    child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                      Text('Capture at the Fair',
+                          style: Theme.of(context).textTheme.titleMedium),
+                      const SizedBox(height: 2),
+                      Text('Start with a supplier, badge, or business card.',
+                          style: Theme.of(context).textTheme.bodySmall),
+                    ])),
               ]),
               const SizedBox(height: 16),
               SizedBox(
@@ -660,12 +692,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
     required IconData icon,
     required String title,
     required String detail,
-  }) => ListTile(
+  }) =>
+      ListTile(
         dense: true,
         contentPadding: EdgeInsets.zero,
         leading: Icon(
           complete ? Icons.check_circle : icon,
-          color: complete ? AppColors.teal : AppColors.muted,
+          color: complete
+              ? AppColors.teal
+              : Theme.of(context).colorScheme.onSurfaceVariant,
         ),
         title: Text(title),
         subtitle: Text(detail),

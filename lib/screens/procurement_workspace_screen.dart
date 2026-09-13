@@ -13,7 +13,8 @@ import '../widgets/enterprise_widgets.dart';
 import 'quote_approval_screen.dart';
 
 class ProcurementWorkspaceScreen extends StatefulWidget {
-  const ProcurementWorkspaceScreen({super.key});
+  final int initialTab;
+  const ProcurementWorkspaceScreen({super.key, this.initialTab = 0});
 
   @override
   State<ProcurementWorkspaceScreen> createState() =>
@@ -37,7 +38,8 @@ class _ProcurementWorkspaceScreenState extends State<ProcurementWorkspaceScreen>
   @override
   void initState() {
     super.initState();
-    _tabs = TabController(length: 4, vsync: this);
+    _tabs =
+        TabController(length: 4, initialIndex: widget.initialTab, vsync: this);
     _data = _load();
   }
 
@@ -55,7 +57,8 @@ class _ProcurementWorkspaceScreenState extends State<ProcurementWorkspaceScreen>
 
   Future<_ProcurementData> _load() async {
     final suppliers = await _db.getExhibitors(null);
-    final products = (await _db.queryAll('products')).map(Product.fromMap).toList();
+    final products =
+        (await _db.queryAll('products')).map(Product.fromMap).toList();
     final quotes = await _db.getQuotesForApproval();
     final meetings = await _db.getMeetings();
     return _ProcurementData(suppliers, products, quotes, meetings);
@@ -66,7 +69,9 @@ class _ProcurementWorkspaceScreenState extends State<ProcurementWorkspaceScreen>
   Map<String, dynamic> _verification(Exhibitor supplier) {
     try {
       final value = jsonDecode(supplier.verificationJson);
-      return value is Map ? Map<String, dynamic>.from(value) : <String, dynamic>{};
+      return value is Map
+          ? Map<String, dynamic>.from(value)
+          : <String, dynamic>{};
     } catch (_) {
       return <String, dynamic>{};
     }
@@ -81,7 +86,8 @@ class _ProcurementWorkspaceScreenState extends State<ProcurementWorkspaceScreen>
       if (certificates is! List) continue;
       for (final item in certificates.whereType<Map>()) {
         final certificate = Map<String, dynamic>.from(item);
-        final expiry = DateTime.tryParse(certificate['expiry'] as String? ?? '');
+        final expiry =
+            DateTime.tryParse(certificate['expiry'] as String? ?? '');
         if (expiry != null && expiry.isBefore(window)) {
           alerts.add(_CertificateAlert(
             supplier: supplier.name,
@@ -97,10 +103,12 @@ class _ProcurementWorkspaceScreenState extends State<ProcurementWorkspaceScreen>
   }
 
   Future<void> _saveLandedCost(_ProcurementData data) async {
-    final quote = data.quotes.where((item) => item['id'] == _selectedQuoteId).firstOrNull;
+    final quote =
+        data.quotes.where((item) => item['id'] == _selectedQuoteId).firstOrNull;
     if (quote == null) return;
     final productId = quote['product_id'] as int;
-    final product = data.products.where((item) => item.id == productId).firstOrNull;
+    final product =
+        data.products.where((item) => item.id == productId).firstOrNull;
     if (product == null) return;
     final quantity = double.tryParse(_quantity.text.trim()) ?? 0;
     final unitPrice = (quote['unit_price'] as num?)?.toDouble() ?? 0;
@@ -125,7 +133,8 @@ class _ProcurementWorkspaceScreenState extends State<ProcurementWorkspaceScreen>
     };
     final database = await _db.database;
     await database.transaction((txn) async {
-      final rows = await txn.query('products', where: 'id = ?', whereArgs: [productId]);
+      final rows =
+          await txn.query('products', where: 'id = ?', whereArgs: [productId]);
       if (rows.isEmpty) throw StateError('Product no longer exists.');
       final details = Map<String, dynamic>.from(
           jsonDecode(rows.single['details_json'] as String? ?? '{}') as Map);
@@ -133,11 +142,13 @@ class _ProcurementWorkspaceScreenState extends State<ProcurementWorkspaceScreen>
       await txn.update('products', {'details_json': jsonEncode(details)},
           where: 'id = ?', whereArgs: [productId]);
     });
-    await _db.logAudit('Saved landed cost', '${product.name} | quote ${quote['id']}');
+    await _db.logAudit(
+        'Saved landed cost', '${product.name} | quote ${quote['id']}');
     if (!mounted) return;
     _refresh();
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Landed cost saved to the product decision record.')),
+      const SnackBar(
+          content: Text('Landed cost saved to the product decision record.')),
     );
   }
 
@@ -146,7 +157,8 @@ class _ProcurementWorkspaceScreenState extends State<ProcurementWorkspaceScreen>
     if (trips.isEmpty) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Create a trip before importing suppliers.')),
+          const SnackBar(
+              content: Text('Create a trip before importing suppliers.')),
         );
       }
       return;
@@ -156,24 +168,35 @@ class _ProcurementWorkspaceScreenState extends State<ProcurementWorkspaceScreen>
     if (sourcePath == null) return;
     try {
       final source = await File(sourcePath).readAsString();
-      final rows = const CsvToListConverter(shouldParseNumbers: false).convert(source);
-      if (rows.length < 2) throw const FormatException('The spreadsheet has no supplier rows.');
+      final rows =
+          const CsvToListConverter(shouldParseNumbers: false).convert(source);
+      if (rows.length < 2) {
+        throw const FormatException('The spreadsheet has no supplier rows.');
+      }
       final headers = rows.first
-          .map((item) => item.toString().trim().toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), ''))
+          .map((item) => item
+              .toString()
+              .trim()
+              .toLowerCase()
+              .replaceAll(RegExp(r'[^a-z0-9]'), ''))
           .toList();
-      final nameIndex = _column(headers, ['supplier', 'suppliername', 'company', 'companyname', 'name']);
+      final nameIndex = _column(headers,
+          ['supplier', 'suppliername', 'company', 'companyname', 'name']);
       if (nameIndex == null) {
-        throw const FormatException('Add a Supplier or Company column to the CSV.');
+        throw const FormatException(
+            'Add a Supplier or Company column to the CSV.');
       }
       if (!mounted) return;
       final trip = await showDialog<Trip>(
         context: context,
         builder: (context) => SimpleDialog(
           title: const Text('Import suppliers into trip'),
-          children: trips.map((item) => SimpleDialogOption(
-            onPressed: () => Navigator.pop(context, item),
-            child: Text(item.name),
-          )).toList(),
+          children: trips
+              .map((item) => SimpleDialogOption(
+                    onPressed: () => Navigator.pop(context, item),
+                    child: Text(item.name),
+                  ))
+              .toList(),
         ),
       );
       if (trip == null) return;
@@ -186,18 +209,22 @@ class _ProcurementWorkspaceScreenState extends State<ProcurementWorkspaceScreen>
           'name': name,
           'booth': _value(row, _column(headers, ['booth', 'stand'])),
           'hall': _value(row, _column(headers, ['hall'])),
-          'category': _value(row, _column(headers, ['category', 'productcategory'])),
+          'category':
+              _value(row, _column(headers, ['category', 'productcategory'])),
           'country': _value(row, _column(headers, ['country'])),
           'notes': _value(row, _column(headers, ['notes', 'note'])),
-          'rating': int.tryParse(_value(row, _column(headers, ['rating']))) ?? 0,
+          'rating':
+              int.tryParse(_value(row, _column(headers, ['rating']))) ?? 0,
         });
         added++;
       }
-      await _db.logAudit('Imported suppliers', '$added supplier rows into ${trip.name}');
+      await _db.logAudit(
+          'Imported suppliers', '$added supplier rows into ${trip.name}');
       _refresh();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Imported $added suppliers into ${trip.name}.')),
+          SnackBar(
+              content: Text('Imported $added suppliers into ${trip.name}.')),
         );
       }
     } catch (error) {
@@ -227,8 +254,12 @@ class _ProcurementWorkspaceScreenState extends State<ProcurementWorkspaceScreen>
   Future<void> _shareManagementReport(_ProcurementData data) async {
     final alerts = _certificateAlerts(data.suppliers);
     final now = DateTime.now();
-    final approved = data.quotes.where((item) => item['approval_status'] == 'Approved').length;
-    final pending = data.quotes.where((item) => item['approval_status'] == 'Pending approval').length;
+    final approved = data.quotes
+        .where((item) => item['approval_status'] == 'Approved')
+        .length;
+    final pending = data.quotes
+        .where((item) => item['approval_status'] == 'Pending approval')
+        .length;
     final openTasks = data.meetings.where((item) => !item.completed).length;
     final text = '''Canton Fair Management Report
 Generated: ${now.toLocal().toString().substring(0, 16)}
@@ -245,7 +276,8 @@ Certificate expiry alerts: ${alerts.length}
 Priority certificate actions:
 ${alerts.take(5).map((item) => '- ${item.supplier}: ${item.type} expires ${_date(item.expiry)}').join('\n').ifEmpty('- None')}
 ''';
-    await SharePlus.instance.share(ShareParams(text: text, subject: 'Canton Fair management report'));
+    await SharePlus.instance.share(
+        ShareParams(text: text, subject: 'Canton Fair management report'));
   }
 
   String _date(DateTime value) =>
@@ -256,7 +288,10 @@ ${alerts.take(5).map((item) => '- ${item.supplier}: ${item.type} expires ${_date
         appBar: AppBar(
           title: const Text('Procurement workspace'),
           actions: [
-            IconButton(tooltip: 'Refresh', onPressed: _refresh, icon: const Icon(Icons.refresh)),
+            IconButton(
+                tooltip: 'Refresh',
+                onPressed: _refresh,
+                icon: const Icon(Icons.refresh)),
           ],
           bottom: TabBar(
             controller: _tabs,
@@ -272,7 +307,9 @@ ${alerts.take(5).map((item) => '- ${item.supplier}: ${item.type} expires ${_date
         body: FutureBuilder<_ProcurementData>(
           future: _data,
           builder: (context, snapshot) {
-            if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+            if (!snapshot.hasData) {
+              return const Center(child: CircularProgressIndicator());
+            }
             final data = snapshot.data!;
             return TabBarView(
               controller: _tabs,
@@ -289,17 +326,30 @@ ${alerts.take(5).map((item) => '- ${item.supplier}: ${item.type} expires ${_date
 
   Widget _decisions(_ProcurementData data) {
     final performance = data.suppliers.map((supplier) {
-      final related = data.meetings.where((item) => item.exhibitorId == supplier.id).toList();
+      final related = data.meetings
+          .where((item) => item.exhibitorId == supplier.id)
+          .toList();
       final completed = related.where((item) => item.completed).length;
       final score = supplier.decisionScore.round();
-      return (supplier: supplier, completed: completed, total: related.length, score: score);
-    }).toList()..sort((a, b) => b.score.compareTo(a.score));
+      return (
+        supplier: supplier,
+        completed: completed,
+        total: related.length,
+        score: score
+      );
+    }).toList()
+      ..sort((a, b) => b.score.compareTo(a.score));
     return ListView(padding: const EdgeInsets.all(16), children: [
       SectionPanel(
         title: 'Approval workflow',
-        subtitle: 'Quote approval is role-governed by the cloud team: viewers read, members work, admins manage membership.',
+        subtitle:
+            'Quote approval is role-governed by the cloud team: viewers read, members work, admins manage membership.',
         child: FilledButton.icon(
-          onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const QuoteApprovalScreen())).then((_) => _refresh()),
+          onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (_) => const QuoteApprovalScreen()))
+              .then((_) => _refresh()),
           icon: const Icon(Icons.rate_review_outlined),
           label: const Text('Review quote approvals'),
         ),
@@ -307,36 +357,56 @@ ${alerts.take(5).map((item) => '- ${item.supplier}: ${item.type} expires ${_date
       const SizedBox(height: 16),
       SectionPanel(
         title: 'Supplier performance',
-        subtitle: 'Decision score combines quality, response speed, trust, MOQ fit, and reliability. Follow-up completion adds the field delivery signal.',
+        subtitle:
+            'Decision score combines quality, response speed, trust, MOQ fit, and reliability. Follow-up completion adds the field delivery signal.',
         child: performance.isEmpty
             ? const Text('Capture suppliers to see performance.')
-            : Column(children: performance.take(12).map((item) => ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: CircleAvatar(child: Text(item.score.toString())),
-              title: Text(item.supplier.name),
-              subtitle: Text('Score ${item.score}/100 | ${item.completed}/${item.total} follow-ups completed'),
-              trailing: InfoChip(label: item.supplier.decision, color: item.supplier.shortlisted ? AppColors.teal : AppColors.muted),
-            )).toList()),
+            : Column(
+                children: performance
+                    .take(12)
+                    .map((item) => ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading:
+                              CircleAvatar(child: Text(item.score.toString())),
+                          title: Text(item.supplier.name),
+                          subtitle: Text(
+                              'Score ${item.score}/100 | ${item.completed}/${item.total} follow-ups completed'),
+                          trailing: InfoChip(
+                              label: item.supplier.decision,
+                              color: item.supplier.shortlisted
+                                  ? AppColors.teal
+                                  : AppColors.muted),
+                        ))
+                    .toList()),
       ),
       const SizedBox(height: 16),
       SectionPanel(
         title: 'Quote revision history',
-        subtitle: 'Every new quote is kept as a version. The most recent version is the current commercial offer; the full history remains available on the product.',
+        subtitle:
+            'Every new quote is kept as a version. The most recent version is the current commercial offer; the full history remains available on the product.',
         child: data.quotes.isEmpty
             ? const Text('No quote versions recorded.')
-            : Column(children: data.quotes.take(10).map((quote) => ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.history_outlined),
-              title: Text('${quote['supplier_name'] ?? 'Supplier'} - ${quote['product_name'] ?? 'Product'}'),
-              subtitle: Text('Revision ${quote['revision_number']} of ${quote['revision_count']} | ${quote['unit_price'] ?? '-'} ${quote['currency'] ?? 'USD'} | ${quote['approval_status'] ?? 'Draft'}'),
-            )).toList()),
+            : Column(
+                children: data.quotes
+                    .take(10)
+                    .map((quote) => ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: const Icon(Icons.history_outlined),
+                          title: Text(
+                              '${quote['supplier_name'] ?? 'Supplier'} - ${quote['product_name'] ?? 'Product'}'),
+                          subtitle: Text(
+                              'Revision ${quote['revision_number']} of ${quote['revision_count']} | ${quote['unit_price'] ?? '-'} ${quote['currency'] ?? 'USD'} | ${quote['approval_status'] ?? 'Draft'}'),
+                        ))
+                    .toList()),
       ),
     ]);
   }
 
   Widget _costing(_ProcurementData data) {
-    final quotes = data.quotes.where((item) => item['unit_price'] != null).toList();
-    final selected = quotes.where((item) => item['id'] == _selectedQuoteId).firstOrNull;
+    final quotes =
+        data.quotes.where((item) => item['unit_price'] != null).toList();
+    final selected =
+        quotes.where((item) => item['id'] == _selectedQuoteId).firstOrNull;
     final unitPrice = (selected?['unit_price'] as num?)?.toDouble() ?? 0;
     final quantity = double.tryParse(_quantity.text) ?? 0;
     final freight = double.tryParse(_freight.text) ?? 0;
@@ -348,86 +418,167 @@ ${alerts.take(5).map((item) => '- ${item.supplier}: ${item.type} expires ${_date
     return ListView(padding: const EdgeInsets.all(16), children: [
       SectionPanel(
         title: 'Landed-cost calculator',
-        subtitle: 'Select an official quote, then calculate the buying decision with freight, duty, other costs, and your USD exchange rate.',
+        subtitle:
+            'Select an official quote, then calculate the buying decision with freight, duty, other costs, and your USD exchange rate.',
         child: Column(children: [
           DropdownButtonFormField<int>(
-            initialValue: quotes.any((item) => item['id'] == _selectedQuoteId) ? _selectedQuoteId : null,
+            initialValue: quotes.any((item) => item['id'] == _selectedQuoteId)
+                ? _selectedQuoteId
+                : null,
             decoration: const InputDecoration(labelText: 'Quote revision'),
-            items: quotes.map((quote) => DropdownMenuItem<int>(
-              value: quote['id'] as int,
-              child: Text('${quote['supplier_name']} - ${quote['product_name']} | ${quote['unit_price']} ${quote['currency']}'),
-            )).toList(),
+            items: quotes
+                .map((quote) => DropdownMenuItem<int>(
+                      value: quote['id'] as int,
+                      child: Text(
+                          '${quote['supplier_name']} - ${quote['product_name']} | ${quote['unit_price']} ${quote['currency']}'),
+                    ))
+                .toList(),
             onChanged: (value) => setState(() => _selectedQuoteId = value),
           ),
           const SizedBox(height: 10),
-          TextField(controller: _quantity, onChanged: (_) => setState(() {}), keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Order quantity')),
-          TextField(controller: _freight, onChanged: (_) => setState(() {}), keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Freight in quote currency')),
-          TextField(controller: _duty, onChanged: (_) => setState(() {}), keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Duty percent')),
-          TextField(controller: _otherCosts, onChanged: (_) => setState(() {}), keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Other landed costs in quote currency')),
-          TextField(controller: _rate, onChanged: (_) => setState(() {}), keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: InputDecoration(labelText: 'USD per ${selected?['currency'] ?? 'source currency'}')),
+          TextField(
+              controller: _quantity,
+              onChanged: (_) => setState(() {}),
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(labelText: 'Order quantity')),
+          TextField(
+              controller: _freight,
+              onChanged: (_) => setState(() {}),
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(
+                  labelText: 'Freight in quote currency')),
+          TextField(
+              controller: _duty,
+              onChanged: (_) => setState(() {}),
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(labelText: 'Duty percent')),
+          TextField(
+              controller: _otherCosts,
+              onChanged: (_) => setState(() {}),
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(
+                  labelText: 'Other landed costs in quote currency')),
+          TextField(
+              controller: _rate,
+              onChanged: (_) => setState(() {}),
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              decoration: InputDecoration(
+                  labelText:
+                      'USD per ${selected?['currency'] ?? 'source currency'}')),
           const SizedBox(height: 16),
-          Text('Goods: ${goods.toStringAsFixed(2)} ${selected?['currency'] ?? ''}'),
-          Text('Landed total: ${total.toStringAsFixed(2)} ${selected?['currency'] ?? ''}'),
-          Text('USD total: ${(total * rate).toStringAsFixed(2)} | USD unit cost: ${quantity == 0 ? '0.00' : (total * rate / quantity).toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.w800)),
+          Text(
+              'Goods: ${goods.toStringAsFixed(2)} ${selected?['currency'] ?? ''}'),
+          Text(
+              'Landed total: ${total.toStringAsFixed(2)} ${selected?['currency'] ?? ''}'),
+          Text(
+              'USD total: ${(total * rate).toStringAsFixed(2)} | USD unit cost: ${quantity == 0 ? '0.00' : (total * rate / quantity).toStringAsFixed(2)}',
+              style: const TextStyle(fontWeight: FontWeight.w800)),
           const SizedBox(height: 12),
-          FilledButton.icon(onPressed: selected == null ? null : () => _saveLandedCost(data), icon: const Icon(Icons.save_outlined), label: const Text('Save to product decision')),
+          FilledButton.icon(
+              onPressed: selected == null ? null : () => _saveLandedCost(data),
+              icon: const Icon(Icons.save_outlined),
+              label: const Text('Save to product decision')),
         ]),
       ),
     ]);
   }
 
   Widget _dataTools() => ListView(padding: const EdgeInsets.all(16), children: [
-    SectionPanel(
-      title: 'Import supplier spreadsheet',
-      subtitle: 'Import a CSV with Supplier or Company, Booth, Hall, Category, Country, Notes, and Rating columns. You choose the destination trip before saving.',
-      child: FilledButton.icon(onPressed: _importCsv, icon: const Icon(Icons.upload_file_outlined), label: const Text('Import CSV suppliers')),
-    ),
-    const SizedBox(height: 16),
-    SectionPanel(
-      title: 'Search supplier files',
-      subtitle: 'Find saved photos, PDFs, catalogues, and evidence by their note, type, or filename.',
-      child: Column(children: [
-        TextField(controller: _documentSearch, onSubmitted: (_) => _searchDocuments(), decoration: InputDecoration(labelText: 'Search documents', suffixIcon: IconButton(onPressed: _searchDocuments, icon: const Icon(Icons.search)))),
-        if (_documents != null) FutureBuilder<List<Map<String, dynamic>>>(
-          future: _documents,
-          builder: (context, snapshot) {
-            if (!snapshot.hasData) return const Padding(padding: EdgeInsets.all(16), child: CircularProgressIndicator());
-            if (snapshot.data!.isEmpty) return const Padding(padding: EdgeInsets.only(top: 12), child: Text('No matching files.'));
-            return Column(children: snapshot.data!.map((file) => ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: Icon(file['kind'] == 'pdf' ? Icons.picture_as_pdf_outlined : Icons.attach_file_outlined),
-              title: Text(file['note'] as String? ?? 'Untitled file'),
-              subtitle: Text('${file['supplier_name']}${file['product_name'] == null ? '' : ' | ${file['product_name']}'}'),
-            )).toList());
-          },
+        SectionPanel(
+          title: 'Import Canton Fair exhibitor directory',
+          subtitle:
+              'Import an official or prepared CSV with Supplier or Company, Booth, Hall, Category, Country, Notes, and Rating columns. You choose the destination trip before saving.',
+          child: FilledButton.icon(
+              onPressed: _importCsv,
+              icon: const Icon(Icons.upload_file_outlined),
+              label: const Text('Import exhibitor CSV')),
         ),
-      ]),
-    ),
-  ]);
+        const SizedBox(height: 16),
+        SectionPanel(
+          title: 'Search supplier files',
+          subtitle:
+              'Find saved photos, PDFs, catalogues, and evidence by their note, type, or filename.',
+          child: Column(children: [
+            TextField(
+                controller: _documentSearch,
+                onSubmitted: (_) => _searchDocuments(),
+                decoration: InputDecoration(
+                    labelText: 'Search documents',
+                    suffixIcon: IconButton(
+                        onPressed: _searchDocuments,
+                        icon: const Icon(Icons.search)))),
+            if (_documents != null)
+              FutureBuilder<List<Map<String, dynamic>>>(
+                future: _documents,
+                builder: (context, snapshot) {
+                  if (!snapshot.hasData) {
+                    return const Padding(
+                        padding: EdgeInsets.all(16),
+                        child: CircularProgressIndicator());
+                  }
+                  if (snapshot.data!.isEmpty) {
+                    return const Padding(
+                        padding: EdgeInsets.only(top: 12),
+                        child: Text('No matching files.'));
+                  }
+                  return Column(
+                      children: snapshot.data!
+                          .map((file) => ListTile(
+                                contentPadding: EdgeInsets.zero,
+                                leading: Icon(file['kind'] == 'pdf'
+                                    ? Icons.picture_as_pdf_outlined
+                                    : Icons.attach_file_outlined),
+                                title: Text(
+                                    file['note'] as String? ?? 'Untitled file'),
+                                subtitle: Text(
+                                    '${file['supplier_name']}${file['product_name'] == null ? '' : ' | ${file['product_name']}'}'),
+                              ))
+                          .toList());
+                },
+              ),
+          ]),
+        ),
+      ]);
 
   Widget _alertsAndReport(_ProcurementData data) {
     final alerts = _certificateAlerts(data.suppliers);
     return ListView(padding: const EdgeInsets.all(16), children: [
       SectionPanel(
         title: 'Document expiry alerts',
-        subtitle: 'Certificates expiring within 60 days, or already expired. Edit the certificate register from the supplier Verification tab.',
+        subtitle:
+            'Certificates expiring within 60 days, or already expired. Edit the certificate register from the supplier Verification tab.',
         child: alerts.isEmpty
             ? const Text('No certificate expiry alerts.')
-            : Column(children: alerts.map((item) {
-              final expired = item.expiry.isBefore(DateTime.now());
-              return ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: Icon(expired ? Icons.warning_amber_outlined : Icons.event_outlined, color: expired ? AppColors.danger : AppColors.amber),
-                title: Text('${item.supplier} - ${item.type}'),
-                subtitle: Text('${expired ? 'Expired' : 'Expires'} ${_date(item.expiry)} | ${item.verified ? 'Verified' : 'Not verified'}'),
-              );
-            }).toList()),
+            : Column(
+                children: alerts.map((item) {
+                final expired = item.expiry.isBefore(DateTime.now());
+                return ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(
+                      expired
+                          ? Icons.warning_amber_outlined
+                          : Icons.event_outlined,
+                      color: expired ? AppColors.danger : AppColors.amber),
+                  title: Text('${item.supplier} - ${item.type}'),
+                  subtitle: Text(
+                      '${expired ? 'Expired' : 'Expires'} ${_date(item.expiry)} | ${item.verified ? 'Verified' : 'Not verified'}'),
+                );
+              }).toList()),
       ),
       const SizedBox(height: 16),
       SectionPanel(
         title: 'Post-fair management report',
-        subtitle: 'Share a compact leadership report with supplier pipeline, commercial approvals, task load, and certificate exposure.',
-        child: FilledButton.icon(onPressed: () => _shareManagementReport(data), icon: const Icon(Icons.ios_share_outlined), label: const Text('Share management report')),
+        subtitle:
+            'Share a compact leadership report with supplier pipeline, commercial approvals, task load, and certificate exposure.',
+        child: FilledButton.icon(
+            onPressed: () => _shareManagementReport(data),
+            icon: const Icon(Icons.ios_share_outlined),
+            label: const Text('Share management report')),
       ),
     ]);
   }
@@ -438,7 +589,8 @@ class _ProcurementData {
   final List<Product> products;
   final List<Map<String, dynamic>> quotes;
   final List<Meeting> meetings;
-  const _ProcurementData(this.suppliers, this.products, this.quotes, this.meetings);
+  const _ProcurementData(
+      this.suppliers, this.products, this.quotes, this.meetings);
 }
 
 class _CertificateAlert {
@@ -446,7 +598,11 @@ class _CertificateAlert {
   final String type;
   final DateTime expiry;
   final bool verified;
-  const _CertificateAlert({required this.supplier, required this.type, required this.expiry, required this.verified});
+  const _CertificateAlert(
+      {required this.supplier,
+      required this.type,
+      required this.expiry,
+      required this.verified});
 }
 
 extension _IterableLookup<T> on Iterable<T> {

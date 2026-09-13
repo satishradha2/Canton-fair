@@ -7,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 
 import 'business_card_parser.dart';
 import 'card_crop_text_check.dart';
+import 'phone_number_normalizer.dart';
 import 'team_workspace_service.dart';
 
 /// App-owned originals and OCR output survive leaving the screen or restarting.
@@ -29,37 +30,49 @@ class BusinessCardCapture {
   Future<void> _writes = Future<void>.value();
 
   static const modes = [
-    'Chinese + English', 'Latin', 'Japanese + English',
-    'Korean + English', 'Devanagari + English',
+    'Chinese + English',
+    'Latin',
+    'Japanese + English',
+    'Korean + English',
+    'Devanagari + English',
   ];
 
   static Future<BusinessCardCapture> open() async {
     final scope = await TeamWorkspaceService().scopeKey();
     final root = await getApplicationDocumentsDirectory();
-    final base = Directory(p.join(root.path, 'attachments', scope, 'business_cards'));
+    final base =
+        Directory(p.join(root.path, 'attachments', scope, 'business_cards'));
     await base.create(recursive: true);
     final pointer = File(p.join(base.path, 'current.json'));
     if (await pointer.exists()) {
-      final id = (jsonDecode(await pointer.readAsString()) as Map)['id'] as String;
+      final id =
+          (jsonDecode(await pointer.readAsString()) as Map)['id'] as String;
       if (!RegExp(r'^card_[0-9]+$').hasMatch(id)) {
         throw const FormatException('Invalid card draft identifier');
       }
-      final draft = BusinessCardCapture._(scope, id, Directory(p.join(base.path, id)), pointer);
-      final data = jsonDecode(await File(p.join(draft.directory.path, 'draft.json')).readAsString()) as Map;
-      draft.mode = modes.contains(data['mode']) ? data['mode'] as String : modes.first;
+      final draft = BusinessCardCapture._(
+          scope, id, Directory(p.join(base.path, id)), pointer);
+      final data = jsonDecode(
+          await File(p.join(draft.directory.path, 'draft.json'))
+              .readAsString()) as Map;
+      draft.mode =
+          modes.contains(data['mode']) ? data['mode'] as String : modes.first;
       draft.backBlank = data['back_blank'] == true;
       draft.pendingSide = data['pending_side'] as String?;
-      draft.fields.addAll(Map<String, String>.from(data['fields'] as Map? ?? {}));
+      draft.fields
+          .addAll(Map<String, String>.from(data['fields'] as Map? ?? {}));
       draft.edited.addAll((data['edited'] as List? ?? []).cast<String>());
       draft.aiReadings.addAll((data['ai_readings'] as List? ?? [])
           .map((item) => Map<String, dynamic>.from(item as Map)));
       for (final entry in (data['sides'] as Map? ?? {}).entries) {
-        draft.sides[entry.key as String] = Map<String, dynamic>.from(entry.value as Map);
+        draft.sides[entry.key as String] =
+            Map<String, dynamic>.from(entry.value as Map);
       }
       return draft;
     }
     final id = 'card_${DateTime.now().microsecondsSinceEpoch}';
-    final draft = BusinessCardCapture._(scope, id, Directory(p.join(base.path, id)), pointer);
+    final draft = BusinessCardCapture._(
+        scope, id, Directory(p.join(base.path, id)), pointer);
     await draft.directory.create(recursive: true);
     await draft.save();
     await pointer.writeAsString(jsonEncode({'id': id}), flush: true);
@@ -68,9 +81,14 @@ class BusinessCardCapture {
 
   Future<void> save() {
     final snapshot = jsonEncode({
-      'id': id, 'mode': mode, 'back_blank': backBlank,
-      'pending_side': pendingSide, 'fields': fields,
-      'edited': edited.toList(), 'sides': sides, 'ai_readings': aiReadings,
+      'id': id,
+      'mode': mode,
+      'back_blank': backBlank,
+      'pending_side': pendingSide,
+      'fields': fields,
+      'edited': edited.toList(),
+      'sides': sides,
+      'ai_readings': aiReadings,
     });
     final next = _writes.then((_) async {
       final temporary = File(p.join(directory.path, 'draft.next.json'));
@@ -90,12 +108,15 @@ class BusinessCardCapture {
   Future<void> keepImage(String side, String source) async {
     if (side != 'front' && side != 'back') throw ArgumentError.value(side);
     final extension = p.extension(source).toLowerCase();
-    final suffix = RegExp(r'^\.[a-z0-9]{1,8}$').hasMatch(extension) ? extension : '.jpg';
+    final suffix =
+        RegExp(r'^\.[a-z0-9]{1,8}$').hasMatch(extension) ? extension : '.jpg';
     final filename = '${side}_${DateTime.now().microsecondsSinceEpoch}$suffix';
     await File(source).copy(p.join(directory.path, filename));
     sides[side] = {
-      'file': filename, 'captured_at': DateTime.now().toUtc().toIso8601String(),
-      'passes': <String, dynamic>{}, 'warnings': <String>[],
+      'file': filename,
+      'captured_at': DateTime.now().toUtc().toIso8601String(),
+      'passes': <String, dynamic>{},
+      'warnings': <String>[],
     };
     if (side == 'back') backBlank = false;
     pendingSide = null;
@@ -104,7 +125,8 @@ class BusinessCardCapture {
 
   String readingPath(String side) {
     final corrected = sides[side]?['processed_file'] as String?;
-    if (corrected == null || p.basename(corrected) != corrected ||
+    if (corrected == null ||
+        p.basename(corrected) != corrected ||
         sides[side]?['crop_verified'] != true) {
       return imagePath(side);
     }
@@ -125,8 +147,8 @@ class BusinessCardCapture {
   }
 
   Map<String, String> get imageIdentities => {
-    for (final side in sides.keys) side: p.basename(readingPath(side)),
-  };
+        for (final side in sides.keys) side: p.basename(readingPath(side)),
+      };
 
   bool matchesAi(Map<String, dynamic> reading) {
     final inputs = reading['input_files'] as Map? ?? {};
@@ -162,19 +184,29 @@ class BusinessCardCapture {
       for (final script in scripts) {
         final recognizer = TextRecognizer(script: script);
         try {
-          final result = await recognizer.processImage(InputImage.fromFilePath(path));
+          final result =
+              await recognizer.processImage(InputImage.fromFilePath(path));
           passes[script.name] = {
             'text': result.text,
             'input_file': p.basename(path),
-            'lines': [for (final block in result.blocks) for (final line in block.lines) {
-              'text': line.text,
-              'box': [line.boundingBox.left, line.boundingBox.top,
-                line.boundingBox.right, line.boundingBox.bottom],
-              'languages': line.recognizedLanguages,
-            }],
+            'lines': [
+              for (final block in result.blocks)
+                for (final line in block.lines)
+                  {
+                    'text': line.text,
+                    'box': [
+                      line.boundingBox.left,
+                      line.boundingBox.top,
+                      line.boundingBox.right,
+                      line.boundingBox.bottom
+                    ],
+                    'languages': line.recognizedLanguages,
+                  }
+            ],
           };
         } catch (_) {
-          warnings.add('${script.name} recognition failed for the $source. Original preserved; retry reading.');
+          warnings.add(
+              '${script.name} recognition failed for the $source. Original preserved; retry reading.');
         } finally {
           await recognizer.close();
         }
@@ -190,9 +222,12 @@ class BusinessCardCapture {
     var selected = originals;
     final corrected = page['processed_file'] as String?;
     if (corrected != null && p.basename(corrected) == corrected) {
-      final cropped = await recognize(p.join(directory.path, corrected), 'crop');
+      final cropped =
+          await recognize(p.join(directory.path, corrected), 'crop');
       page['crop_passes'] = cropped;
-      final check = CardCropTextCheck.evaluate(originals: originals, cropped: cropped,
+      final check = CardCropTextCheck.evaluate(
+          originals: originals,
+          cropped: cropped,
           requiredScripts: scripts.map((script) => script.name).toSet());
       final verified = check.verified;
       page['crop_verified'] = verified;
@@ -205,28 +240,32 @@ class BusinessCardCapture {
       if (verified) {
         selected = cropped;
       } else {
-        warnings.add('Using the original: the crop could not be confirmed to retain all readable text. Both images and recognition results are preserved.');
+        warnings.add(
+            'Using the original: the crop could not be confirmed to retain all readable text. Both images and recognition results are preserved.');
       }
     }
     final previous = Map<String, dynamic>.from(page['passes'] as Map? ?? {});
     // Keep prior output in the archive, but never mix an old crop's text into
     // the active result for a different input image.
     if (previous.isNotEmpty) {
-      final history = List<dynamic>.from(page['reading_history'] as List? ?? []);
+      final history =
+          List<dynamic>.from(page['reading_history'] as List? ?? []);
       history.add({'read_at': page['read_at'], 'passes': previous});
       page['reading_history'] = history;
     }
     final currentInput = p.basename(readingPath(side));
     page['passes'] = {
       for (final entry in previous.entries)
-        if ((entry.value as Map)['input_file'] == currentInput) entry.key: entry.value,
+        if ((entry.value as Map)['input_file'] == currentInput)
+          entry.key: entry.value,
       ...selected,
     };
     page['mode'] = mode;
     page['read_at'] = DateTime.now().toUtc().toIso8601String();
     page['warnings'] = warnings;
     if (sideText(side).trim().length < 20) {
-      warnings.add('Very little text detected. Check focus, lighting and card edges, or enter details manually.');
+      warnings.add(
+          'Very little text detected. Check focus, lighting and card edges, or enter details manually.');
     }
     updateSuggestions();
     await save();
@@ -237,14 +276,17 @@ class BusinessCardCapture {
     final lines = <String>{};
     for (final pass in passes.values) {
       lines.addAll(((pass as Map)['text'] as String? ?? '')
-          .split(RegExp(r'[\r\n]+')).map((line) => line.trim())
+          .split(RegExp(r'[\r\n]+'))
+          .map((line) => line.trim())
           .where((line) => line.isNotEmpty));
     }
     return lines.join('\n');
   }
 
-  String get text => ['front', 'back'].map(sideText).where((s) => s.isNotEmpty).join('\n\n');
-  Map<String, List<String>> get candidates => BusinessCardParser.candidates(text);
+  String get text =>
+      ['front', 'back'].map(sideText).where((s) => s.isNotEmpty).join('\n\n');
+  Map<String, List<String>> get candidates =>
+      BusinessCardParser.candidates(text);
 
   void updateSuggestions() {
     final values = candidates;
@@ -261,6 +303,7 @@ class BusinessCardCapture {
       if (!edited.contains(key)) fields[key] = suggestions[key] ?? '';
     }
     applyLatestAi();
+    _normalizePhones();
   }
 
   int applyLatestAi() {
@@ -271,23 +314,50 @@ class BusinessCardCapture {
         if (entry.key is! String || entry.value is! String) continue;
         final key = entry.key as String;
         final value = (entry.value as String).trim();
-        if (edited.contains(key) || value.isEmpty || fields[key] == value) continue;
+        if (edited.contains(key) || value.isEmpty || fields[key] == value)
+          continue;
         fields[key] = value;
         count++;
       }
+      final extra = <String>[];
+      for (final item in reading['extra_details'] as List? ?? const []) {
+        if (item is! Map) continue;
+        final label = item['label']?.toString().trim() ?? '';
+        final value = item['value']?.toString().trim() ?? '';
+        if (label.isNotEmpty && value.isNotEmpty) extra.add('$label: $value');
+      }
+      if (extra.isNotEmpty && !edited.contains('other')) {
+        final existing = fields['other']?.trim() ?? '';
+        fields['other'] = {
+          ...existing.split('\n').where((line) => line.trim().isNotEmpty),
+          ...extra
+        }.join('\n');
+      }
+      _normalizePhones();
       return count;
     }
     return 0;
   }
 
+  void _normalizePhones() {
+    final normalized = PhoneNumberNormalizer.normalizeFields(fields);
+    for (final entry in normalized.entries) {
+      if (!edited.contains(entry.key)) fields[entry.key] = entry.value;
+    }
+  }
+
   Map<String, dynamic> archive({Map<String, String>? reviewedFields}) => {
-    'version': 1, 'id': id, 'engine': 'ML Kit on-device',
-    'reviewed_at': DateTime.now().toUtc().toIso8601String(),
-    'fields': reviewedFields ?? Map<String, String>.from(fields),
-    'candidates': candidates, 'back_blank': backBlank,
-    'sides': jsonDecode(jsonEncode(sides)), 'raw_text': text,
-    'ai_readings': jsonDecode(jsonEncode(aiReadings)),
-  };
+        'version': 1,
+        'id': id,
+        'engine': 'ML Kit on-device',
+        'reviewed_at': DateTime.now().toUtc().toIso8601String(),
+        'fields': reviewedFields ?? Map<String, String>.from(fields),
+        'candidates': candidates,
+        'back_blank': backBlank,
+        'sides': jsonDecode(jsonEncode(sides)),
+        'raw_text': text,
+        'ai_readings': jsonDecode(jsonEncode(aiReadings)),
+      };
 
   Future<void> markSaved() async {
     await _writes;

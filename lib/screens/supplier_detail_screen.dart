@@ -1,4 +1,5 @@
 import '../data/team_workspace_service.dart';
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -13,6 +14,7 @@ import '../data/database.dart';
 import '../data/camera_capture_service.dart';
 import '../data/reminder_service.dart';
 import '../data/device_contacts_service.dart';
+import '../data/edit_lock_service.dart';
 import '../models/models.dart';
 import '../theme/app_theme.dart';
 import '../widgets/enterprise_widgets.dart';
@@ -39,6 +41,9 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
   late Future<List<Meeting>> _meetings;
   late Future<List<Attachment>> _files;
   late Future<List<Sample>> _samples;
+  final _editLocks = EditLockService();
+  EditLock? _editLock;
+  String? _lockRecordId;
 
   @override
   void initState() {
@@ -47,6 +52,23 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
     _verificationJson = widget.supplier.verificationJson;
     _fieldCaptureJson = widget.supplier.fieldCaptureJson;
     _reload();
+    _acquireEditLock();
+  }
+
+  Future<void> _acquireEditLock() async {
+    final link = await _db.getCloudLink('supplier', widget.supplier.id!);
+    final recordId = link?['record_id']?.toString();
+    if (recordId == null) return;
+    _lockRecordId = recordId;
+    final lock = await _editLocks.acquire('supplier', recordId);
+    if (mounted) setState(() => _editLock = lock);
+  }
+
+  @override
+  void dispose() {
+    final recordId = _lockRecordId;
+    if (recordId != null) unawaited(_editLocks.release('supplier', recordId));
+    super.dispose();
   }
 
   Future<void> _setDecision(String decision) async {
@@ -84,10 +106,14 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
     if (mounted) setState(() => _decision = decision);
   }
 
-  Future<void> _editSupplierProfile({int? contactId}) async {
+  Future<void> _editSupplierProfile(
+      {int? contactId, bool createContact = false}) async {
     final saved = await Navigator.of(context).push<Exhibitor>(MaterialPageRoute(
       builder: (_) => SupplierProfileScreen(
-          supplierId: widget.supplier.id!, contactId: contactId),
+        supplierId: widget.supplier.id!,
+        contactId: contactId,
+        createContact: createContact,
+      ),
     ));
     if (!mounted || saved == null) return;
     Navigator.of(context).pushReplacement(MaterialPageRoute<void>(
@@ -1127,9 +1153,10 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
         title: Text('Negotiation notes: ${product.name}'),
         content: SingleChildScrollView(
           child: Column(children: [
-            const Text(
+            Text(
               'Use this for discussion context. Save an agreed commercial offer as an official quote in Quote history.',
-              style: TextStyle(color: AppColors.muted),
+              style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant),
             ),
             const SizedBox(height: 12),
             TextField(
@@ -1649,8 +1676,9 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
   Widget _moreTab() => ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          const Text('Supplier tools',
-              style: TextStyle(color: AppColors.muted)),
+          Text('Supplier tools',
+              style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant)),
           const SizedBox(height: 8),
           _moreTile(
               'Verification & certificates',
@@ -1723,14 +1751,32 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
             ],
           ),
         ),
-        body: TabBarView(
+        body: Column(
           children: [
-            _overview(supplier),
-            _contactsTab(),
-            _productsTab(),
-            _meetingsTab(),
-            _filesTab(),
-            _moreTab(),
+            if (_editLock != null &&
+                _editLock!.userId != TeamWorkspaceService().userId)
+              Material(
+                color: Theme.of(context).colorScheme.errorContainer,
+                child: ListTile(
+                  dense: true,
+                  leading: const Icon(Icons.lock_clock_outlined),
+                  title: Text(
+                      '${_editLock!.userEmail.isEmpty ? 'A teammate' : _editLock!.userEmail} is editing this supplier'),
+                  subtitle: const Text(
+                      'Review their changes after sync before saving overlapping edits.'),
+                ),
+              ),
+            Expanded(
+                child: TabBarView(
+              children: [
+                _overview(supplier),
+                _contactsTab(),
+                _productsTab(),
+                _meetingsTab(),
+                _filesTab(),
+                _moreTab(),
+              ],
+            )),
           ],
         ),
       ),
@@ -1836,9 +1882,10 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
                 : const Divider(height: 1),
             itemBuilder: (context, index) {
               if (index == 0) {
-                return const Text(
+                return Text(
                     'This supplier only: visits, contacts, products, meetings, files, and samples. Use Team activity for the whole workspace.',
-                    style: TextStyle(color: AppColors.muted));
+                    style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant));
               }
               final event = events[index - 1];
               return ListTile(
@@ -1950,7 +1997,10 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
               .map((item) => Padding(
                     padding: const EdgeInsets.only(top: 10),
                     child: Text('${item.$1}: ${item.$2}',
-                        style: const TextStyle(color: AppColors.muted)),
+                        style: TextStyle(
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSurfaceVariant)),
                   )),
           const SizedBox(height: 12),
           OutlinedButton.icon(
@@ -1972,7 +2022,8 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
             const SizedBox(height: 8),
             Text(
                 '${visits.length} visit${visits.length == 1 ? '' : 's'} recorded',
-                style: const TextStyle(color: AppColors.muted)),
+                style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant)),
           ],
         ],
       ),
@@ -2024,8 +2075,10 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
               Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
                 Text('${supplier.rating}/5',
                     style: Theme.of(context).textTheme.titleMedium),
-                const Text('rating',
-                    style: TextStyle(fontSize: 11, color: AppColors.muted)),
+                Text('rating',
+                    style: TextStyle(
+                        fontSize: 11,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant)),
               ]),
             ]),
           ),
@@ -2261,17 +2314,30 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
             return const Center(child: CircularProgressIndicator());
           }
           if (contacts.isEmpty) {
-            return _empty(
-                'No contacts',
-                'Add a contact from the supplier capture screen.',
-                Icons.person_add_alt_1_outlined);
+            return Center(
+              child: FilledButton.icon(
+                onPressed: () => _editSupplierProfile(createContact: true),
+                icon: const Icon(Icons.person_add_alt_1_outlined),
+                label: const Text('Add first contact'),
+              ),
+            );
           }
           return ListView.separated(
             padding: const EdgeInsets.all(16),
-            itemCount: contacts.length,
+            itemCount: contacts.length + 1,
             separatorBuilder: (_, __) => const SizedBox(height: 10),
             itemBuilder: (context, index) {
-              final contact = contacts[index];
+              if (index == 0) {
+                return Align(
+                  alignment: Alignment.centerLeft,
+                  child: FilledButton.icon(
+                    onPressed: () => _editSupplierProfile(createContact: true),
+                    icon: const Icon(Icons.person_add_alt_1_outlined),
+                    label: const Text('Add another contact'),
+                  ),
+                );
+              }
+              final contact = contacts[index - 1];
               final profile = _contactProfile(contact);
               final details = [
                 contact.designation,
@@ -2319,10 +2385,12 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
                                     const SizedBox(height: 4),
                                     Text(
                                       details.join('\n'),
-                                      maxLines: 4,
+                                      maxLines: 8,
                                       overflow: TextOverflow.ellipsis,
-                                      style: const TextStyle(
-                                          color: AppColors.muted),
+                                      style: TextStyle(
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .onSurfaceVariant),
                                     ),
                                   ],
                                 ],
@@ -2853,9 +2921,14 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
                             child: Container(
                               padding: const EdgeInsets.all(12),
                               decoration: BoxDecoration(
-                                color: const Color(0xFFFAFBFD),
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .surfaceContainerLow,
                                 borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: AppColors.line),
+                                border: Border.all(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .outlineVariant),
                               ),
                               child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,

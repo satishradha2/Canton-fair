@@ -88,7 +88,8 @@ class _PhotoAnnotationScreenState extends State<PhotoAnnotationScreen> {
             child: file.existsSync()
                 ? LayoutBuilder(
                     builder: (context, constraints) {
-                      final size = Size(constraints.maxWidth, constraints.maxHeight);
+                      final size =
+                          Size(constraints.maxWidth, constraints.maxHeight);
                       return GestureDetector(
                         onTapDown: (details) =>
                             _addAnnotation(details.localPosition, size),
@@ -96,7 +97,9 @@ class _PhotoAnnotationScreenState extends State<PhotoAnnotationScreen> {
                           fit: StackFit.expand,
                           children: [
                             ColoredBox(
-                              color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .surfaceContainerHighest,
                               child: Image.file(file, fit: BoxFit.contain),
                             ),
                             ..._annotations.asMap().entries.map((entry) {
@@ -104,10 +107,13 @@ class _PhotoAnnotationScreenState extends State<PhotoAnnotationScreen> {
                               final x = (item['x'] as num? ?? 0.5).toDouble();
                               final y = (item['y'] as num? ?? 0.5).toDouble();
                               return Positioned(
-                                left: (x * size.width - 16).clamp(0, size.width - 32),
-                                top: (y * size.height - 16).clamp(0, size.height - 32),
+                                left: (x * size.width - 16)
+                                    .clamp(0, size.width - 32),
+                                top: (y * size.height - 16)
+                                    .clamp(0, size.height - 32),
                                 child: Tooltip(
-                                  message: item['text'] as String? ?? 'Photo note',
+                                  message:
+                                      item['text'] as String? ?? 'Photo note',
                                   child: Badge(
                                     label: Text('${entry.key + 1}'),
                                     child: const Icon(Icons.location_on,
@@ -121,7 +127,8 @@ class _PhotoAnnotationScreenState extends State<PhotoAnnotationScreen> {
                       );
                     },
                   )
-                : const Center(child: Text('This photo is no longer available locally.')),
+                : const Center(
+                    child: Text('This photo is no longer available locally.')),
           ),
           if (_annotations.isNotEmpty)
             SafeArea(
@@ -139,7 +146,8 @@ class _PhotoAnnotationScreenState extends State<PhotoAnnotationScreen> {
                     trailing: IconButton(
                       tooltip: 'Remove photo note',
                       icon: const Icon(Icons.delete_outline),
-                      onPressed: () => setState(() => _annotations.removeAt(index)),
+                      onPressed: () =>
+                          setState(() => _annotations.removeAt(index)),
                     ),
                   ),
                 ),

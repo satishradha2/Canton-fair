@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../data/app_lock_service.dart';
-import '../theme/app_theme.dart';
 
 class AppLockScreen extends StatefulWidget {
   final VoidCallback onUnlocked;
@@ -81,18 +80,22 @@ class _AppLockScreenState extends State<AppLockScreen> {
                     width: 64,
                     height: 64,
                     decoration: BoxDecoration(
-                      color: AppColors.primary.withValues(alpha: 0.12),
+                      color: Theme.of(context).colorScheme.primaryContainer,
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: const Icon(Icons.lock, color: AppColors.primary),
+                    child: Icon(Icons.lock,
+                        color:
+                            Theme.of(context).colorScheme.onPrimaryContainer),
                   ),
                   const SizedBox(height: 20),
                   const Text('Canton Fair CRM',
                       style:
                           TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
                   const SizedBox(height: 6),
-                  const Text('Enter your PIN to continue.',
-                      style: TextStyle(color: AppColors.muted)),
+                  Text('Enter your PIN to continue.',
+                      style: TextStyle(
+                          color:
+                              Theme.of(context).colorScheme.onSurfaceVariant)),
                   const SizedBox(height: 20),
                   TextField(
                     controller: _pin,

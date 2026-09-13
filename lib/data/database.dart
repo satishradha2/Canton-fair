@@ -30,7 +30,7 @@ class TradeDatabase {
     final path = join(dbPath, name);
     return openDatabase(
       path,
-      version: 22,
+      version: 24,
       onCreate: (db, version) async {
         await db.execute('''
         CREATE TABLE trips(
@@ -175,6 +175,8 @@ class TradeDatabase {
         await _createCloudLinksTable(db);
         await _createCloudSyncConflictsTable(db);
         await _createSourcingBriefsTable(db);
+        await _createFieldOperationsTables(db);
+        await _createWorkflowToolsTable(db);
         await _createSafetyTables(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
@@ -288,36 +290,160 @@ class TradeDatabase {
         if (oldVersion < 22) {
           final columns = await db.rawQuery('PRAGMA table_info(trips)');
           if (!columns.any((column) => column['name'] == 'assignee_email')) {
-            await db.execute("ALTER TABLE trips ADD COLUMN assignee_email TEXT NOT NULL DEFAULT ''");
+            await db.execute(
+                "ALTER TABLE trips ADD COLUMN assignee_email TEXT NOT NULL DEFAULT ''");
           }
+          await _createFieldOperationsTables(db);
+          await _createSafetyTables(db);
+        }
+        if (oldVersion < 23) {
+          await _createFieldOperationsTables(db);
+          await _createSafetyTables(db);
+        }
+        if (oldVersion < 24) {
+          await _createWorkflowToolsTable(db);
           await _createSafetyTables(db);
         }
       },
     );
   }
 
-
   static const syncTables = <String, String>{
-    'trip': 'trips', 'sourcing_brief': 'sourcing_briefs',
-    'supplier': 'exhibitors', 'contact': 'contacts', 'product': 'products',
-    'meeting': 'meetings', 'quote': 'quotes', 'sample': 'samples',
-    'attachment': 'attachments', 'activity': 'audit_logs',
+    'trip': 'trips',
+    'sourcing_brief': 'sourcing_briefs',
+    'supplier': 'exhibitors',
+    'contact': 'contacts',
+    'product': 'products',
+    'meeting': 'meetings',
+    'quote': 'quotes',
+    'sample': 'samples',
+    'supplier_comment': 'supplier_comments',
+    'rfq': 'rfqs',
+    'expense': 'expenses',
+    'due_diligence': 'due_diligence_checks',
+    'attachment': 'attachments',
+    'activity': 'audit_logs',
+    'workflow_item': 'workflow_items',
   };
 
   static const backupTables = [
-    'trips', 'exhibitors', 'contacts', 'products', 'meetings', 'quotes',
-    'samples', 'attachments', 'saved_supplier_filters', 'sourcing_briefs',
-    'trip_closeouts', 'audit_logs',
+    'trips',
+    'exhibitors',
+    'contacts',
+    'products',
+    'meetings',
+    'quotes',
+    'samples',
+    'attachments',
+    'saved_supplier_filters',
+    'sourcing_briefs',
+    'trip_closeouts',
+    'audit_logs',
+    'supplier_comments',
+    'rfqs',
+    'expenses',
+    'due_diligence_checks',
+    'recycle_bin',
+    'record_versions',
+    'workflow_items',
   ];
 
+  Future<void> _createWorkflowToolsTable(DatabaseExecutor db) async {
+    await db.execute('''CREATE TABLE IF NOT EXISTS workflow_items(
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      kind TEXT NOT NULL,
+      trip_id INTEGER,
+      exhibitor_id INTEGER,
+      product_id INTEGER,
+      contact_id INTEGER,
+      title TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'Open',
+      due_at TEXT,
+      data_json TEXT NOT NULL DEFAULT '{}',
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )''');
+    await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_workflow_kind ON workflow_items(kind, updated_at)');
+    await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_workflow_supplier ON workflow_items(exhibitor_id)');
+    await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_workflow_product ON workflow_items(product_id)');
+  }
+
+  Future<void> _createFieldOperationsTables(DatabaseExecutor db) async {
+    await db.execute('''CREATE TABLE IF NOT EXISTS supplier_comments(
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      exhibitor_id INTEGER NOT NULL,
+      body TEXT NOT NULL,
+      mentions_json TEXT NOT NULL DEFAULT '[]',
+      author_email TEXT NOT NULL DEFAULT '',
+      resolved INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )''');
+    await db.execute('''CREATE TABLE IF NOT EXISTS rfqs(
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      trip_id INTEGER,
+      title TEXT NOT NULL,
+      requirements TEXT NOT NULL DEFAULT '',
+      recipients_json TEXT NOT NULL DEFAULT '[]',
+      products_json TEXT NOT NULL DEFAULT '[]',
+      status TEXT NOT NULL DEFAULT 'Draft',
+      due_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )''');
+    await db.execute('''CREATE TABLE IF NOT EXISTS expenses(
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      trip_id INTEGER,
+      exhibitor_id INTEGER,
+      category TEXT NOT NULL DEFAULT 'Other',
+      amount REAL NOT NULL DEFAULT 0,
+      currency TEXT NOT NULL DEFAULT 'CNY',
+      note TEXT NOT NULL DEFAULT '',
+      incurred_at TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )''');
+    await db.execute('''CREATE TABLE IF NOT EXISTS due_diligence_checks(
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      exhibitor_id INTEGER NOT NULL,
+      check_type TEXT NOT NULL,
+      source TEXT NOT NULL DEFAULT '',
+      result TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'Needs review',
+      reviewed_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )''');
+    await db.execute('''CREATE TABLE IF NOT EXISTS recycle_bin(
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      record_type TEXT NOT NULL,
+      record_json TEXT NOT NULL,
+      deleted_at TEXT NOT NULL
+    )''');
+    await db.execute('''CREATE TABLE IF NOT EXISTS record_versions(
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      record_type TEXT NOT NULL,
+      record_id INTEGER NOT NULL,
+      record_json TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    )''');
+    await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_comments_supplier ON supplier_comments(exhibitor_id)');
+    await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_expenses_trip ON expenses(trip_id)');
+    await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_due_diligence_supplier ON due_diligence_checks(exhibitor_id)');
+  }
+
   Future<void> _createSafetyTables(DatabaseExecutor db) async {
+    await _createWorkflowToolsTable(db);
     await _ensureTripCloseoutTable(db);
     await db.execute('''CREATE TABLE IF NOT EXISTS sync_deletions(
       record_type TEXT NOT NULL, local_id INTEGER NOT NULL,
       record_id TEXT NOT NULL, version INTEGER NOT NULL,
       PRIMARY KEY(record_type, local_id))''');
     for (final entry in syncTables.entries) {
-      await db.execute("""CREATE TRIGGER IF NOT EXISTS queue_delete_${entry.value}
+      await db
+          .execute("""CREATE TRIGGER IF NOT EXISTS queue_delete_${entry.value}
         AFTER DELETE ON ${entry.value} BEGIN
           INSERT OR IGNORE INTO sync_deletions(record_type, local_id, record_id, version)
           SELECT record_type, local_id, record_id, version FROM cloud_links
@@ -325,26 +451,41 @@ class TradeDatabase {
         END""");
     }
     // Cascades also cover raw SQLite callers, not just convenience methods.
-    await db.execute("""CREATE TRIGGER IF NOT EXISTS cascade_trip AFTER DELETE ON trips BEGIN
+    await db.execute(
+        """CREATE TRIGGER IF NOT EXISTS cascade_trip AFTER DELETE ON trips BEGIN
       DELETE FROM exhibitors WHERE trip_id = OLD.id;
       DELETE FROM sourcing_briefs WHERE trip_id = OLD.id;
       DELETE FROM trip_closeouts WHERE trip_id = OLD.id;
+      DELETE FROM workflow_items WHERE trip_id = OLD.id;
     END""");
-    await db.execute("""CREATE TRIGGER IF NOT EXISTS cascade_supplier AFTER DELETE ON exhibitors BEGIN
+    await db.execute(
+        """CREATE TRIGGER IF NOT EXISTS cascade_supplier AFTER DELETE ON exhibitors BEGIN
       DELETE FROM products WHERE exhibitor_id = OLD.id;
       DELETE FROM contacts WHERE exhibitor_id = OLD.id;
       DELETE FROM meetings WHERE exhibitor_id = OLD.id;
       DELETE FROM samples WHERE exhibitor_id = OLD.id;
+      DELETE FROM supplier_comments WHERE exhibitor_id = OLD.id;
+      DELETE FROM due_diligence_checks WHERE exhibitor_id = OLD.id;
+      DELETE FROM expenses WHERE exhibitor_id = OLD.id;
+      DELETE FROM workflow_items WHERE exhibitor_id = OLD.id;
       DELETE FROM attachments WHERE owner_type = 'exhibitor' AND owner_id = OLD.id;
     END""");
-    await db.execute("""CREATE TRIGGER IF NOT EXISTS cascade_product AFTER DELETE ON products BEGIN
+    await db.execute(
+        """CREATE TRIGGER IF NOT EXISTS cascade_product AFTER DELETE ON products BEGIN
       DELETE FROM quotes WHERE product_id = OLD.id;
       DELETE FROM samples WHERE product_id = OLD.id;
       UPDATE meetings SET product_id = NULL WHERE product_id = OLD.id;
       DELETE FROM attachments WHERE owner_type = 'product' AND owner_id = OLD.id;
+      DELETE FROM workflow_items WHERE product_id = OLD.id;
     END""");
-    await db.execute("""CREATE TRIGGER IF NOT EXISTS cascade_contact AFTER DELETE ON contacts BEGIN
+    await db.execute(
+        """CREATE TRIGGER IF NOT EXISTS cascade_contact AFTER DELETE ON contacts BEGIN
       DELETE FROM attachments WHERE owner_type = 'contact' AND owner_id = OLD.id;
+      DELETE FROM workflow_items WHERE contact_id = OLD.id;
+    END""");
+    await db.execute(
+        """CREATE TRIGGER IF NOT EXISTS cascade_expense AFTER DELETE ON expenses BEGIN
+      DELETE FROM attachments WHERE owner_type = 'expense' AND owner_id = OLD.id;
     END""");
   }
 
@@ -354,7 +495,8 @@ class TradeDatabase {
       final result = <String, List<Map<String, dynamic>>>{};
       for (final table in backupTables) {
         result[table] = (await txn.query(table))
-            .map((row) => Map<String, dynamic>.from(row)).toList();
+            .map((row) => Map<String, dynamic>.from(row))
+            .toList();
       }
       return result;
     });
@@ -362,32 +504,42 @@ class TradeDatabase {
 
   Future<List<String>> purchaseBlockers(int productId) async {
     final db = await database;
-    final rows = await db.query('products', where: 'id = ?', whereArgs: [productId]);
+    final rows =
+        await db.query('products', where: 'id = ?', whereArgs: [productId]);
     if (rows.isEmpty) return ['Product no longer exists'];
     final product = rows.first;
-    final suppliers = await db.query('exhibitors', where: 'id = ?',
-        whereArgs: [product['exhibitor_id']]);
-    final verification = ApprovalPolicy.jsonObject(suppliers.isEmpty
-        ? null : suppliers.first['verification_json']);
-    final samples = await db.query('samples', where: 'product_id = ? AND status = ?',
+    final suppliers = await db.query('exhibitors',
+        where: 'id = ?', whereArgs: [product['exhibitor_id']]);
+    final verification = ApprovalPolicy.jsonObject(
+        suppliers.isEmpty ? null : suppliers.first['verification_json']);
+    final samples = await db.query('samples',
+        where: 'product_id = ? AND status = ?',
         whereArgs: [productId, 'Approved']);
-    final quotes = await db.query('quotes', where: 'product_id = ? AND is_sample_quote = 0',
-        whereArgs: [productId], orderBy: 'created_at DESC, id DESC', limit: 1);
+    final quotes = await db.query('quotes',
+        where: 'product_id = ? AND is_sample_quote = 0',
+        whereArgs: [productId],
+        orderBy: 'created_at DESC, id DESC',
+        limit: 1);
     final quote = quotes.isEmpty ? null : quotes.first;
     final expiry = DateTime.tryParse(quote?['valid_until']?.toString() ?? '');
     return [
       if (samples.isEmpty) 'Product sample not approved',
-      if (quote == null || quote['approval_status'] != 'Approved' ||
+      if (quote == null ||
+          quote['approval_status'] != 'Approved' ||
           (expiry != null && expiry.isBefore(DateTime.now())))
         'Latest commercial quote is not actively approved',
-      if (product['moq'] is! num || (product['moq'] as num) <= 0) 'Valid MOQ missing',
-      if ((product['lead_time']?.toString() ?? '').trim().isEmpty) 'Lead time missing',
-      if ((product['payment_terms']?.toString() ?? '').trim().isEmpty) 'Payment terms missing',
-      if (verification['status'] != 'Approved') 'Supplier verification not approved',
+      if (product['moq'] is! num || (product['moq'] as num) <= 0)
+        'Valid MOQ missing',
+      if ((product['lead_time']?.toString() ?? '').trim().isEmpty)
+        'Lead time missing',
+      if ((product['payment_terms']?.toString() ?? '').trim().isEmpty)
+        'Payment terms missing',
+      if (verification['status'] != 'Approved')
+        'Supplier verification not approved',
       if (verification['payment_risk'] == true ||
           verification['payment_risk'] == 1 ||
           (verification['flags'] is Map &&
-           (verification['flags'] as Map)['payment_risk'] == true))
+              (verification['flags'] as Map)['payment_risk'] == true))
         'Payment risk flagged',
     ];
   }
@@ -510,6 +662,7 @@ class TradeDatabase {
 
   Future<int> update(String table, int id, Map<String, Object?> values) async {
     final db = await database;
+    await _saveVersion(db, table, id);
     final next = Map<String, Object?>.from(values);
     if (table == 'quotes') {
       final rows = await db.query(table, where: 'id = ?', whereArgs: [id]);
@@ -518,9 +671,12 @@ class TradeDatabase {
     }
     if (table == 'products' && next.containsKey('purchase_readiness_json')) {
       final plan = ApprovalPolicy.jsonObject(next['purchase_readiness_json']);
-      if (plan['status'] == 'Ready to order' || plan['status'] == 'Approved for order') {
+      if (plan['status'] == 'Ready to order' ||
+          plan['status'] == 'Approved for order') {
         await ApprovalPolicy.requireWriter();
-        if (plan['status'] == 'Approved for order') await ApprovalPolicy.requireAdmin();
+        if (plan['status'] == 'Approved for order') {
+          await ApprovalPolicy.requireAdmin();
+        }
         final blockers = await purchaseBlockers(id);
         if (blockers.isNotEmpty) throw StateError(blockers.join('; '));
       }
@@ -530,7 +686,67 @@ class TradeDatabase {
 
   Future<int> delete(String table, int id) async {
     final db = await database;
+    final rows = await db.query(table, where: 'id = ?', whereArgs: [id]);
+    if (rows.isNotEmpty && !_safetyTables.contains(table)) {
+      await db.insert('recycle_bin', {
+        'record_type': table,
+        'record_json': jsonEncode(rows.first),
+        'deleted_at': DateTime.now().toIso8601String(),
+      });
+    }
     return db.delete(table, where: 'id = ?', whereArgs: [id]);
+  }
+
+  static const _safetyTables = {
+    'recycle_bin',
+    'record_versions',
+    'cloud_links',
+    'cloud_sync_conflicts',
+    'sync_deletions',
+  };
+
+  Future<void> _saveVersion(DatabaseExecutor db, String table, int id) async {
+    if (_safetyTables.contains(table)) return;
+    final rows = await db.query(table, where: 'id = ?', whereArgs: [id]);
+    if (rows.isEmpty) return;
+    await db.insert('record_versions', {
+      'record_type': table,
+      'record_id': id,
+      'record_json': jsonEncode(rows.first),
+      'created_at': DateTime.now().toIso8601String(),
+    });
+    await db.execute('''DELETE FROM record_versions WHERE id IN (
+      SELECT id FROM record_versions
+      WHERE record_type = ? AND record_id = ?
+      ORDER BY created_at DESC, id DESC LIMIT -1 OFFSET 20
+    )''', [table, id]);
+  }
+
+  Future<void> restoreRecycleItem(int recycleId) async {
+    final db = await database;
+    final rows =
+        await db.query('recycle_bin', where: 'id = ?', whereArgs: [recycleId]);
+    if (rows.isEmpty) throw StateError('This recovery item no longer exists.');
+    final table = rows.first['record_type'] as String;
+    final record = Map<String, Object?>.from(
+        jsonDecode(rows.first['record_json'] as String) as Map);
+    await db.transaction((txn) async {
+      await txn.insert(table, record,
+          conflictAlgorithm: ConflictAlgorithm.replace);
+      await txn.delete('recycle_bin', where: 'id = ?', whereArgs: [recycleId]);
+    });
+  }
+
+  Future<void> restoreVersion(int versionId) async {
+    final db = await database;
+    final rows = await db
+        .query('record_versions', where: 'id = ?', whereArgs: [versionId]);
+    if (rows.isEmpty) throw StateError('This version no longer exists.');
+    final table = rows.first['record_type'] as String;
+    final record = Map<String, Object?>.from(
+        jsonDecode(rows.first['record_json'] as String) as Map);
+    await db.insert(table, record,
+        conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   Future<Map<String, dynamic>?> getCloudLink(
@@ -1174,7 +1390,8 @@ class TradeDatabase {
       Map<String, List<Map<String, dynamic>>> tables) async {
     final db = await database;
     if (await TeamWorkspaceService().load() != null) {
-      throw StateError('Restore into Personal workspace to avoid replacing shared team data.');
+      throw StateError(
+          'Restore into Personal workspace to avoid replacing shared team data.');
     }
     var restored = 0;
     await db.transaction((txn) async {

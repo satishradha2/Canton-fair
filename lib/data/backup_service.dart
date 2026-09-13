@@ -12,7 +12,8 @@ class BackupService {
   static const _backupChannel = MethodChannel('canton_fair_crm/backup');
   static const _maxBytes = 256 * 1024 * 1024;
   final TradeDatabase _database;
-  BackupService({TradeDatabase? database}) : _database = database ?? TradeDatabase.instance;
+  BackupService({TradeDatabase? database})
+      : _database = database ?? TradeDatabase.instance;
 
   Future<File> createBackup() => TeamWorkspaceService.exclusive(_createBackup);
 
@@ -23,10 +24,13 @@ class BackupService {
     for (final row in tables['attachments']!) {
       final file = File(row['path'] as String);
       if (!await file.exists()) {
-        throw StateError('Attachment ${row['id']} is missing. Restore the file before making a complete backup.');
+        throw StateError(
+            'Attachment ${row['id']} is missing. Restore the file before making a complete backup.');
       }
       total += await file.length();
-      if (total > _maxBytes) throw StateError('Backup attachments exceed the 256 MB safety limit.');
+      if (total > _maxBytes) {
+        throw StateError('Backup attachments exceed the 256 MB safety limit.');
+      }
       final bytes = await file.readAsBytes();
       files[row['id'].toString()] = {
         'data': base64Encode(bytes),
@@ -35,12 +39,15 @@ class BackupService {
       };
     }
     final payload = {
-      'format': 'canton-fair-crm-backup', 'version': 2,
+      'format': 'canton-fair-crm-backup',
+      'version': 3,
       'created_at': DateTime.now().toUtc().toIso8601String(),
-      'tables': tables, 'files': files,
+      'tables': tables,
+      'files': files,
     };
     final directory = await getApplicationDocumentsDirectory();
-    final file = File('${directory.path}/backups/canton_fair_${DateTime.now().microsecondsSinceEpoch}.json');
+    final file = File(
+        '${directory.path}/backups/canton_fair_${DateTime.now().microsecondsSinceEpoch}.json');
     await file.parent.create(recursive: true);
     await file.writeAsString(jsonEncode(payload), flush: true);
     return file;
@@ -49,7 +56,8 @@ class BackupService {
   Future<void> createAndShareBackup() async {
     final file = await createBackup();
     await SharePlus.instance.share(ShareParams(
-      files: [XFile(file.path)], text: 'Canton Fair CRM portable backup',
+      files: [XFile(file.path)],
+      text: 'Canton Fair CRM portable backup',
     ));
   }
 
@@ -66,28 +74,34 @@ class BackupService {
   Future<int> restoreReplacingLocalData(BackupPreview backup) =>
       TeamWorkspaceService.exclusive(() async {
         if (await TeamWorkspaceService().load() != null) {
-          throw StateError('Choose Personal workspace before restoring. Shared team data is not replaced by a local backup.');
+          throw StateError(
+              'Choose Personal workspace before restoring. Shared team data is not replaced by a local backup.');
         }
         final tables = {
           for (final entry in backup.tables.entries)
-            entry.key: entry.value.map((row) => Map<String, dynamic>.from(row)).toList(),
+            entry.key: entry.value
+                .map((row) => Map<String, dynamic>.from(row))
+                .toList(),
         };
         final current = await _database.backupSnapshot();
         for (final table in TradeDatabase.backupTables) {
           if (!tables.containsKey(table) && current[table]!.isNotEmpty) {
-            throw FormatException('This legacy backup has no $table section. Restore would lose existing records.');
+            throw FormatException(
+                'This legacy backup has no $table section. Restore would lose existing records.');
           }
           tables.putIfAbsent(table, () => <Map<String, dynamic>>[]);
         }
         _validateRelations(tables);
         final root = await getApplicationDocumentsDirectory();
-        final directory = Directory('${root.path}/restored_files/${DateTime.now().microsecondsSinceEpoch}');
+        final directory = Directory(
+            '${root.path}/restored_files/${DateTime.now().microsecondsSinceEpoch}');
         var restoredBytes = 0;
         try {
           for (final attachment in tables['attachments']!) {
             if (backup.version == 1) {
               if (!await File(attachment['path'] as String).exists()) {
-                throw const FormatException('Legacy backup attachment files are missing. Version 1 backups are not portable.');
+                throw const FormatException(
+                    'Legacy backup attachment files are missing. Version 1 backups are not portable.');
               }
               continue;
             }
@@ -97,18 +111,22 @@ class BackupService {
             }
             final encoded = entry['data'] as String;
             if (encoded.length > (_maxBytes * 4 / 3 + 4)) {
-              throw const FormatException('Attachment exceeds the backup size limit.');
+              throw const FormatException(
+                  'Attachment exceeds the backup size limit.');
             }
             final bytes = base64Decode(encoded);
             restoredBytes += bytes.length;
             if (restoredBytes > _maxBytes) {
-              throw const FormatException('Attachments exceed the 256 MB limit.');
+              throw const FormatException(
+                  'Attachments exceed the 256 MB limit.');
             }
             if (sha256.convert(bytes).toString() != entry['sha256']) {
-              throw const FormatException('An attachment checksum does not match.');
+              throw const FormatException(
+                  'An attachment checksum does not match.');
             }
             final ext = entry['extension']?.toString() ?? '';
-            if (!RegExp(r'^\.[a-zA-Z0-9]{1,12}$').hasMatch(ext) && ext.isNotEmpty) {
+            if (!RegExp(r'^\.[a-zA-Z0-9]{1,12}$').hasMatch(ext) &&
+                ext.isNotEmpty) {
               throw const FormatException('Invalid attachment extension.');
             }
             final file = File('${directory.path}/${attachment['id']}$ext');
@@ -132,8 +150,10 @@ class BackupService {
 
   BackupPreview _decodeBackup(String content) {
     final decoded = jsonDecode(content);
-    if (decoded is! Map || decoded['format'] != 'canton-fair-crm-backup' ||
-        ![1, 2].contains(decoded['version']) || decoded['tables'] is! Map) {
+    if (decoded is! Map ||
+        decoded['format'] != 'canton-fair-crm-backup' ||
+        ![1, 2, 3].contains(decoded['version']) ||
+        decoded['tables'] is! Map) {
       throw const FormatException('Unsupported Canton Fair CRM backup.');
     }
     final version = decoded['version'] as int;
@@ -141,21 +161,38 @@ class BackupService {
     final tables = <String, List<Map<String, dynamic>>>{};
     for (final table in TradeDatabase.backupTables) {
       if (!rawTables.containsKey(table)) {
-        if (version == 2) throw FormatException('Missing $table section.');
+        if (version == 3) throw FormatException('Missing $table section.');
         continue;
       }
       final rows = rawTables[table];
       if (rows is! List || rows.any((row) => row is! Map)) {
         throw FormatException('Invalid $table section.');
       }
-      tables[table] = rows.map((row) => Map<String, dynamic>.from(row as Map)).toList();
+      tables[table] =
+          rows.map((row) => Map<String, dynamic>.from(row as Map)).toList();
     }
-    for (final required in ['trips', 'exhibitors', 'contacts', 'products', 'meetings', 'quotes', 'attachments']) {
-      if (!tables.containsKey(required)) throw FormatException('Missing $required section.');
+    for (final required in [
+      'trips',
+      'exhibitors',
+      'contacts',
+      'products',
+      'meetings',
+      'quotes',
+      'attachments'
+    ]) {
+      if (!tables.containsKey(required)) {
+        throw FormatException('Missing $required section.');
+      }
     }
-    final createdAt = DateTime.tryParse(decoded['created_at']?.toString() ?? '');
-    if (createdAt == null) throw const FormatException('Missing creation date.');
-    return BackupPreview(tables: tables, createdAt: createdAt, version: version,
+    final createdAt =
+        DateTime.tryParse(decoded['created_at']?.toString() ?? '');
+    if (createdAt == null) {
+      throw const FormatException('Missing creation date.');
+    }
+    return BackupPreview(
+        tables: tables,
+        createdAt: createdAt,
+        version: version,
         files: Map<String, dynamic>.from(decoded['files'] as Map? ?? {}));
   }
 
@@ -172,7 +209,8 @@ class BackupService {
       }
       ids[entry.key] = set;
     }
-    void require(String table, String column, String parent, {bool nullable = false}) {
+    void require(String table, String column, String parent,
+        {bool nullable = false}) {
       for (final row in tables[table]!) {
         if (nullable && row[column] == null) continue;
         if (!ids[parent]!.contains(row[column])) {
@@ -180,6 +218,7 @@ class BackupService {
         }
       }
     }
+
     require('exhibitors', 'trip_id', 'trips');
     require('sourcing_briefs', 'trip_id', 'trips', nullable: true);
     require('trip_closeouts', 'trip_id', 'trips');
@@ -189,8 +228,18 @@ class BackupService {
     require('quotes', 'product_id', 'products');
     require('meetings', 'product_id', 'products', nullable: true);
     require('samples', 'product_id', 'products', nullable: true);
+    require('supplier_comments', 'exhibitor_id', 'exhibitors');
+    require('due_diligence_checks', 'exhibitor_id', 'exhibitors');
+    require('rfqs', 'trip_id', 'trips', nullable: true);
+    require('expenses', 'trip_id', 'trips', nullable: true);
+    require('expenses', 'exhibitor_id', 'exhibitors', nullable: true);
     for (final row in tables['attachments']!) {
-      final table = {'exhibitor': 'exhibitors', 'product': 'products', 'contact': 'contacts'}[row['owner_type']];
+      final table = {
+        'exhibitor': 'exhibitors',
+        'product': 'products',
+        'contact': 'contacts',
+        'expense': 'expenses',
+      }[row['owner_type']];
       if (table == null || !ids[table]!.contains(row['owner_id'])) {
         throw const FormatException('Broken attachment owner relationship.');
       }
@@ -203,7 +252,11 @@ class BackupPreview {
   final DateTime createdAt;
   final int version;
   final Map<String, dynamic> files;
-  const BackupPreview({required this.tables, required this.createdAt,
-    this.version = 1, this.files = const {}});
-  int get recordCount => tables.values.fold(0, (total, rows) => total + rows.length);
+  const BackupPreview(
+      {required this.tables,
+      required this.createdAt,
+      this.version = 1,
+      this.files = const {}});
+  int get recordCount =>
+      tables.values.fold(0, (total, rows) => total + rows.length);
 }

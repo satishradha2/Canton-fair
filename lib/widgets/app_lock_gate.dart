@@ -16,8 +16,7 @@ class AppLockGate extends StatefulWidget {
   State<AppLockGate> createState() => _AppLockGateState();
 }
 
-class _AppLockGateState extends State<AppLockGate>
-    with WidgetsBindingObserver {
+class _AppLockGateState extends State<AppLockGate> with WidgetsBindingObserver {
   final _service = AppLockService();
   bool _ready = false;
   bool _enabled = true;
@@ -54,8 +53,7 @@ class _AppLockGateState extends State<AppLockGate>
 
   Future<void> _tryCameraReturn() async {
     final session = _cameraReturn;
-    if (session == null || !session.completed || !_resumed ||
-        _checkingCamera) {
+    if (session == null || !session.completed || !_resumed || _checkingCamera) {
       return;
     }
     _checkingCamera = true;
@@ -64,7 +62,8 @@ class _AppLockGateState extends State<AppLockGate>
     if (!mounted || _cameraReturn != session) return;
     setState(() {
       _clearCameraReturn();
-      if (allowed && _resumed &&
+      if (allowed &&
+          _resumed &&
           session.elapsed.elapsed < CameraCaptureService.grace) {
         _locked = false;
       }
@@ -93,7 +92,8 @@ class _AppLockGateState extends State<AppLockGate>
     _resumed = state == AppLifecycleState.resumed;
     if (state == AppLifecycleState.paused && _enabled) {
       final session = CameraCaptureService.active;
-      final eligible = !_locked && session != null &&
+      final eligible = !_locked &&
+          session != null &&
           session.elapsed.elapsed < CameraCaptureService.grace;
       setState(() {
         _clearCameraReturn();

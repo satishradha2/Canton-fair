@@ -179,83 +179,92 @@ class _HallRouteScreenState extends State<HallRouteScreen> {
                         ClipRRect(
                           borderRadius: BorderRadius.circular(8),
                           child: Image.file(File(_mapPath!),
-                              height: 260, width: double.infinity, fit: BoxFit.cover),
+                              height: 260,
+                              width: double.infinity,
+                              fit: BoxFit.cover),
                         )
                       else
                         const EmptyState(
                           icon: Icons.map_outlined,
                           title: 'No hall map imported',
-                          message: 'Import the official Canton Fair map to review it alongside your planned booth route.',
+                          message:
+                              'Import the official Canton Fair map to review it alongside your planned booth route.',
                         ),
                       if (halls.isNotEmpty) ...[
                         const SizedBox(height: 16),
-                        Text('Planned hall stops', style: Theme.of(context).textTheme.titleMedium),
+                        Text('Planned hall stops',
+                            style: Theme.of(context).textTheme.titleMedium),
                         const SizedBox(height: 8),
                         Wrap(
                           spacing: 8,
                           runSpacing: 8,
-                          children: halls.map((hall) => InfoChip(
-                            label: 'Hall $hall · ${grouped[hall]!.length}',
-                            icon: Icons.place_outlined,
-                            color: AppColors.teal,
-                          )).toList(),
+                          children: halls
+                              .map((hall) => InfoChip(
+                                    label:
+                                        'Hall $hall · ${grouped[hall]!.length}',
+                                    icon: Icons.place_outlined,
+                                    color: AppColors.teal,
+                                  ))
+                              .toList(),
                         ),
                       ],
                     ],
                     if (_routeView == _RouteView.route) ...[
-                    const SizedBox(height: 18),
-                    if (halls.isEmpty)
-                      const EmptyState(
-                        icon: Icons.route_outlined,
-                        title: 'Add hall and booth details first',
-                        message:
-                            'Captured suppliers with a hall are grouped here into a practical walking route.',
-                      )
-                    else
-                      ...halls.map((hall) => SectionPanel(
-                            title:
-                                'Stop ${halls.indexOf(hall) + 1}: Hall $hall',
-                            subtitle:
-                                '${grouped[hall]!.length} supplier${grouped[hall]!.length == 1 ? '' : 's'}',
-                            child: Column(
-                              children:
-                                  grouped[hall]!.asMap().entries.map((entry) {
-                                final supplier = entry.value;
-                                final missed = _isMissed(supplier);
-                                return ListTile(
-                                  contentPadding: EdgeInsets.zero,
-                                  leading: CircleAvatar(
-                                      child: Text('${entry.key + 1}')),
-                                  title: Text(supplier.name),
-                                  subtitle: Text(
-                                      'Booth ${supplier.booth.isEmpty ? 'not recorded' : supplier.booth}'),
-                                  trailing: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      if (supplier.shortlisted ||
-                                          supplier.rating >= 4)
-                                        const Icon(Icons.priority_high,
-                                            color: AppColors.amber),
-                                      IconButton(
-                                        tooltip: missed
-                                            ? 'Restore planned booth'
-                                            : 'Mark missed booth',
-                                        icon: Icon(
-                                            missed
-                                                ? Icons.undo
-                                                : Icons.flag_outlined,
-                                            color: missed
-                                                ? AppColors.teal
-                                                : AppColors.muted),
-                                        onPressed: () =>
-                                            _toggleMissed(supplier),
-                                      ),
-                                    ],
-                                  ),
-                                );
-                              }).toList(),
-                            ),
-                          )),
+                      const SizedBox(height: 18),
+                      if (halls.isEmpty)
+                        const EmptyState(
+                          icon: Icons.route_outlined,
+                          title: 'Add hall and booth details first',
+                          message:
+                              'Captured suppliers with a hall are grouped here into a practical walking route.',
+                        )
+                      else
+                        ...halls.map((hall) => SectionPanel(
+                              title:
+                                  'Stop ${halls.indexOf(hall) + 1}: Hall $hall',
+                              subtitle:
+                                  '${grouped[hall]!.length} supplier${grouped[hall]!.length == 1 ? '' : 's'}',
+                              child: Column(
+                                children:
+                                    grouped[hall]!.asMap().entries.map((entry) {
+                                  final supplier = entry.value;
+                                  final missed = _isMissed(supplier);
+                                  return ListTile(
+                                    contentPadding: EdgeInsets.zero,
+                                    leading: CircleAvatar(
+                                        child: Text('${entry.key + 1}')),
+                                    title: Text(supplier.name),
+                                    subtitle: Text(
+                                        'Booth ${supplier.booth.isEmpty ? 'not recorded' : supplier.booth}'),
+                                    trailing: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        if (supplier.shortlisted ||
+                                            supplier.rating >= 4)
+                                          const Icon(Icons.priority_high,
+                                              color: AppColors.amber),
+                                        IconButton(
+                                          tooltip: missed
+                                              ? 'Restore planned booth'
+                                              : 'Mark missed booth',
+                                          icon: Icon(
+                                              missed
+                                                  ? Icons.undo
+                                                  : Icons.flag_outlined,
+                                              color: missed
+                                                  ? AppColors.teal
+                                                  : Theme.of(context)
+                                                      .colorScheme
+                                                      .onSurfaceVariant),
+                                          onPressed: () =>
+                                              _toggleMissed(supplier),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                }).toList(),
+                              ),
+                            )),
                     ],
                   ],
                 );
