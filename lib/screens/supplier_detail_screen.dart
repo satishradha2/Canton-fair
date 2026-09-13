@@ -12,6 +12,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../data/database.dart';
 import '../data/camera_capture_service.dart';
 import '../data/reminder_service.dart';
+import '../data/device_contacts_service.dart';
 import '../models/models.dart';
 import '../theme/app_theme.dart';
 import '../widgets/enterprise_widgets.dart';
@@ -85,7 +86,8 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
 
   Future<void> _editSupplierProfile({int? contactId}) async {
     final saved = await Navigator.of(context).push<Exhibitor>(MaterialPageRoute(
-      builder: (_) => SupplierProfileScreen(supplierId: widget.supplier.id!, contactId: contactId),
+      builder: (_) => SupplierProfileScreen(
+          supplierId: widget.supplier.id!, contactId: contactId),
     ));
     if (!mounted || saved == null) return;
     Navigator.of(context).pushReplacement(MaterialPageRoute<void>(
@@ -134,6 +136,30 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
     }
   }
 
+  Future<void> _saveContactToPhone(Contact contact) async {
+    try {
+      final saved = await DeviceContactsService.openCreateContact(
+        contact: contact,
+        supplier: widget.supplier,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(saved
+              ? 'Contact saved to your phone'
+              : 'Phone contact was not saved'),
+        ),
+      );
+    } on PlatformException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(error.message ?? 'Could not open phone contacts'),
+        ),
+      );
+    }
+  }
+
   Future<void> _captureBusinessCard(Contact contact) async {
     if (contact.id == null) return;
     final picked = await CameraCaptureService.capture(
@@ -145,8 +171,8 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
     if (picked == null) return;
     if (!mounted) return;
     final root = await getApplicationDocumentsDirectory();
-    final directory =
-        Directory('${root.path}/attachments/${await TeamWorkspaceService().scopeKey()}/contact/${contact.id}');
+    final directory = Directory(
+        '${root.path}/attachments/${await TeamWorkspaceService().scopeKey()}/contact/${contact.id}');
     await directory.create(recursive: true);
     final extension = picked.path.contains('.')
         ? picked.path.substring(picked.path.lastIndexOf('.'))
@@ -555,7 +581,9 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
                 child: const Text('Cancel')),
             FilledButton(
               onPressed: () {
-                if ((status == 'Ready to order' || status == 'Approved for order') && item.blockers.isNotEmpty) {
+                if ((status == 'Ready to order' ||
+                        status == 'Approved for order') &&
+                    item.blockers.isNotEmpty) {
                   setDialogState(() => error =
                       'Resolve all blockers before marking this ready to order.');
                   return;
@@ -585,8 +613,9 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
     poNumber.dispose();
     if (result == null) return;
     try {
-      await _db.update('products', item.product.id!,
-          {'purchase_readiness_json': jsonEncode({...current, ...result})});
+      await _db.update('products', item.product.id!, {
+        'purchase_readiness_json': jsonEncode({...current, ...result})
+      });
       if (mounted) setState(_reload);
     } catch (error) {
       if (mounted) {
@@ -600,7 +629,8 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
     final items = await _loadPurchaseItems();
     final ready = items.where((item) {
       final status = _purchasePlan(item.product)['status'];
-      return item.blockers.isEmpty && (status == 'Ready to order' || status == 'Approved for order');
+      return item.blockers.isEmpty &&
+          (status == 'Ready to order' || status == 'Approved for order');
     }).toList();
     final lines = [
       'Canton Fair purchase handover: ${widget.supplier.name}',
@@ -1600,8 +1630,9 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
               Padding(
                 padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
                 child: Row(children: [
-                  Expanded(child: Text(title,
-                      style: Theme.of(context).textTheme.titleLarge)),
+                  Expanded(
+                      child: Text(title,
+                          style: Theme.of(context).textTheme.titleLarge)),
                   IconButton(
                       tooltip: 'Close',
                       onPressed: () => Navigator.pop(context),
@@ -1618,26 +1649,41 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
   Widget _moreTab() => ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          const Text('Supplier tools', style: TextStyle(color: AppColors.muted)),
+          const Text('Supplier tools',
+              style: TextStyle(color: AppColors.muted)),
           const SizedBox(height: 8),
-          _moreTile('Verification & certificates',
-              'Compliance, risk, and certificates', Icons.verified_outlined,
-              () => _openMoreSection('Verification & certificates', _verificationTab())),
-          _moreTile('Samples', 'Requests, shipping, testing, and approval',
+          _moreTile(
+              'Verification & certificates',
+              'Compliance, risk, and certificates',
+              Icons.verified_outlined,
+              () => _openMoreSection(
+                  'Verification & certificates', _verificationTab())),
+          _moreTile(
+              'Samples',
+              'Requests, shipping, testing, and approval',
               Icons.inventory_2_outlined,
               () => _openMoreSection('Samples', _samplesTab())),
-          _moreTile('Purchase readiness', 'Quotes, handover, and purchasing',
+          _moreTile(
+              'Purchase readiness',
+              'Quotes, handover, and purchasing',
               Icons.shopping_bag_outlined,
               () => _openMoreSection('Purchase readiness', _purchaseTab())),
-          _moreTile('Supplier scorecard', 'Quality, trust, and sourcing fit',
+          _moreTile(
+              'Supplier scorecard',
+              'Quality, trust, and sourcing fit',
               Icons.score_outlined,
-              () => _openMoreSection('Supplier scorecard', _scorecard(widget.supplier))),
-          _moreTile('Supplier timeline', 'Complete record history', Icons.history_outlined,
+              () => _openMoreSection(
+                  'Supplier scorecard', _scorecard(widget.supplier))),
+          _moreTile(
+              'Supplier timeline',
+              'Complete record history',
+              Icons.history_outlined,
               () => _openMoreSection('Supplier timeline', _timelineTab())),
         ],
       );
 
-  Widget _moreTile(String title, String subtitle, IconData icon, VoidCallback onTap) =>
+  Widget _moreTile(
+          String title, String subtitle, IconData icon, VoidCallback onTap) =>
       Card(
         margin: const EdgeInsets.only(bottom: 10),
         child: ListTile(
@@ -1941,7 +1987,8 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
             decoration: BoxDecoration(
               color: Theme.of(context).colorScheme.primaryContainer,
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+              border: Border.all(
+                  color: Theme.of(context).colorScheme.outlineVariant),
             ),
             child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Container(
@@ -1955,20 +2002,30 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
                     color: Theme.of(context).colorScheme.onPrimary),
               ),
               const SizedBox(width: 12),
-              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(supplier.name, style: Theme.of(context).textTheme.titleLarge,
-                    maxLines: 2, overflow: TextOverflow.ellipsis),
-                const SizedBox(height: 4),
-                Text([
-                  if (supplier.category.isNotEmpty) supplier.category,
-                  if (supplier.country.isNotEmpty) supplier.country,
-                  if (supplier.booth.isNotEmpty) 'Booth ${supplier.booth}',
-                ].join(' · '), style: Theme.of(context).textTheme.bodySmall),
-              ])),
+              Expanded(
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                    Text(supplier.name,
+                        style: Theme.of(context).textTheme.titleLarge,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis),
+                    const SizedBox(height: 4),
+                    Text(
+                        [
+                          if (supplier.category.isNotEmpty) supplier.category,
+                          if (supplier.country.isNotEmpty) supplier.country,
+                          if (supplier.booth.isNotEmpty)
+                            'Booth ${supplier.booth}',
+                        ].join(' · '),
+                        style: Theme.of(context).textTheme.bodySmall),
+                  ])),
               const SizedBox(width: 8),
               Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                Text('${supplier.rating}/5', style: Theme.of(context).textTheme.titleMedium),
-                const Text('rating', style: TextStyle(fontSize: 11, color: AppColors.muted)),
+                Text('${supplier.rating}/5',
+                    style: Theme.of(context).textTheme.titleMedium),
+                const Text('rating',
+                    style: TextStyle(fontSize: 11, color: AppColors.muted)),
               ]),
             ]),
           ),
@@ -2015,7 +2072,7 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
                         : AppColors.amber,
               ),
               _verificationChip(),
-          ],
+            ],
           ),
           const SizedBox(height: 18),
           _quickActions(supplier),
@@ -2047,35 +2104,60 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
           const SizedBox(height: 16),
           SectionPanel(
             title: 'Company and contact details',
-            subtitle: 'Editable supplier profile, addresses and separate contact records.',
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              OutlinedButton.icon(onPressed: _editSupplierProfile,
-                icon: const Icon(Icons.edit_outlined), label: const Text('Edit supplier details')),
-              ExpansionTile(tilePadding: EdgeInsets.zero, title: const Text('Additional company information'),
+            subtitle:
+                'Editable supplier profile, addresses and separate contact records.',
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              OutlinedButton.icon(
+                  onPressed: _editSupplierProfile,
+                  icon: const Icon(Icons.edit_outlined),
+                  label: const Text('Edit supplier details')),
+              ExpansionTile(
+                tilePadding: EdgeInsets.zero,
+                title: const Text('Additional company information'),
                 children: [
                   for (final entry in SupplierProfile.company(supplier).entries)
-                    if (entry.value.isNotEmpty && !['name', 'booth', 'hall', 'country', 'category', 'notes'].contains(entry.key))
-                      ListTile(title: Text(SupplierProfile.companyFields[entry.key] ?? entry.key),
-                        subtitle: SelectableText(entry.value)),
+                    if (entry.value.isNotEmpty &&
+                        ![
+                          'name',
+                          'booth',
+                          'hall',
+                          'country',
+                          'category',
+                          'notes'
+                        ].contains(entry.key))
+                      ListTile(
+                          title: Text(
+                              SupplierProfile.companyFields[entry.key] ??
+                                  entry.key),
+                          subtitle: SelectableText(entry.value)),
                 ],
               ),
-              const Text('Open Contacts to review or edit each person and their additional phone numbers, emails and other details.'),
+              const Text(
+                  'Open Contacts to review or edit each person and their additional phone numbers, emails and other details.'),
             ]),
           ),
           if (_fieldCapture(supplier)['business_card'] is Map) ...[
             const SizedBox(height: 16),
             SectionPanel(
               title: 'Business card archive',
-              subtitle: 'Original front/back images, reviewed details and complete OCR text.',
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                for (final card in SupplierProfile.cards(supplier)) OutlinedButton.icon(
-                  icon: const Icon(Icons.badge_outlined),
-                  label: Text('Open card / ${card['reviewed_at'] ?? card['id']}'),
-                  onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(
-                    builder: (_) => BusinessCardArchiveScreen(supplierId: supplier.id!, archive: card),
-                  )),
-                ),
-              ]),
+              subtitle:
+                  'Original front/back images, reviewed details and complete OCR text.',
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    for (final card in SupplierProfile.cards(supplier))
+                      OutlinedButton.icon(
+                        icon: const Icon(Icons.badge_outlined),
+                        label: Text(
+                            'Open card / ${card['reviewed_at'] ?? card['id']}'),
+                        onPressed: () =>
+                            Navigator.of(context).push(MaterialPageRoute<void>(
+                          builder: (_) => BusinessCardArchiveScreen(
+                              supplierId: supplier.id!, archive: card),
+                        )),
+                      ),
+                  ]),
             ),
           ],
           const SizedBox(height: 16),
@@ -2120,12 +2202,16 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
 
   Widget _quickActions(Exhibitor supplier) => SectionPanel(
         title: 'Quick actions',
-        subtitle: 'Continue the supplier conversation without hunting through sections.',
+        subtitle:
+            'Continue the supplier conversation without hunting through sections.',
         child: FutureBuilder<List<Contact>>(
           future: _contacts,
           builder: (context, snapshot) {
-            final contact = (snapshot.data ?? const <Contact>[]).cast<Contact?>().firstWhere(
-                  (item) => item != null &&
+            final contact = (snapshot.data ?? const <Contact>[])
+                .cast<Contact?>()
+                .firstWhere(
+                  (item) =>
+                      item != null &&
                       (item.phone.isNotEmpty || item.whatsapp.isNotEmpty),
                   orElse: () => null,
                 );
@@ -2143,7 +2229,9 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
                     (contact.whatsapp.isNotEmpty || contact.phone.isNotEmpty))
                   OutlinedButton.icon(
                     onPressed: () => _openPhone(
-                      contact.whatsapp.isNotEmpty ? contact.whatsapp : contact.phone,
+                      contact.whatsapp.isNotEmpty
+                          ? contact.whatsapp
+                          : contact.phone,
                       whatsapp: true,
                     ),
                     icon: const Icon(Icons.chat_outlined),
@@ -2185,53 +2273,106 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
             itemBuilder: (context, index) {
               final contact = contacts[index];
               final profile = _contactProfile(contact);
+              final details = [
+                contact.designation,
+                contact.phone,
+                contact.email,
+                for (final entry in SupplierProfile.contact(contact).entries)
+                  if (entry.value.isNotEmpty &&
+                      !['person', 'role', 'phone', 'email', 'language']
+                          .contains(entry.key))
+                    '${SupplierProfile.contactFields[entry.key]}: ${entry.value}',
+                if ((profile['influence'] as String? ?? '').isNotEmpty &&
+                    profile['influence'] != 'Not recorded')
+                  profile['influence'] as String,
+                if ((profile['language'] as String? ?? '').isNotEmpty)
+                  profile['language'] as String,
+              ].where((item) => item.isNotEmpty).toList();
               return Card(
-                child: ListTile(
-                  leading:
-                      const CircleAvatar(child: Icon(Icons.person_outline)),
-                  title: Text(
-                      contact.name.isEmpty ? 'Unnamed contact' : contact.name),
-                  onTap: () => _editSupplierProfile(contactId: contact.id),
-                  subtitle: Text([
-                    contact.designation,
-                    contact.phone,
-                    contact.email,
-                    for (final entry in SupplierProfile.contact(contact).entries)
-                      if (entry.value.isNotEmpty && !['person', 'role', 'phone', 'email', 'language'].contains(entry.key))
-                        '${SupplierProfile.contactFields[entry.key]}: ${entry.value}',
-                    if ((profile['influence'] as String? ?? '').isNotEmpty &&
-                        profile['influence'] != 'Not recorded')
-                      profile['influence'] as String,
-                    if ((profile['language'] as String? ?? '').isNotEmpty)
-                      profile['language'] as String,
-                  ].where((item) => item.isNotEmpty).join('\n')),
-                  isThreeLine: contact.designation.isNotEmpty &&
-                      contact.phone.isNotEmpty,
-                  trailing: Wrap(
+                child: Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      if (contact.phone.isNotEmpty)
-                        IconButton(
-                            tooltip: 'Call',
-                            onPressed: () => _openPhone(contact.phone),
-                            icon: const Icon(Icons.call_outlined)),
-                      if (contact.whatsapp.isNotEmpty ||
-                          contact.phone.isNotEmpty)
-                        IconButton(
-                            tooltip: 'WhatsApp',
-                            onPressed: () => _openPhone(
+                      InkWell(
+                        onTap: () =>
+                            _editSupplierProfile(contactId: contact.id),
+                        child: Row(
+                          children: [
+                            const CircleAvatar(
+                                child: Icon(Icons.person_outline)),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    contact.name.isEmpty
+                                        ? 'Unnamed contact'
+                                        : contact.name,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.w700),
+                                  ),
+                                  if (details.isNotEmpty) ...[
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      details.join('\n'),
+                                      maxLines: 4,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                          color: AppColors.muted),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Wrap(
+                        spacing: 4,
+                        runSpacing: 4,
+                        children: [
+                          if (contact.phone.isNotEmpty)
+                            TextButton.icon(
+                              onPressed: () => _openPhone(contact.phone),
+                              icon: const Icon(Icons.call_outlined, size: 18),
+                              label: const Text('Call'),
+                            ),
+                          if (contact.whatsapp.isNotEmpty ||
+                              contact.phone.isNotEmpty)
+                            TextButton.icon(
+                              onPressed: () => _openPhone(
                                 contact.whatsapp.isEmpty
                                     ? contact.phone
                                     : contact.whatsapp,
-                                whatsapp: true),
-                            icon: const Icon(Icons.chat_outlined)),
-                      IconButton(
-                          tooltip: 'Edit contact details',
-                          onPressed: () => _editSupplierProfile(contactId: contact.id),
-                          icon: const Icon(Icons.edit_outlined)),
-                      IconButton(
-                          tooltip: 'Save business card photo',
-                          onPressed: () => _captureBusinessCard(contact),
-                          icon: const Icon(Icons.badge_outlined)),
+                                whatsapp: true,
+                              ),
+                              icon: const Icon(Icons.chat_outlined, size: 18),
+                              label: const Text('WhatsApp'),
+                            ),
+                          TextButton.icon(
+                            onPressed: () => _saveContactToPhone(contact),
+                            icon: const Icon(Icons.person_add_alt_1_outlined,
+                                size: 18),
+                            label: const Text('Save to phone'),
+                          ),
+                          IconButton(
+                            tooltip: 'Edit contact details',
+                            onPressed: () =>
+                                _editSupplierProfile(contactId: contact.id),
+                            icon: const Icon(Icons.edit_outlined),
+                          ),
+                          IconButton(
+                            tooltip: 'Save business card photo',
+                            onPressed: () => _captureBusinessCard(contact),
+                            icon: const Icon(Icons.badge_outlined),
+                          ),
+                        ],
+                      ),
                     ],
                   ),
                 ),

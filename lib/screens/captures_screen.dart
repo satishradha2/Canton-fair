@@ -20,6 +20,7 @@ import '../data/team_workspace_service.dart';
 import '../data/language_service.dart';
 import '../data/reminder_service.dart';
 import '../data/quick_capture_draft_service.dart';
+import '../data/device_contacts_service.dart';
 import '../models/models.dart';
 import '../theme/app_theme.dart';
 import '../widgets/enterprise_widgets.dart';
@@ -127,7 +128,8 @@ class _CapturesScreenState extends State<CapturesScreen> {
     if (!mounted) return;
     if (trips.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Create a trip before capturing a supplier.')),
+        const SnackBar(
+            content: Text('Create a trip before capturing a supplier.')),
       );
       return;
     }
@@ -157,8 +159,8 @@ class _CapturesScreenState extends State<CapturesScreen> {
       showDragHandle: true,
       builder: (context) => StatefulBuilder(
         builder: (context, setSheetState) => Padding(
-          padding: EdgeInsets.fromLTRB(20, 4, 20,
-              20 + MediaQuery.viewInsetsOf(context).bottom),
+          padding: EdgeInsets.fromLTRB(
+              20, 4, 20, 20 + MediaQuery.viewInsetsOf(context).bottom),
           child: SafeArea(
             top: false,
             child: SingleChildScrollView(
@@ -166,81 +168,123 @@ class _CapturesScreenState extends State<CapturesScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Text('Quick capture', style: Theme.of(context).textTheme.titleLarge),
+                  Text('Quick capture',
+                      style: Theme.of(context).textTheme.titleLarge),
                   const SizedBox(height: 6),
-                  const Text('Save the essentials now. Add products, photos, and scoring later.',
+                  const Text(
+                      'Save the essentials now. Add products, photos, and scoring later.',
                       style: TextStyle(color: AppColors.muted)),
                   const SizedBox(height: 20),
                   DropdownButtonFormField<int>(
-                    initialValue: trips.any((trip) => trip.id == tripId) ? tripId : trips.first.id,
+                    initialValue: trips.any((trip) => trip.id == tripId)
+                        ? tripId
+                        : trips.first.id,
                     decoration: const InputDecoration(labelText: 'Trip'),
-                    items: trips.map((trip) => DropdownMenuItem(
-                        value: trip.id, child: Text(trip.name))).toList(),
-                    onChanged: saving ? null : (value) {
-                      tripId = value ?? tripId;
-                      saveDraft();
-                    },
+                    items: trips
+                        .map((trip) => DropdownMenuItem(
+                            value: trip.id, child: Text(trip.name)))
+                        .toList(),
+                    onChanged: saving
+                        ? null
+                        : (value) {
+                            tripId = value ?? tripId;
+                            saveDraft();
+                          },
                   ),
                   const SizedBox(height: 12),
-                  TextField(controller: name, enabled: !saving,
-                    textCapitalization: TextCapitalization.words,
-                    autofocus: name.text.isEmpty,
-                    decoration: const InputDecoration(labelText: 'Supplier name *', prefixIcon: Icon(Icons.business_outlined))),
+                  TextField(
+                      controller: name,
+                      enabled: !saving,
+                      textCapitalization: TextCapitalization.words,
+                      autofocus: name.text.isEmpty,
+                      decoration: const InputDecoration(
+                          labelText: 'Supplier name *',
+                          prefixIcon: Icon(Icons.business_outlined))),
                   const SizedBox(height: 12),
-                  TextField(controller: booth, enabled: !saving,
-                    decoration: const InputDecoration(labelText: 'Booth / hall', prefixIcon: Icon(Icons.place_outlined))),
+                  TextField(
+                      controller: booth,
+                      enabled: !saving,
+                      decoration: const InputDecoration(
+                          labelText: 'Booth / hall',
+                          prefixIcon: Icon(Icons.place_outlined))),
                   const SizedBox(height: 12),
-                  TextField(controller: contact, enabled: !saving,
-                    textCapitalization: TextCapitalization.words,
-                    decoration: const InputDecoration(labelText: 'Person met', prefixIcon: Icon(Icons.person_outline))),
+                  TextField(
+                      controller: contact,
+                      enabled: !saving,
+                      textCapitalization: TextCapitalization.words,
+                      decoration: const InputDecoration(
+                          labelText: 'Person met',
+                          prefixIcon: Icon(Icons.person_outline))),
                   const SizedBox(height: 12),
-                  TextField(controller: category, enabled: !saving,
-                    decoration: const InputDecoration(labelText: 'Category', prefixIcon: Icon(Icons.category_outlined))),
+                  TextField(
+                      controller: category,
+                      enabled: !saving,
+                      decoration: const InputDecoration(
+                          labelText: 'Category',
+                          prefixIcon: Icon(Icons.category_outlined))),
                   const SizedBox(height: 20),
                   FilledButton.icon(
-                    onPressed: saving ? null : () async {
-                      if (name.text.trim().isEmpty) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Enter a supplier name to save.')),
-                        );
-                        return;
-                      }
-                      setSheetState(() => saving = true);
-                      try {
-                        final supplierId = await db.insert('exhibitors', Exhibitor(
-                          tripId: tripId,
-                          name: name.text.trim(),
-                          booth: booth.text.trim(),
-                          hall: '',
-                          category: category.text.trim(),
-                          country: '',
-                        ).toMap()..remove('id'));
-                        if (contact.text.trim().isNotEmpty) {
-                          await db.insert('contacts', Contact(
-                            exhibitorId: supplierId,
-                            name: contact.text.trim(),
-                          ).toMap()..remove('id'));
-                        }
-                        await db.logAudit('Quick captured supplier', name.text.trim());
-                        await draftService.clear();
-                        await HapticFeedback.mediumImpact();
-                        if (context.mounted) Navigator.pop(context, true);
-                      } catch (_) {
-                        setSheetState(() => saving = false);
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Could not save yet. Your draft is kept.')),
-                          );
-                        }
-                      }
-                    },
-                    icon: saving ? const SizedBox(width: 18, height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.check),
+                    onPressed: saving
+                        ? null
+                        : () async {
+                            if (name.text.trim().isEmpty) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                    content:
+                                        Text('Enter a supplier name to save.')),
+                              );
+                              return;
+                            }
+                            setSheetState(() => saving = true);
+                            try {
+                              final supplierId = await db.insert(
+                                  'exhibitors',
+                                  Exhibitor(
+                                    tripId: tripId,
+                                    name: name.text.trim(),
+                                    booth: booth.text.trim(),
+                                    hall: '',
+                                    category: category.text.trim(),
+                                    country: '',
+                                  ).toMap()
+                                    ..remove('id'));
+                              if (contact.text.trim().isNotEmpty) {
+                                await db.insert(
+                                    'contacts',
+                                    Contact(
+                                      exhibitorId: supplierId,
+                                      name: contact.text.trim(),
+                                    ).toMap()
+                                      ..remove('id'));
+                              }
+                              await db.logAudit(
+                                  'Quick captured supplier', name.text.trim());
+                              await draftService.clear();
+                              await HapticFeedback.mediumImpact();
+                              if (context.mounted) Navigator.pop(context, true);
+                            } catch (_) {
+                              setSheetState(() => saving = false);
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                      content: Text(
+                                          'Could not save yet. Your draft is kept.')),
+                                );
+                              }
+                            }
+                          },
+                    icon: saving
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Icon(Icons.check),
                     label: Text(saving ? 'Saving...' : 'Save locally'),
                   ),
                   const SizedBox(height: 8),
                   const Text('Your unfinished entries are kept on this device.',
-                      textAlign: TextAlign.center, style: TextStyle(color: AppColors.muted, fontSize: 12)),
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: AppColors.muted, fontSize: 12)),
                 ],
               ),
             ),
@@ -255,9 +299,12 @@ class _CapturesScreenState extends State<CapturesScreen> {
     if (saved == true && mounted) {
       _load();
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: const Text('Saved locally'), action: SnackBarAction(
-          label: 'Sync now', onPressed: () => _syncAfterSave(),
-        )),
+        SnackBar(
+            content: const Text('Saved locally'),
+            action: SnackBarAction(
+              label: 'Sync now',
+              onPressed: () => _syncAfterSave(),
+            )),
       );
     }
   }
@@ -822,13 +869,16 @@ class _CapturesScreenState extends State<CapturesScreen> {
         throw StateError('Workspace changed. Reopen the original workspace.');
       }
       if (!mounted) return;
-      final destination = card.supplierDestination ?? await chooseCardSupplier(context);
+      final destination =
+          card.supplierDestination ?? await chooseCardSupplier(context);
       if (!mounted || destination == null) return;
       if (destination == -1) {
         await _openAddExhibitorSheet(prefill: card.fields, businessCard: card);
       } else {
-        final saved = await Navigator.of(context).push<Exhibitor>(MaterialPageRoute(
-          builder: (_) => SupplierProfileScreen(supplierId: destination, card: card),
+        final saved =
+            await Navigator.of(context).push<Exhibitor>(MaterialPageRoute(
+          builder: (_) =>
+              SupplierProfileScreen(supplierId: destination, card: card),
         ));
         if (!mounted || saved == null) return;
         _load();
@@ -839,7 +889,8 @@ class _CapturesScreenState extends State<CapturesScreen> {
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Could not complete supplier capture. Your card draft remains available; reopen Scan card details.'),
+          content: Text(
+              'Could not complete supplier capture. Your card draft remains available; reopen Scan card details.'),
         ));
       }
     }
@@ -897,14 +948,18 @@ class _CapturesScreenState extends State<CapturesScreen> {
       barrierDismissible: false,
       builder: (ctx) => StatefulBuilder(builder: (ctx, update) {
         Future<void> chooseDate(bool isStart) async {
-          final earliest = isStart ? DateTime(2000) : _parseDate(start) ?? DateTime(2000);
+          final earliest =
+              isStart ? DateTime(2000) : _parseDate(start) ?? DateTime(2000);
           final previous = _parseDate(isStart ? start : end) ?? DateTime.now();
-          final picked = await showDatePicker(context: ctx,
-            initialDate: previous.isBefore(earliest) ? earliest : previous,
-            firstDate: earliest, lastDate: DateTime(2100),
-            helpText: isStart ? 'Trip start date' : 'Trip end date');
+          final picked = await showDatePicker(
+              context: ctx,
+              initialDate: previous.isBefore(earliest) ? earliest : previous,
+              firstDate: earliest,
+              lastDate: DateTime(2100),
+              helpText: isStart ? 'Trip start date' : 'Trip end date');
           if (picked == null || !ctx.mounted) return;
-          final text = '${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
+          final text =
+              '${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
           update(() {
             if (isStart) {
               start = text;
@@ -914,112 +969,173 @@ class _CapturesScreenState extends State<CapturesScreen> {
             }
           });
         }
+
         Widget dateField(bool isStart) {
           final value = isStart ? start : end;
-          return TextFormField(key: ValueKey('${isStart ? 'start' : 'end'}-$value'),
-            initialValue: value, readOnly: true, enabled: !saving,
-            onTap: () => chooseDate(isStart),
-            decoration: InputDecoration(labelText: isStart ? 'Start date' : 'End date',
-              hintText: 'Select date', prefixIcon: const Icon(Icons.calendar_today_outlined),
-              suffixIcon: value.isEmpty ? null : IconButton(tooltip: 'Clear date',
-                onPressed: saving ? null : () => update(() { if (isStart) { start = ''; } else { end = ''; } }),
-                icon: const Icon(Icons.close, size: 18))));
+          return TextFormField(
+              key: ValueKey('${isStart ? 'start' : 'end'}-$value'),
+              initialValue: value,
+              readOnly: true,
+              enabled: !saving,
+              onTap: () => chooseDate(isStart),
+              decoration: InputDecoration(
+                  labelText: isStart ? 'Start date' : 'End date',
+                  hintText: 'Select date',
+                  prefixIcon: const Icon(Icons.calendar_today_outlined),
+                  suffixIcon: value.isEmpty
+                      ? null
+                      : IconButton(
+                          tooltip: 'Clear date',
+                          onPressed: saving
+                              ? null
+                              : () => update(() {
+                                    if (isStart) {
+                                      start = '';
+                                    } else {
+                                      end = '';
+                                    }
+                                  }),
+                          icon: const Icon(Icons.close, size: 18))));
         }
-        return PopScope(canPop: !saving, child: AlertDialog(
-        insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-        titlePadding: const EdgeInsets.fromLTRB(24, 24, 16, 8),
-        contentPadding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
-        actionsPadding: const EdgeInsets.fromLTRB(24, 0, 24, 20),
-        title: Row(children: [
-          Container(padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(color: Theme.of(ctx).colorScheme.surfaceContainerLow,
-              borderRadius: BorderRadius.circular(12)),
-            child: const Icon(Icons.flight_takeoff_outlined)),
-          const SizedBox(width: 12),
-          Expanded(child: Text('Create trip', style: Theme.of(ctx).textTheme.titleLarge)),
-        ]),
-        content: Form(
-          key: formKey,
-          child: SizedBox(width: 480, child: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text('Organize suppliers, visits and follow-ups for your next sourcing trip.',
-                  style: Theme.of(ctx).textTheme.bodySmall),
-                const SizedBox(height: 24),
-                TextFormField(
-                  initialValue: name, enabled: !saving,
-                  textCapitalization: TextCapitalization.words,
-                  textInputAction: TextInputAction.next,
-                  decoration: const InputDecoration(labelText: 'Trip name',
-                    hintText: 'e.g. Canton Fair - October 2026', prefixIcon: Icon(Icons.work_outline)),
-                  validator: (value) => value == null || value.trim().isEmpty ? 'Enter a trip name' : null,
-                  onSaved: (v) => name = v?.trim() ?? name,
+
+        return PopScope(
+            canPop: !saving,
+            child: AlertDialog(
+              insetPadding:
+                  const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+              titlePadding: const EdgeInsets.fromLTRB(24, 24, 16, 8),
+              contentPadding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
+              actionsPadding: const EdgeInsets.fromLTRB(24, 0, 24, 20),
+              title: Row(children: [
+                Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                        color: Theme.of(ctx).colorScheme.surfaceContainerLow,
+                        borderRadius: BorderRadius.circular(12)),
+                    child: const Icon(Icons.flight_takeoff_outlined)),
+                const SizedBox(width: 12),
+                Expanded(
+                    child: Text('Create trip',
+                        style: Theme.of(ctx).textTheme.titleLarge)),
+              ]),
+              content: Form(
+                key: formKey,
+                child: SizedBox(
+                    width: 480,
+                    child: SingleChildScrollView(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Text(
+                              'Organize suppliers, visits and follow-ups for your next sourcing trip.',
+                              style: Theme.of(ctx).textTheme.bodySmall),
+                          const SizedBox(height: 24),
+                          TextFormField(
+                            initialValue: name,
+                            enabled: !saving,
+                            textCapitalization: TextCapitalization.words,
+                            textInputAction: TextInputAction.next,
+                            decoration: const InputDecoration(
+                                labelText: 'Trip name',
+                                hintText: 'e.g. Canton Fair - October 2026',
+                                prefixIcon: Icon(Icons.work_outline)),
+                            validator: (value) =>
+                                value == null || value.trim().isEmpty
+                                    ? 'Enter a trip name'
+                                    : null,
+                            onSaved: (v) => name = v?.trim() ?? name,
+                          ),
+                          const SizedBox(height: 20),
+                          TextFormField(
+                            initialValue: city,
+                            enabled: !saving,
+                            textCapitalization: TextCapitalization.words,
+                            decoration: const InputDecoration(
+                                labelText: 'Destination city',
+                                prefixIcon: Icon(Icons.location_on_outlined)),
+                            onSaved: (v) => city = v?.trim() ?? city,
+                          ),
+                          const SizedBox(height: 24),
+                          Text('Travel dates (optional)',
+                              style: Theme.of(ctx).textTheme.titleSmall),
+                          const SizedBox(height: 16),
+                          dateField(true),
+                          const SizedBox(height: 20),
+                          dateField(false),
+                          const SizedBox(height: 24),
+                          TextFormField(
+                            enabled: !saving,
+                            minLines: 2,
+                            maxLines: 4,
+                            textCapitalization: TextCapitalization.sentences,
+                            decoration: const InputDecoration(
+                                labelText: 'Notes (optional)',
+                                hintText:
+                                    'Sourcing priorities, halls to visit or travel details',
+                                alignLabelWithHint: true),
+                            onSaved: (v) => notes = v?.trim() ?? '',
+                          ),
+                          if (error != null)
+                            Padding(
+                                padding: const EdgeInsets.only(top: 16),
+                                child: Semantics(
+                                    liveRegion: true,
+                                    child: Text(error!,
+                                        style: TextStyle(
+                                            color: Theme.of(ctx)
+                                                .colorScheme
+                                                .error)))),
+                        ],
+                      ),
+                    )),
+              ),
+              actions: [
+                TextButton(
+                    onPressed: saving ? null : () => Navigator.pop(ctx),
+                    child: Text(tr(context, 'cancel'))),
+                FilledButton.icon(
+                  icon: saving
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Icon(Icons.check),
+                  label: Text(saving ? 'Saving...' : 'Create trip'),
+                  onPressed: saving
+                      ? null
+                      : () async {
+                          if (formKey.currentState?.validate() != true) return;
+                          formKey.currentState?.save();
+                          update(() {
+                            saving = true;
+                            error = null;
+                          });
+                          try {
+                            final trip = Trip(
+                              name: name,
+                              city: city,
+                              notes: notes,
+                              startDate: _parseDate(start),
+                              endDate: _parseDate(end),
+                            );
+                            await db.insertTrip(trip);
+                            _trips = db.getTrips();
+                            if (!ctx.mounted) return;
+                            Navigator.pop(ctx);
+                            _load();
+                          } catch (_) {
+                            if (ctx.mounted) {
+                              update(() {
+                                saving = false;
+                                error =
+                                    'Could not save the trip. Your entries are kept; please retry.';
+                              });
+                            }
+                          }
+                        },
                 ),
-                const SizedBox(height: 20),
-                TextFormField(
-                  initialValue: city, enabled: !saving,
-                  textCapitalization: TextCapitalization.words,
-                  decoration: const InputDecoration(labelText: 'Destination city', prefixIcon: Icon(Icons.location_on_outlined)),
-                  onSaved: (v) => city = v?.trim() ?? city,
-                ),
-                const SizedBox(height: 24),
-                Text('Travel dates (optional)', style: Theme.of(ctx).textTheme.titleSmall),
-                const SizedBox(height: 16),
-                dateField(true),
-                const SizedBox(height: 20),
-                dateField(false),
-                const SizedBox(height: 24),
-                TextFormField(
-                  enabled: !saving, minLines: 2, maxLines: 4,
-                  textCapitalization: TextCapitalization.sentences,
-                  decoration: const InputDecoration(labelText: 'Notes (optional)',
-                    hintText: 'Sourcing priorities, halls to visit or travel details', alignLabelWithHint: true),
-                  onSaved: (v) => notes = v?.trim() ?? '',
-                ),
-                if (error != null) Padding(padding: const EdgeInsets.only(top: 16),
-                  child: Semantics(liveRegion: true, child: Text(error!,
-                    style: TextStyle(color: Theme.of(ctx).colorScheme.error)))),
               ],
-            ),
-          )),
-        ),
-        actions: [
-          TextButton(
-              onPressed: saving ? null : () => Navigator.pop(ctx),
-              child: Text(tr(context, 'cancel'))),
-          FilledButton.icon(
-            icon: saving ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.check),
-            label: Text(saving ? 'Saving...' : 'Create trip'),
-            onPressed: saving ? null : () async {
-              if (formKey.currentState?.validate() != true) return;
-              formKey.currentState?.save();
-              update(() { saving = true; error = null; });
-              try {
-              final trip = Trip(
-                name: name,
-                city: city,
-                notes: notes,
-                startDate: _parseDate(start),
-                endDate: _parseDate(end),
-              );
-              await db.insertTrip(trip);
-              _trips = db.getTrips();
-              if (!ctx.mounted) return;
-              Navigator.pop(ctx);
-              _load();
-              } catch (_) {
-                if (ctx.mounted) {
-                  update(() {
-                    saving = false;
-                    error = 'Could not save the trip. Your entries are kept; please retry.';
-                  });
-                }
-              }
-            },
-          ),
-        ],
-      ));
+            ));
       }),
     );
   }
@@ -1072,20 +1188,31 @@ class _CapturesScreenState extends State<CapturesScreen> {
       fieldCaptureJson: jsonEncode({
         ...capture.fieldCapture,
         'supplier_details': {
-          if (businessCard != null) ...SupplierProfile.companySubset(businessCard.fields),
-          'name': capture.name, 'booth': capture.booth, 'hall': capture.hall,
-          'country': capture.country, 'category': capture.category, 'notes': capture.notes,
+          if (businessCard != null)
+            ...SupplierProfile.companySubset(businessCard.fields),
+          'name': capture.name,
+          'booth': capture.booth,
+          'hall': capture.hall,
+          'country': capture.country,
+          'category': capture.category,
+          'notes': capture.notes,
         },
-        if (businessCard != null) 'business_card': businessCard.archive(
-          reviewedFields: {
-            ...businessCard.fields,
-            'name': capture.name, 'person': capture.contactName,
-            'role': capture.contactRole, 'phone': capture.phone,
-            'email': capture.email, 'whatsapp': capture.whatsapp,
-            'wechat': capture.wechat, 'country': capture.country,
-            'booth': capture.booth, 'hall': capture.hall,
-          },
-        ),
+        if (businessCard != null)
+          'business_card': businessCard.archive(
+            reviewedFields: {
+              ...businessCard.fields,
+              'name': capture.name,
+              'person': capture.contactName,
+              'role': capture.contactRole,
+              'phone': capture.phone,
+              'email': capture.email,
+              'whatsapp': capture.whatsapp,
+              'wechat': capture.wechat,
+              'country': capture.country,
+              'booth': capture.booth,
+              'hall': capture.hall,
+            },
+          ),
       }),
       verificationJson: jsonEncode({
         'status': 'Unverified',
@@ -1095,101 +1222,156 @@ class _CapturesScreenState extends State<CapturesScreen> {
     if (!allow || !mounted) return;
     await TeamWorkspaceService.exclusive(() async {
       if (await TeamWorkspaceService().scopeKey() != captureScope) {
-        throw StateError('Workspace changed. Reopen capture in the original workspace.');
+        throw StateError(
+            'Workspace changed. Reopen capture in the original workspace.');
       }
       for (final photo in capture.photos) {
-        if (!await File(photo.path).exists()) throw StateError('A captured photo is missing.');
+        if (!await File(photo.path).exists()) {
+          throw StateError('A captured photo is missing.');
+        }
       }
       if (businessCard != null &&
           await TeamWorkspaceService().scopeKey() != businessCard.scope) {
-        throw StateError('Workspace changed. Reopen the card in its original workspace.');
+        throw StateError(
+            'Workspace changed. Reopen the card in its original workspace.');
       }
       if (businessCard != null) {
         for (final side in businessCard.sides.keys) {
           if (!await File(businessCard.imagePath(side)).exists()) {
-            throw StateError('A card image is missing. Recapture it before saving.');
+            throw StateError(
+                'A card image is missing. Recapture it before saving.');
           }
         }
       }
       final sql = await db.database;
       await sql.transaction((txn) async {
         // Supplier, contact, images and OCR archive either all commit or none do.
-        final exhibitorId = await txn.insert('exhibitors', candidate.toMap()..remove('id'));
-        if (capture.contactName.isNotEmpty || capture.phone.isNotEmpty ||
-            capture.email.isNotEmpty || capture.whatsapp.isNotEmpty || capture.wechat.isNotEmpty ||
-            (businessCard != null && SupplierProfile.contactFields.keys.any(
-              (key) => businessCard.fields[key]?.isNotEmpty ?? false))) {
-          await txn.insert('contacts', Contact(
-            exhibitorId: exhibitorId,
-            name: capture.contactName.isEmpty ? 'Unnamed company contact' : capture.contactName,
-            designation: capture.contactRole, phone: capture.phone,
-            email: capture.email, whatsapp: capture.whatsapp,
-            wechat: capture.wechat,
-            profileJson: jsonEncode({
-              if (businessCard != null) 'business_card_id': businessCard.id,
-              'details': {
-                if (businessCard != null) ...SupplierProfile.contactSubset(businessCard.fields),
-                'person': capture.contactName, 'role': capture.contactRole,
-                'phone': capture.phone, 'email': capture.email,
-                'whatsapp': capture.whatsapp, 'wechat': capture.wechat,
-              },
-              if (businessCard != null) 'language': businessCard.fields['language'] ?? '',
-            }),
-          ).toMap()..remove('id'));
+        final exhibitorId =
+            await txn.insert('exhibitors', candidate.toMap()..remove('id'));
+        if (capture.contactName.isNotEmpty ||
+            capture.phone.isNotEmpty ||
+            capture.email.isNotEmpty ||
+            capture.whatsapp.isNotEmpty ||
+            capture.wechat.isNotEmpty ||
+            (businessCard != null &&
+                SupplierProfile.contactFields.keys.any(
+                    (key) => businessCard.fields[key]?.isNotEmpty ?? false))) {
+          await txn.insert(
+              'contacts',
+              Contact(
+                exhibitorId: exhibitorId,
+                name: capture.contactName.isEmpty
+                    ? 'Unnamed company contact'
+                    : capture.contactName,
+                designation: capture.contactRole,
+                phone: capture.phone,
+                email: capture.email,
+                whatsapp: capture.whatsapp,
+                wechat: capture.wechat,
+                profileJson: jsonEncode({
+                  if (businessCard != null) 'business_card_id': businessCard.id,
+                  'details': {
+                    if (businessCard != null)
+                      ...SupplierProfile.contactSubset(businessCard.fields),
+                    'person': capture.contactName,
+                    'role': capture.contactRole,
+                    'phone': capture.phone,
+                    'email': capture.email,
+                    'whatsapp': capture.whatsapp,
+                    'wechat': capture.wechat,
+                  },
+                  if (businessCard != null)
+                    'language': businessCard.fields['language'] ?? '',
+                }),
+              ).toMap()
+                ..remove('id'));
         }
         final capturedProductIds = <String, int>{};
         for (final product in capture.products) {
-          capturedProductIds[product.key] = await txn.insert('products', Product(
-            exhibitorId: exhibitorId, name: product.name,
-            modelCode: product.fields['model'] ?? '', moq: double.tryParse(product.fields['moq'] ?? ''),
-            quotedPrice: double.tryParse(product.fields['price'] ?? ''), leadTime: product.fields['lead_time'] ?? '',
-            paymentTerms: product.fields['payment_terms'] ?? '',
-            shortlisted: product.shortlisted, rating: product.rating,
-            detailsJson: jsonEncode(product.details),
-          ).toMap()..remove('id'));
+          capturedProductIds[product.key] = await txn.insert(
+              'products',
+              Product(
+                exhibitorId: exhibitorId,
+                name: product.name,
+                modelCode: product.fields['model'] ?? '',
+                moq: double.tryParse(product.fields['moq'] ?? ''),
+                quotedPrice: double.tryParse(product.fields['price'] ?? ''),
+                leadTime: product.fields['lead_time'] ?? '',
+                paymentTerms: product.fields['payment_terms'] ?? '',
+                shortlisted: product.shortlisted,
+                rating: product.rating,
+                detailsJson: jsonEncode(product.details),
+              ).toMap()
+                ..remove('id'));
         }
         if (capture.nextAction != 'No action') {
-          await txn.insert('meetings', Meeting(
-            exhibitorId: exhibitorId, meetingDate: DateTime.now(),
-            followUpDate: capture.followUpDate, outcome: capture.nextAction,
-            priority: capture.shortlisted ? 'High' : 'Medium',
-            notes: capture.meetingNotes,
-            commitmentsJson: jsonEncode(capture.meetingCommitments),
-          ).toMap()..remove('id'));
+          await txn.insert(
+              'meetings',
+              Meeting(
+                exhibitorId: exhibitorId,
+                meetingDate: DateTime.now(),
+                followUpDate: capture.followUpDate,
+                outcome: capture.nextAction,
+                priority: capture.shortlisted ? 'High' : 'Medium',
+                notes: capture.meetingNotes,
+                commitmentsJson: jsonEncode(capture.meetingCommitments),
+              ).toMap()
+                ..remove('id'));
         }
         for (final photo in capture.photos) {
           final capturedProductId = capturedProductIds[photo.productKey];
           if (photo.category == 'product' && capturedProductId == null) {
             throw StateError('Product photos require a product record.');
           }
-          await txn.insert('attachments', Attachment(
-            ownerType: photo.category == 'product' ? 'product' : 'exhibitor',
-            ownerId: photo.category == 'product' ? capturedProductId! : exhibitorId,
-            kind: 'image', path: photo.path,
-            note: photo.category == 'stand' ? 'Expo stand / booth'
-                : photo.category == 'person' ? 'Person met: ${capture.contactName}'
-                : 'Product: ${capture.products.firstWhere((product) => product.key == photo.productKey).name}',
-            createdAt: DateTime.now(),
-          ).toMap()..remove('id'));
+          await txn.insert(
+              'attachments',
+              Attachment(
+                ownerType:
+                    photo.category == 'product' ? 'product' : 'exhibitor',
+                ownerId: photo.category == 'product'
+                    ? capturedProductId!
+                    : exhibitorId,
+                kind: 'image',
+                path: photo.path,
+                note: photo.category == 'stand'
+                    ? 'Expo stand / booth'
+                    : photo.category == 'person'
+                        ? 'Person met: ${capture.contactName}'
+                        : 'Product: ${capture.products.firstWhere((product) => product.key == photo.productKey).name}',
+                createdAt: DateTime.now(),
+              ).toMap()
+                ..remove('id'));
         }
         if (businessCard != null) {
           for (final side in businessCard.sides.keys) {
-            await txn.insert('attachments', Attachment(
-              ownerType: 'exhibitor', ownerId: exhibitorId, kind: 'image',
-              path: businessCard.imagePath(side),
-              note: 'Business card $side | ${businessCard.id}',
-              createdAt: DateTime.now(),
-            ).toMap()..remove('id'));
-            if (businessCard.readingPath(side) != businessCard.imagePath(side)) {
+            await txn.insert(
+                'attachments',
+                Attachment(
+                  ownerType: 'exhibitor',
+                  ownerId: exhibitorId,
+                  kind: 'image',
+                  path: businessCard.imagePath(side),
+                  note: 'Business card $side | ${businessCard.id}',
+                  createdAt: DateTime.now(),
+                ).toMap()
+                  ..remove('id'));
+            if (businessCard.readingPath(side) !=
+                businessCard.imagePath(side)) {
               if (!await File(businessCard.readingPath(side)).exists()) {
-                throw StateError('The corrected card image is missing. Adjust the crop again.');
+                throw StateError(
+                    'The corrected card image is missing. Adjust the crop again.');
               }
-              await txn.insert('attachments', Attachment(
-                ownerType: 'exhibitor', ownerId: exhibitorId, kind: 'image',
-                path: businessCard.readingPath(side),
-                note: 'Business card $side corrected | ${businessCard.id}',
-                createdAt: DateTime.now(),
-              ).toMap()..remove('id'));
+              await txn.insert(
+                  'attachments',
+                  Attachment(
+                    ownerType: 'exhibitor',
+                    ownerId: exhibitorId,
+                    kind: 'image',
+                    path: businessCard.readingPath(side),
+                    note: 'Business card $side corrected | ${businessCard.id}',
+                    createdAt: DateTime.now(),
+                  ).toMap()
+                    ..remove('id'));
             }
           }
         }
@@ -1200,7 +1382,8 @@ class _CapturesScreenState extends State<CapturesScreen> {
         } catch (_) {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-              content: Text('Supplier and card saved. Draft cleanup failed; do not save the same draft again.'),
+              content: Text(
+                  'Supplier and card saved. Draft cleanup failed; do not save the same draft again.'),
             ));
           }
         }
@@ -1351,9 +1534,14 @@ class _CapturesScreenState extends State<CapturesScreen> {
                 'exhibitors',
                 e.id!,
                 {
-                  'trip_id': selectedTrip, 'name': name, 'booth': booth,
-                  'hall': hall, 'category': category, 'country': country,
-                  'notes': notes, 'shortlisted': shortlisted ? 1 : 0,
+                  'trip_id': selectedTrip,
+                  'name': name,
+                  'booth': booth,
+                  'hall': hall,
+                  'category': category,
+                  'country': country,
+                  'notes': notes,
+                  'shortlisted': shortlisted ? 1 : 0,
                   'rating': rating,
                 },
               );
@@ -1514,8 +1702,12 @@ class _CapturesScreenState extends State<CapturesScreen> {
                 'contacts',
                 c.id!,
                 {
-                  'name': name, 'designation': designation, 'phone': phone,
-                  'email': email, 'whatsapp': whatsapp, 'wechat': wechat,
+                  'name': name,
+                  'designation': designation,
+                  'phone': phone,
+                  'email': email,
+                  'whatsapp': whatsapp,
+                  'wechat': wechat,
                 },
               );
               _load();
@@ -1638,10 +1830,16 @@ class _CapturesScreenState extends State<CapturesScreen> {
                   'products',
                   p.id!,
                   {
-                    'name': name, 'model_code': model, 'specs': specs,
-                    'moq': moq, 'quoted_price': price, 'price_currency': currency,
-                    'lead_time': lead, 'payment_terms': terms,
-                    'shortlisted': shortlisted ? 1 : 0, 'rating': rating,
+                    'name': name,
+                    'model_code': model,
+                    'specs': specs,
+                    'moq': moq,
+                    'quoted_price': price,
+                    'price_currency': currency,
+                    'lead_time': lead,
+                    'payment_terms': terms,
+                    'shortlisted': shortlisted ? 1 : 0,
+                    'rating': rating,
                   },
                 );
                 _load();
@@ -2097,7 +2295,8 @@ class _CapturesScreenState extends State<CapturesScreen> {
     double? quotedPrice,
     double? moq,
     String leadTime = '',
-  }) => ProductScore.fromRating(rating);
+  }) =>
+      ProductScore.fromRating(rating);
 
   static const _messageTemplates = [
     'Hi {name}, nice meeting you at Canton Fair. Thank you for sharing product details.',
@@ -2161,17 +2360,18 @@ class _CapturesScreenState extends State<CapturesScreen> {
     final isVideo = source == 'videoCamera' || source == 'videoGallery';
     if (isVideo) {
       Future<XFile?> pickVideo() => picker.pickVideo(
-        source:
-            source == 'videoCamera' ? ImageSource.camera : ImageSource.gallery,
-        maxDuration: const Duration(minutes: 2),
-      );
+            source: source == 'videoCamera'
+                ? ImageSource.camera
+                : ImageSource.gallery,
+            maxDuration: const Duration(minutes: 2),
+          );
       final picked = source == 'videoCamera'
           ? await CameraCaptureService.capture(pickVideo)
           : await pickVideo();
       if (picked == null || !mounted) return;
       final root = await getApplicationDocumentsDirectory();
-      final targetDir =
-          Directory('${root.path}/attachments/${await TeamWorkspaceService().scopeKey()}/$ownerType/$ownerId');
+      final targetDir = Directory(
+          '${root.path}/attachments/${await TeamWorkspaceService().scopeKey()}/$ownerType/$ownerId');
       await targetDir.create(recursive: true);
       final extensionIndex = picked.path.lastIndexOf('.');
       final extension =
@@ -2190,16 +2390,17 @@ class _CapturesScreenState extends State<CapturesScreen> {
       return;
     }
     Future<XFile?> pickImage() => picker.pickImage(
-      source: source == 'camera' ? ImageSource.camera : ImageSource.gallery,
-      imageQuality: 70,
-    );
+          source: source == 'camera' ? ImageSource.camera : ImageSource.gallery,
+          imageQuality: 70,
+        );
     final picked = source == 'camera'
         ? await CameraCaptureService.capture(pickImage)
         : await pickImage();
     if (picked == null || !mounted) return;
 
     final root = await getApplicationDocumentsDirectory();
-    final targetDir = Directory('${root.path}/attachments/${await TeamWorkspaceService().scopeKey()}/$ownerType/$ownerId');
+    final targetDir = Directory(
+        '${root.path}/attachments/${await TeamWorkspaceService().scopeKey()}/$ownerType/$ownerId');
     if (!await targetDir.exists()) {
       await targetDir.create(recursive: true);
     }
@@ -2231,7 +2432,8 @@ class _CapturesScreenState extends State<CapturesScreen> {
     if (sourcePath == null) return;
     final source = File(sourcePath);
     final root = await getApplicationDocumentsDirectory();
-    final targetDir = Directory('${root.path}/attachments/${await TeamWorkspaceService().scopeKey()}/$ownerType/$ownerId');
+    final targetDir = Directory(
+        '${root.path}/attachments/${await TeamWorkspaceService().scopeKey()}/$ownerType/$ownerId');
     await targetDir.create(recursive: true);
     final extension = sourcePath.contains('.')
         ? sourcePath.substring(sourcePath.lastIndexOf('.'))
@@ -2508,6 +2710,30 @@ class _CapturesScreenState extends State<CapturesScreen> {
         .showSnackBar(const SnackBar(content: Text('Copied to clipboard')));
   }
 
+  Future<void> _saveToPhoneContacts(Contact contact, Exhibitor supplier) async {
+    try {
+      final saved = await DeviceContactsService.openCreateContact(
+        contact: contact,
+        supplier: supplier,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(saved
+              ? 'Contact saved to your phone'
+              : 'Phone contact was not saved'),
+        ),
+      );
+    } on PlatformException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(error.message ?? 'Could not open phone contacts'),
+        ),
+      );
+    }
+  }
+
   Widget _contactRow(Contact c, Exhibitor e) {
     final details = <String>[
       if (c.phone.isNotEmpty) c.phone,
@@ -2544,7 +2770,8 @@ class _CapturesScreenState extends State<CapturesScreen> {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     textAlign: TextAlign.end,
-                    style: const TextStyle(fontSize: 12, color: AppColors.muted),
+                    style:
+                        const TextStyle(fontSize: 12, color: AppColors.muted),
                   ),
                 ),
             ],
@@ -2591,6 +2818,11 @@ class _CapturesScreenState extends State<CapturesScreen> {
                 icon: Icons.chat_bubble_outline,
                 label: 'Template',
                 onPressed: () => _openTemplateForContact(c, e),
+              ),
+              _recordAction(
+                icon: Icons.person_add_alt_1_outlined,
+                label: 'Save to phone',
+                onPressed: () => _saveToPhoneContacts(c, e),
               ),
               if (c.phone.isNotEmpty || c.email.isNotEmpty)
                 _recordAction(
@@ -2689,7 +2921,8 @@ class _CapturesScreenState extends State<CapturesScreen> {
                     context: context,
                     builder: (ctx) => AlertDialog(
                       title: const Text('Delete product'),
-                      content: const Text('Do you want to remove this product?'),
+                      content:
+                          const Text('Do you want to remove this product?'),
                       actions: [
                         TextButton(
                             onPressed: () => Navigator.pop(ctx, false),
@@ -3872,11 +4105,17 @@ class _CapturesScreenState extends State<CapturesScreen> {
     );
   }
 
-  Widget _supplierThumbnail(Exhibitor supplier) => FutureBuilder<List<Attachment>>(
+  Widget _supplierThumbnail(Exhibitor supplier) =>
+      FutureBuilder<List<Attachment>>(
         future: db.getAttachments('exhibitor', supplier.id!),
         builder: (context, snapshot) {
-          final image = (snapshot.data ?? const <Attachment>[]).cast<Attachment?>().firstWhere(
-                (item) => item != null && item.kind == 'image' && File(item.path).existsSync(),
+          final image = (snapshot.data ?? const <Attachment>[])
+              .cast<Attachment?>()
+              .firstWhere(
+                (item) =>
+                    item != null &&
+                    item.kind == 'image' &&
+                    File(item.path).existsSync(),
                 orElse: () => null,
               );
           return Semantics(
