@@ -2,9 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../app.dart';
 import '../data/team_workspace_service.dart';
+import '../data/language_service.dart';
 
-class AuthGate extends StatelessWidget {
+class AuthGate extends StatefulWidget {
   const AuthGate({super.key});
+  @override
+  State<AuthGate> createState() => _AuthGateState();
+}
+
+class _AuthGateState extends State<AuthGate> {
+  bool _recovering = false;
 
   @override
   Widget build(BuildContext context) => StreamBuilder<AuthState>(
@@ -15,6 +22,12 @@ class AuthGate extends StatelessWidget {
                 body: Center(child: CircularProgressIndicator()));
           }
           if (snapshot.data?.event == AuthChangeEvent.passwordRecovery) {
+            _recovering = true;
+          }
+          if (snapshot.data?.event == AuthChangeEvent.signedOut) {
+            _recovering = false;
+          }
+          if (_recovering) {
             return const UpdatePasswordScreen();
           }
           return Supabase.instance.client.auth.currentSession == null
@@ -43,6 +56,27 @@ class _SignInScreenState extends State<SignInScreen> {
   bool _creating = false;
   bool _busy = false;
   String? _error;
+
+  Future<void> _googleSignIn() async {
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      final opened = await Supabase.instance.client.auth.signInWithOAuth(
+          OAuthProvider.google,
+          redirectTo: 'cantonfair://auth-callback',
+          authScreenLaunchMode: LaunchMode.externalApplication);
+      if (!opened) throw StateError('Could not open Google sign-in.');
+    } catch (error) {
+      if (mounted) {
+        setState(() => _error =
+            'Google sign-in could not start. Email sign-in is still available. $error');
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
 
   Future<void> _resetPassword() async {
     final email = _email.text.trim();
@@ -154,13 +188,10 @@ class _SignInScreenState extends State<SignInScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(_creating ? 'Create your account' : 'Welcome back',
+            Text(tr(context, _creating ? 'createYourAccount' : 'welcomeBack'),
                 style: Theme.of(context).textTheme.headlineSmall),
             const SizedBox(height: 8),
-            Text(
-                _creating
-                    ? 'Set up your sourcing workspace.'
-                    : 'Sign in to continue to your workspace.',
+            Text(tr(context, _creating ? 'setupWorkspace' : 'signInWorkspace'),
                 style: TextStyle(
                     color: Theme.of(context).colorScheme.onSurfaceVariant)),
             const SizedBox(height: 28),
@@ -171,10 +202,10 @@ class _SignInScreenState extends State<SignInScreen> {
               autofillHints: const [AutofillHints.email],
               autocorrect: false,
               enabled: !_busy,
-              decoration: const InputDecoration(
-                  labelText: 'Work email',
+              decoration: InputDecoration(
+                  labelText: tr(context, 'workEmail'),
                   hintText: 'you@company.com',
-                  prefixIcon: Icon(Icons.alternate_email_rounded)),
+                  prefixIcon: const Icon(Icons.alternate_email_rounded)),
             ),
             const SizedBox(height: 20),
             TextField(
@@ -189,8 +220,8 @@ class _SignInScreenState extends State<SignInScreen> {
                 if (!_busy) _submit();
               },
               decoration: InputDecoration(
-                  labelText: 'Password',
-                  helperText: _creating ? 'Use at least 6 characters' : null,
+                  labelText: tr(context, 'password'),
+                  helperText: _creating ? tr(context, 'minimumPassword') : null,
                   prefixIcon: const Icon(Icons.lock_outline_rounded)),
             ),
             if (!_creating)
@@ -198,7 +229,7 @@ class _SignInScreenState extends State<SignInScreen> {
                 alignment: Alignment.centerRight,
                 child: TextButton(
                   onPressed: _busy ? null : _resetPassword,
-                  child: const Text('Forgot password?'),
+                  child: Text(tr(context, 'forgotPassword')),
                 ),
               ),
             if (_error != null) ...[
@@ -226,9 +257,13 @@ class _SignInScreenState extends State<SignInScreen> {
                       width: 20,
                       height: 20,
                       child: CircularProgressIndicator(strokeWidth: 2))
-                  : Text(_creating ? 'Create account' : 'Sign in'),
+                  : Text(tr(context, _creating ? 'createAccount' : 'signIn')),
             ),
             const SizedBox(height: 12),
+            OutlinedButton.icon(
+                onPressed: _busy ? null : _googleSignIn,
+                icon: const Icon(Icons.login),
+                label: Text(tr(context, 'googleOptional'))),
             TextButton(
               onPressed: _busy
                   ? null
@@ -237,9 +272,7 @@ class _SignInScreenState extends State<SignInScreen> {
                         _error = null;
                       }),
               child: Text(
-                  _creating
-                      ? 'Already registered? Sign in'
-                      : 'New here? Create an account',
+                  tr(context, _creating ? 'alreadyRegistered' : 'newAccount'),
                   textAlign: TextAlign.center),
             ),
           ],
@@ -341,22 +374,22 @@ class _UpdatePasswordScreenState extends State<UpdatePasswordScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        Text('Choose a new password',
+                        Text(tr(context, 'chooseNewPassword'),
                             style: Theme.of(context).textTheme.headlineSmall),
                         const SizedBox(height: 24),
                         TextField(
                           controller: _password,
                           obscureText: true,
-                          decoration:
-                              const InputDecoration(labelText: 'New password'),
+                          decoration: InputDecoration(
+                              labelText: tr(context, 'newPassword')),
                         ),
                         const SizedBox(height: 16),
                         TextField(
                           controller: _confirmation,
                           obscureText: true,
                           onSubmitted: (_) => _busy ? null : _update(),
-                          decoration: const InputDecoration(
-                              labelText: 'Confirm new password'),
+                          decoration: InputDecoration(
+                              labelText: tr(context, 'confirmPassword')),
                         ),
                         if (_error != null) ...[
                           const SizedBox(height: 12),
@@ -367,8 +400,8 @@ class _UpdatePasswordScreenState extends State<UpdatePasswordScreen> {
                         const SizedBox(height: 24),
                         FilledButton(
                           onPressed: _busy ? null : _update,
-                          child:
-                              Text(_busy ? 'Updating...' : 'Update password'),
+                          child: Text(tr(
+                              context, _busy ? 'updating' : 'updatePassword')),
                         ),
                       ],
                     ),

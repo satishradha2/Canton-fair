@@ -2,13 +2,23 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class LanguageService {
+  static final changes = ValueNotifier<String>('en');
   static const _key = 'app_language';
   final FlutterSecureStorage _storage = const FlutterSecureStorage();
 
-  Future<String> load() async => await _storage.read(key: _key) ?? 'en';
+  Future<String> load() async {
+    final stored = await _storage.read(key: _key) ?? 'en';
+    changes.value = const ['en', 'zh', 'hi'].contains(stored) ? stored : 'en';
+    return changes.value;
+  }
 
-  Future<void> save(String language) =>
-      _storage.write(key: _key, value: language);
+  Future<void> save(String language) async {
+    if (!const ['en', 'zh', 'hi'].contains(language)) {
+      throw ArgumentError.value(language, 'language', 'Unsupported language');
+    }
+    await _storage.write(key: _key, value: language);
+    changes.value = language;
+  }
 }
 
 class AppLanguage extends InheritedWidget {
@@ -17,7 +27,9 @@ class AppLanguage extends InheritedWidget {
   const AppLanguage({super.key, required this.code, required super.child});
 
   static String of(BuildContext context) =>
-      context.dependOnInheritedWidgetOfExactType<AppLanguage>()?.code ?? 'en';
+      context.dependOnInheritedWidgetOfExactType<AppLanguage>()?.code ??
+      Localizations.maybeLocaleOf(context)?.languageCode ??
+      'en';
 
   @override
   bool updateShouldNotify(AppLanguage oldWidget) => code != oldWidget.code;
@@ -26,6 +38,24 @@ class AppLanguage extends InheritedWidget {
 String tr(BuildContext context, String key) {
   const values = {
     'en': {
+      'createAccount': 'Create account',
+      'createYourAccount': 'Create your account',
+      'welcomeBack': 'Welcome back',
+      'signIn': 'Sign in',
+      'setupWorkspace': 'Set up your sourcing workspace.',
+      'signInWorkspace': 'Sign in to continue to your workspace.',
+      'workEmail': 'Work email',
+      'password': 'Password',
+      'minimumPassword': 'Use at least 6 characters',
+      'forgotPassword': 'Forgot password?',
+      'googleOptional': 'Continue with Google (optional)',
+      'alreadyRegistered': 'Already registered? Sign in',
+      'newAccount': 'New here? Create an account',
+      'chooseNewPassword': 'Choose a new password',
+      'newPassword': 'New password',
+      'confirmPassword': 'Confirm new password',
+      'updating': 'Updating...',
+      'updatePassword': 'Update password',
       'dashboard': 'Dashboard',
       'captures': 'Captures',
       'capture': 'Capture',
@@ -80,6 +110,24 @@ String tr(BuildContext context, String key) {
       'lastSyncCompleted': 'Last sync completed',
     },
     'zh': {
+      'createAccount': '创建账户',
+      'createYourAccount': '创建您的账户',
+      'welcomeBack': '欢迎回来',
+      'signIn': '登录',
+      'setupWorkspace': '设置您的采购工作区。',
+      'signInWorkspace': '登录以继续使用您的工作区。',
+      'workEmail': '工作邮箱',
+      'password': '密码',
+      'minimumPassword': '至少使用6个字符',
+      'forgotPassword': '忘记密码？',
+      'googleOptional': '使用Google继续（可选）',
+      'alreadyRegistered': '已有账户？登录',
+      'newAccount': '首次使用？创建账户',
+      'chooseNewPassword': '设置新密码',
+      'newPassword': '新密码',
+      'confirmPassword': '确认新密码',
+      'updating': '正在更新…',
+      'updatePassword': '更新密码',
       'dashboard': '仪表板',
       'captures': '采集',
       'capture': '采集',
@@ -134,6 +182,24 @@ String tr(BuildContext context, String key) {
       'lastSyncCompleted': '上次同步已完成',
     },
     'hi': {
+      'createAccount': 'खाता बनाएं',
+      'createYourAccount': 'अपना खाता बनाएं',
+      'welcomeBack': 'फिर से स्वागत है',
+      'signIn': 'साइन इन करें',
+      'setupWorkspace': 'अपना सोर्सिंग वर्कस्पेस सेट करें।',
+      'signInWorkspace': 'अपने वर्कस्पेस में जाने के लिए साइन इन करें।',
+      'workEmail': 'कार्य ईमेल',
+      'password': 'पासवर्ड',
+      'minimumPassword': 'कम से कम 6 अक्षर रखें',
+      'forgotPassword': 'पासवर्ड भूल गए?',
+      'googleOptional': 'Google से जारी रखें (वैकल्पिक)',
+      'alreadyRegistered': 'पहले से खाता है? साइन इन करें',
+      'newAccount': 'नए हैं? खाता बनाएं',
+      'chooseNewPassword': 'नया पासवर्ड चुनें',
+      'newPassword': 'नया पासवर्ड',
+      'confirmPassword': 'नए पासवर्ड की पुष्टि करें',
+      'updating': 'अपडेट हो रहा है...',
+      'updatePassword': 'पासवर्ड अपडेट करें',
       'dashboard': 'डैशबोर्ड',
       'captures': 'कैप्चर',
       'capture': 'कैप्चर',
