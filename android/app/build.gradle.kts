@@ -14,7 +14,7 @@ if (keystorePropertiesFile.exists()) {
 }
 
 fun signingValue(name: String, envName: String): String? {
-    return (keystoreProperties[name] as String?) ?: System.getenv(envName)
+    return System.getenv(envName) ?: (keystoreProperties[name] as String?)
 }
 
 val releaseStoreFile = signingValue("storeFile", "ANDROID_KEYSTORE_FILE")

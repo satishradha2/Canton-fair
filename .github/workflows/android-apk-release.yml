@@ -17,6 +17,7 @@ jobs:
       ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
       ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
       ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      ANDROID_KEYSTORE_FILE: app/canton-fair-release.jks
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
 
@@ -49,27 +50,9 @@ jobs:
         run: |
           mkdir -p android/app
           printf '%s' "$ANDROID_KEYSTORE_BASE64" | tr -d '[:space:]' | base64 --decode > android/app/canton-fair-release.jks
-          cat > android/key.properties <<EOF
-          storePassword=$ANDROID_KEYSTORE_PASSWORD
-          keyPassword=$ANDROID_KEY_PASSWORD
-          keyAlias=$ANDROID_KEY_ALIAS
-          storeFile=app/canton-fair-release.jks
-          EOF
-          keytool -list \
-            -keystore android/app/canton-fair-release.jks \
-            -storepass "$ANDROID_KEYSTORE_PASSWORD" \
-            -alias "$ANDROID_KEY_ALIAS" \
-            >/dev/null
-          keytool -importkeystore \
-            -srckeystore android/app/canton-fair-release.jks \
-            -srcstorepass "$ANDROID_KEYSTORE_PASSWORD" \
-            -srcalias "$ANDROID_KEY_ALIAS" \
-            -srckeypass "$ANDROID_KEY_PASSWORD" \
-            -destkeystore "$RUNNER_TEMP/signing-check.p12" \
-            -deststorepass "SigningCheck123456" \
-            -destkeypass "SigningCheck123456" \
-            -noprompt \
-            >/dev/null
+          # Pass passwords directly; Java properties files interpret backslashes.
+          ANDROID_KEYSTORE_FILE=android/app/canton-fair-release.jks \
+            java scripts/ValidateAndroidSigning.java
 
       - name: Install dependencies
         run: flutter pub get
