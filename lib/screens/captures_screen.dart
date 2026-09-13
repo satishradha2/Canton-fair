@@ -2386,6 +2386,7 @@ class _CapturesScreenState extends State<CapturesScreen> {
             }
             return Wrap(
               spacing: 8,
+              runSpacing: 6,
               children: snap.data!.map((attachment) {
                 final isImage = attachment.kind == 'image';
                 return InputChip(
@@ -2399,14 +2400,19 @@ class _CapturesScreenState extends State<CapturesScreen> {
                                 : Icons.description_outlined,
                     size: 16,
                   ),
-                  label: Text(
-                    attachment.note.isEmpty
-                        ? isImage
-                            ? 'Photo'
-                            : attachment.kind == 'video'
-                                ? 'Video'
-                                : 'Attachment'
-                        : attachment.note,
+                  label: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 150),
+                    child: Text(
+                      attachment.note.isEmpty
+                          ? isImage
+                              ? 'Photo'
+                              : attachment.kind == 'video'
+                                  ? 'Video'
+                                  : 'Attachment'
+                          : attachment.note,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                   onPressed: () => _openAttachment(attachment.path),
                   onDeleted:
@@ -2503,93 +2509,224 @@ class _CapturesScreenState extends State<CapturesScreen> {
   }
 
   Widget _contactRow(Contact c, Exhibitor e) {
-    return Card(
-      child: ListTile(
-        title: Text('${c.name} (${c.designation})'),
-        subtitle: Text(
-          'Phone: ${c.phone.isEmpty ? "N/A" : c.phone} | Email: ${c.email.isEmpty ? "N/A" : c.email} | '
-          'WeChat: ${c.wechat.isEmpty ? "N/A" : c.wechat}',
-        ),
-        trailing: Wrap(
-          spacing: 2,
-          children: [
-            IconButton(
-                icon: const Icon(Icons.edit),
-                onPressed: () => _openEditContactSheet(c)),
-            IconButton(
-                icon: const Icon(Icons.call),
-                onPressed: () => _openCall(c.phone)),
-            IconButton(
-                icon: const Icon(Icons.message),
-                onPressed: () => _openWhatsApp(c.phone)),
-            IconButton(
-                icon: const Icon(Icons.email),
-                onPressed: () => _openEmail(c.email)),
-            IconButton(
-              icon: const Icon(Icons.speaker_notes),
-              onPressed: () => _openTemplateForContact(c, e),
-              tooltip: 'Message templates',
+    final details = <String>[
+      if (c.phone.isNotEmpty) c.phone,
+      if (c.email.isNotEmpty) c.email,
+      if (c.wechat.isNotEmpty) 'WeChat: ${c.wechat}',
+    ];
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerLowest,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Theme.of(context).dividerColor),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.person_outline, size: 18),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  c.name.isEmpty ? 'Unnamed contact' : c.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ),
+              if (c.designation.isNotEmpty)
+                Flexible(
+                  child: Text(
+                    c.designation,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.end,
+                    style: const TextStyle(fontSize: 12, color: AppColors.muted),
+                  ),
+                ),
+            ],
+          ),
+          if (details.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(
+              details.join('  |  '),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 12, color: AppColors.muted),
             ),
-            IconButton(
-                icon: const Icon(Icons.copy_all),
-                onPressed: () =>
-                    _copyText(c.phone.isNotEmpty ? c.phone : c.email)),
           ],
-        ),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 2,
+            runSpacing: 2,
+            children: [
+              _recordAction(
+                icon: Icons.edit_outlined,
+                label: 'Edit',
+                onPressed: () => _openEditContactSheet(c),
+              ),
+              if (c.phone.isNotEmpty)
+                _recordAction(
+                  icon: Icons.call_outlined,
+                  label: 'Call',
+                  onPressed: () => _openCall(c.phone),
+                ),
+              if (c.phone.isNotEmpty || c.whatsapp.isNotEmpty)
+                _recordAction(
+                  icon: Icons.chat_outlined,
+                  label: 'WhatsApp',
+                  onPressed: () => _openWhatsApp(
+                      c.whatsapp.isNotEmpty ? c.whatsapp : c.phone),
+                ),
+              if (c.email.isNotEmpty)
+                _recordAction(
+                  icon: Icons.email_outlined,
+                  label: 'Email',
+                  onPressed: () => _openEmail(c.email),
+                ),
+              _recordAction(
+                icon: Icons.chat_bubble_outline,
+                label: 'Template',
+                onPressed: () => _openTemplateForContact(c, e),
+              ),
+              if (c.phone.isNotEmpty || c.email.isNotEmpty)
+                _recordAction(
+                  icon: Icons.copy_outlined,
+                  label: 'Copy',
+                  onPressed: () =>
+                      _copyText(c.phone.isNotEmpty ? c.phone : c.email),
+                ),
+            ],
+          ),
+        ],
       ),
     );
   }
 
   Widget _productRow(Product p) {
-    return ListTile(
-      title: Text('${p.name} (${p.modelCode})'),
-      subtitle: Text(
-        '${p.quotedPrice == null ? "No price" : "${p.quotedPrice} ${p.priceCurrency}"} | MOQ: ${p.moq ?? '-'} | Lead time: ${p.leadTime} | Score: ${_productShortlistScoreForValues(rating: p.rating, quotedPrice: p.quotedPrice, moq: p.moq, leadTime: p.leadTime).toStringAsFixed(2)}',
+    final commercialSummary = [
+      p.quotedPrice == null
+          ? 'No price'
+          : '${p.quotedPrice} ${p.priceCurrency}',
+      'MOQ ${p.moq ?? '-'}',
+      if (p.leadTime.isNotEmpty) p.leadTime,
+    ].join('  |  ');
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerLowest,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Theme.of(context).dividerColor),
       ),
-      trailing: Wrap(
-        spacing: 2,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          IconButton(
-            icon: Icon(
-              p.shortlisted ? Icons.star : Icons.star_border,
-              color: p.shortlisted ? Colors.amber : null,
-            ),
-            tooltip:
-                p.shortlisted ? 'Remove from shortlist' : 'Add to shortlist',
-            onPressed: () => _toggleProductShortlist(p),
-          ),
-          IconButton(
-              icon: const Icon(Icons.edit),
-              onPressed: () => _openEditProductSheet(p)),
-          IconButton(
-            icon: const Icon(Icons.request_quote),
-            tooltip: 'Add quote version',
-            onPressed: () => _openAddQuoteDialog(p),
-          ),
-          IconButton(
-            icon: const Icon(Icons.delete),
-            onPressed: () async {
-              final confirm = await showDialog<bool>(
-                context: context,
-                builder: (ctx) => AlertDialog(
-                  title: const Text('Delete product'),
-                  content: const Text('Do you want to remove this product?'),
-                  actions: [
-                    TextButton(
-                        onPressed: () => Navigator.pop(ctx, false),
-                        child: const Text('Cancel')),
-                    ElevatedButton(
-                        onPressed: () => Navigator.pop(ctx, true),
-                        child: const Text('Delete')),
-                  ],
+          Row(
+            children: [
+              const Icon(Icons.inventory_2_outlined, size: 18),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  p.name.isEmpty ? 'Unnamed product' : p.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.w700),
                 ),
-              );
-              if (confirm != true) return;
-              await db.delete('products', p.id!);
-              _load();
-            },
+              ),
+              if (p.shortlisted)
+                const Padding(
+                  padding: EdgeInsets.only(left: 6),
+                  child: Icon(Icons.star, size: 18, color: Colors.amber),
+                ),
+            ],
+          ),
+          if (p.modelCode.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              p.modelCode,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 12, color: AppColors.muted),
+            ),
+          ],
+          const SizedBox(height: 6),
+          Text(
+            commercialSummary,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 12, color: AppColors.muted),
+          ),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 2,
+            runSpacing: 2,
+            children: [
+              _recordAction(
+                icon: p.shortlisted ? Icons.star : Icons.star_border,
+                label: p.shortlisted ? 'Shortlisted' : 'Shortlist',
+                onPressed: () => _toggleProductShortlist(p),
+              ),
+              _recordAction(
+                icon: Icons.edit_outlined,
+                label: 'Edit',
+                onPressed: () => _openEditProductSheet(p),
+              ),
+              _recordAction(
+                icon: Icons.request_quote_outlined,
+                label: 'Quote',
+                onPressed: () => _openAddQuoteDialog(p),
+              ),
+              _recordAction(
+                icon: Icons.delete_outline,
+                label: 'Delete',
+                destructive: true,
+                onPressed: () async {
+                  final confirm = await showDialog<bool>(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      title: const Text('Delete product'),
+                      content: const Text('Do you want to remove this product?'),
+                      actions: [
+                        TextButton(
+                            onPressed: () => Navigator.pop(ctx, false),
+                            child: const Text('Cancel')),
+                        ElevatedButton(
+                            onPressed: () => Navigator.pop(ctx, true),
+                            child: const Text('Delete')),
+                      ],
+                    ),
+                  );
+                  if (confirm != true) return;
+                  await db.delete('products', p.id!);
+                  _load();
+                },
+              ),
+            ],
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _recordAction({
+    required IconData icon,
+    required String label,
+    required VoidCallback onPressed,
+    bool destructive = false,
+  }) {
+    final color = destructive ? Theme.of(context).colorScheme.error : null;
+    return TextButton.icon(
+      onPressed: onPressed,
+      icon: Icon(icon, size: 17, color: color),
+      label: Text(label, style: TextStyle(color: color)),
+      style: TextButton.styleFrom(
+        visualDensity: VisualDensity.compact,
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        minimumSize: const Size(0, 34),
       ),
     );
   }
