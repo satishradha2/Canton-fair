@@ -12,7 +12,9 @@ import 'card_crop_screen.dart';
 import 'supplier_profile_screen.dart';
 
 class OcrScreen extends StatefulWidget {
-  const OcrScreen({super.key});
+  const OcrScreen({super.key, this.supplierId, this.supplierName});
+  final int? supplierId;
+  final String? supplierName;
 
   @override
   State<OcrScreen> createState() => _OcrScreenState();
@@ -264,8 +266,8 @@ class _OcrScreenState extends State<OcrScreen> {
       setState(() => _error = 'Enter or confirm the company / supplier name.');
       return;
     }
-    final destination =
-        existing ? await chooseCardSupplier(context, allowCreate: false) : -1;
+    final destination = widget.supplierId ??
+        (existing ? await chooseCardSupplier(context, allowCreate: false) : -1);
     if (!mounted || destination == null) return;
     draft.supplierDestination = destination;
     setState(() {
@@ -467,8 +469,9 @@ class _OcrScreenState extends State<OcrScreen> {
                             FilledButton.icon(
                                 onPressed: _busy ? null : () => _useDetails(),
                                 icon: const Icon(Icons.add_business_outlined),
-                                label: const Text('Save new supplier')),
-                            OutlinedButton(
+                                label: Text(widget.supplierId == null
+                                    ? 'Save new supplier' : 'Review contact')),
+                            if (widget.supplierId == null) OutlinedButton(
                                 onPressed: _busy
                                     ? null
                                     : () => _useDetails(existing: true),
@@ -477,7 +480,7 @@ class _OcrScreenState extends State<OcrScreen> {
                     ]))),
         body: SafeArea(
             child: ListView(padding: const EdgeInsets.all(20), children: [
-          Text('Card to supplier',
+          Text(widget.supplierName ?? 'Card to supplier',
               style: Theme.of(context).textTheme.headlineSmall),
           const SizedBox(height: 8),
           Text('Scan. Review. Save.',

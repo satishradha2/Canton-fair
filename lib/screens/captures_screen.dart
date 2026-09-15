@@ -314,6 +314,7 @@ class _CapturesScreenState extends State<CapturesScreen> {
   }
 
   void _load() {
+    if (!mounted) return;
     setState(() {
       _visitQueues = _loadVisitQueues();
       _itinerary = _loadItinerary();
@@ -329,6 +330,8 @@ class _CapturesScreenState extends State<CapturesScreen> {
   }
 
   Future<void> _syncAfterSave() async {
+    // The shared snackbar can remain visible after this screen is disposed.
+    if (!mounted) return;
     try {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Syncing your cloud team...')),

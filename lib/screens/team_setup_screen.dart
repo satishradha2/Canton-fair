@@ -13,13 +13,13 @@ class _TeamSetupScreenState extends State<TeamSetupScreen> {
   final _workspace = TeamWorkspaceService();
   late Future<List<CloudTeam>> _teams = _api.teams();
   Future<void> _create() async {
-    final controller = TextEditingController();
+    var teamName = '';
     final name = await showDialog<String>(
         context: context,
         builder: (c) => AlertDialog(
                 title: const Text('Create team'),
                 content: TextField(
-                    controller: controller,
+                    onChanged: (value) => teamName = value,
                     autofocus: true,
                     decoration: const InputDecoration(labelText: 'Team name')),
                 actions: [
@@ -27,10 +27,10 @@ class _TeamSetupScreenState extends State<TeamSetupScreen> {
                       onPressed: () => Navigator.pop(c),
                       child: const Text('Cancel')),
                   ElevatedButton(
-                      onPressed: () => Navigator.pop(c, controller.text),
+                      onPressed: () => Navigator.pop(c, teamName),
                       child: const Text('Create'))
                 ]));
-    if (name?.trim().isEmpty ?? true) return;
+    if (!mounted || (name?.trim().isEmpty ?? true)) return;
     final team = await _api.createTeam(name!.trim());
     await _select(team);
   }
@@ -60,7 +60,7 @@ class _TeamSetupScreenState extends State<TeamSetupScreen> {
   }
 
   Future<void> _invite(CloudTeam team) async {
-    final email = TextEditingController();
+    var email = '';
     var role = 'member';
     final result = await showDialog<Map<String, String>>(
       context: context,
@@ -69,7 +69,7 @@ class _TeamSetupScreenState extends State<TeamSetupScreen> {
           title: Text('Add member to ${team.name}'),
           content: Column(mainAxisSize: MainAxisSize.min, children: [
             TextField(
-              controller: email,
+              onChanged: (value) => email = value,
               keyboardType: TextInputType.emailAddress,
               decoration: const InputDecoration(labelText: 'Registered email'),
             ),
@@ -90,15 +90,14 @@ class _TeamSetupScreenState extends State<TeamSetupScreen> {
                 child: const Text('Cancel')),
             ElevatedButton(
               onPressed: () =>
-                  Navigator.pop(context, {'email': email.text, 'role': role}),
+                  Navigator.pop(context, {'email': email.trim(), 'role': role}),
               child: const Text('Add member'),
             ),
           ],
         ),
       ),
     );
-    email.dispose();
-    if (result == null || result['email']!.trim().isEmpty) return;
+    if (!mounted || result == null || result['email']!.trim().isEmpty) return;
     try {
       await _api.inviteMember(team, result['email']!, result['role']!);
       if (mounted) {
@@ -116,7 +115,11 @@ class _TeamSetupScreenState extends State<TeamSetupScreen> {
   Future<void> _manageMembers(CloudTeam team) async {
     await Navigator.of(context).push(MaterialPageRoute(
         builder: (_) => TeamMembersScreen(team: team, api: _api)));
-    if (mounted) setState(() => _teams = _api.teams());
+    if (mounted) {
+      setState(() {
+        _teams = _api.teams();
+      });
+    }
   }
 
   @override
@@ -182,7 +185,12 @@ class TeamMembersScreen extends StatefulWidget {
 class _TeamMembersScreenState extends State<TeamMembersScreen> {
   late Future<List<CloudMember>> _members = widget.api.members(widget.team);
 
-  void _refresh() => setState(() => _members = widget.api.members(widget.team));
+  void _refresh() {
+    if (!mounted) return;
+    setState(() {
+      _members = widget.api.members(widget.team);
+    });
+  }
 
   Future<void> _changeRole(CloudMember member, String role) async {
     try {

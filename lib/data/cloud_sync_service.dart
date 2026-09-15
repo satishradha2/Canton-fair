@@ -10,6 +10,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'database.dart';
 import 'sync_status_service.dart';
 import 'team_workspace_service.dart';
+import 'field_work_sync_contract.dart';
 
 class SyncResult {
   final int uploaded;
@@ -62,7 +63,11 @@ class CloudSyncService {
   SupabaseClient get _client => Supabase.instance.client;
   static const _bucket = 'team-attachments';
   static const _deleted = <String, Object?>{'_deleted': true};
+  Map<String, String> _tables = {...TradeDatabase.syncTables};
+  bool get fieldWorkEnabled =>
+      _tables.containsKey('supplier_participation');
   static const _relations = <String, Map<String, String>>{
+    ...FieldWorkSyncContract.relations,
     'sourcing_brief': {'trip_id': 'trip'},
     'supplier': {'trip_id': 'trip'},
     'contact': {'exhibitor_id': 'supplier'},
@@ -112,23 +117,24 @@ class CloudSyncService {
     final remote = <String, List<Map<String, dynamic>>>{};
     // Read every page, including tombstones. Capture before writes so a
     // subsequent concurrent server change cannot masquerade as our baseline.
-    for (final type in TradeDatabase.syncTables.keys) {
+    for (final type in _tables.keys) {
       remote[type] = await _records(team.id, type);
     }
     if (role != 'viewer') {
       // Allocate stable IDs before network writes so retries do not duplicate
       // records if a request succeeds but its response is lost.
-      for (final entry in TradeDatabase.syncTables.entries) {
-        for (final row in await db.query(entry.value)) {
+      for (final entry in _tables.entries) {
+        for (final row in await _rows(db, entry.key)) {
           final id = row['id'] as int;
           if (await _link(db, entry.key, id: id) == null) {
-            await _saveLink(db, entry.key, id, _newRecordId(), 0, '');
+            await _saveLink(db, entry.key, id,
+                await _recordId(db, entry.key, row), 0, '');
           }
         }
       }
       final deferredProducts = <Map<String, Object?>>[];
-      for (final entry in TradeDatabase.syncTables.entries) {
-        for (final row in await db.query(entry.value)) {
+      for (final entry in _tables.entries) {
+        for (final row in await _rows(db, entry.key)) {
           await _assertScope(scope);
           final link = await _link(db, entry.key, id: row['id'] as int);
           if (link == null ||
@@ -156,7 +162,7 @@ class CloudSyncService {
       }
       // Child deletions precede parent deletions; the server refuses dangling
       // references, including children added by another device.
-      for (final type in TradeDatabase.syncTables.keys.toList().reversed) {
+      for (final type in _tables.keys.toList().reversed) {
         for (final deletion in await db.query('sync_deletions',
             where: 'record_type = ?', whereArgs: [type])) {
           if (await _hasConflict(db, type, deletion['record_id'] as String)) {
@@ -184,7 +190,7 @@ class CloudSyncService {
         }
       }
     }
-    for (final entry in TradeDatabase.syncTables.entries) {
+    for (final entry in _tables.entries) {
       for (final record in remote[entry.key]!) {
         await _assertScope(scope);
         final id = record['record_id'] as String;
@@ -211,6 +217,7 @@ class CloudSyncService {
   }
 
   Future<TeamWorkspace> _requireTeam() async {
+    _tables = {...TradeDatabase.syncTables};
     final team = await _workspace.load();
     if (team == null) {
       throw StateError(
@@ -227,7 +234,58 @@ class CloudSyncService {
       throw StateError(
           'Apply Supabase migration 010_sync_safety.sql before syncing.');
     }
+    try {
+      final capability =
+          await _client.rpc(FieldWorkSyncContract.capabilityRpc);
+      if (capability == FieldWorkSyncContract.version) {
+        _tables.addAll(FieldWorkSyncContract.tables);
+      } else {
+        throw StateError('Unsupported field-work sync version. Upgrade the app.');
+      }
+    } on PostgrestException catch (error) {
+      // Only an absent capability is compatible with a pre-migration server.
+      // Authorization and network failures must remain visible.
+      if (error.code != 'PGRST202' && error.code != '42883') rethrow;
+    }
     return team;
+  }
+
+  Future<List<Map<String, Object?>>> _rows(
+      DatabaseExecutor db, String type) async {
+    final rows = await db.query(_tables[type]!);
+    final key = FieldWorkSyncContract.primaryKey(type);
+    return [for (final row in rows) {...row, 'id': row[key]}];
+  }
+
+  Future<String> _recordId(DatabaseExecutor db, String type,
+      Map<String, Object?> row) async {
+    Future<String> parent(String parentType, String key) async {
+      final link = await _link(db, parentType, id: row[key] as int);
+      if (link == null) throw StateError('Missing $parentType sync identity.');
+      return link['record_id'] as String;
+    }
+
+    final List<Object?> identity;
+    switch (type) {
+      case 'product_category':
+        identity = [type, row['normalized_name']];
+        break;
+      case 'supplier_participation':
+        identity = [type, await parent('supplier', 'exhibitor_id'),
+          await parent('trip', 'trip_id')];
+        break;
+      case 'exhibitor_booth':
+        identity = [type,
+          await parent('supplier_participation', 'participation_id'),
+          row['hall'], row['zone'], row['booth']];
+        break;
+      case 'product_category_assignment':
+        identity = [type, await parent('product', 'product_id')];
+        break;
+      default:
+        return _newRecordId();
+    }
+    return sha256.convert(utf8.encode(jsonEncode(identity))).toString();
   }
 
   Future<void> _assertScope(String scope) async {
@@ -287,8 +345,9 @@ class CloudSyncService {
 
   Future<Map<String, Object?>> _localPayload(
       Database db, String type, Map<String, dynamic> link, String team) async {
-    final rows = await db.query(TradeDatabase.syncTables[type]!,
-        where: 'id = ?', whereArgs: [link['local_id']]);
+    final rows = await db.query(_tables[type]!,
+        where: '${FieldWorkSyncContract.primaryKey(type)} = ?',
+        whereArgs: [link['local_id']]);
     if (rows.isEmpty) return Map<String, Object?>.from(_deleted);
     return _toCloud(db, type, rows.first, team, link['record_id'] as String);
   }
@@ -343,7 +402,9 @@ class CloudSyncService {
       // Never interpret a legacy device-local foreign key as this device's ID.
       payload.remove(entry.key);
       final foreignId = payload.remove('${entry.value}_record_id');
-      final requiredParent = (entry.key == 'exhibitor_id' &&
+      final requiredParent = (FieldWorkSyncContract.tables.containsKey(type) &&
+              !FieldWorkSyncContract.optionalRelation(type, entry.key)) ||
+          (entry.key == 'exhibitor_id' &&
               type != 'expense' &&
               type != 'workflow_item') ||
           (type == 'supplier' && entry.key == 'trip_id') ||
@@ -357,7 +418,7 @@ class CloudSyncService {
         if (link == null) {
           throw StateError('Download the parent before resolving $type.');
         }
-        final parent = await db.query(TradeDatabase.syncTables[entry.value]!,
+        final parent = await db.query(_tables[entry.value]!,
             where: 'id = ?', whereArgs: [link['local_id']]);
         if (parent.isEmpty) {
           throw StateError('The parent of $type was deleted.');
@@ -511,7 +572,8 @@ class CloudSyncService {
     final source = Map<String, Object?>.from(record['payload'] as Map);
     final recordId = record['record_id'] as String;
     final link = await _link(db, type, recordId: recordId);
-    final table = TradeDatabase.syncTables[type]!;
+    final table = _tables[type]!;
+    final primaryKey = FieldWorkSyncContract.primaryKey(type);
     final payload = source['_deleted'] == true
         ? null
         : await _fromCloud(db, team, type, source);
@@ -519,17 +581,18 @@ class CloudSyncService {
       int? localId = link?['local_id'] as int?;
       if (payload == null) {
         if (localId == null) return; // Unknown tombstone needs no local row.
-        await txn.delete(table, where: 'id = ?', whereArgs: [localId]);
+        await txn.delete(table, where: '$primaryKey = ?', whereArgs: [localId]);
       } else if (localId == null) {
-        localId = await txn.insert(table, payload);
+        final inserted = await txn.insert(table, payload);
+        localId = primaryKey == 'id' ? inserted : payload[primaryKey] as int;
       } else {
         final rows =
-            await txn.query(table, where: 'id = ?', whereArgs: [localId]);
+            await txn.query(table, where: '$primaryKey = ?', whereArgs: [localId]);
         if (rows.isEmpty) {
-          await txn.insert(table, {...payload, 'id': localId});
+          await txn.insert(table, {...payload, primaryKey: localId});
         } else {
           await txn
-              .update(table, payload, where: 'id = ?', whereArgs: [localId]);
+              .update(table, payload, where: '$primaryKey = ?', whereArgs: [localId]);
         }
       }
       await _saveLink(txn, type, localId, recordId, record['version'] as int,
@@ -553,6 +616,9 @@ class CloudSyncService {
         final team = await _requireTeam();
         if (team.id != conflict.teamId) {
           throw StateError('This conflict belongs to another team.');
+        }
+        if (!_tables.containsKey(conflict.recordType)) {
+          throw StateError('Apply migration 018 before resolving field-work conflicts.');
         }
         final scope = await _workspace.scopeKey();
         final db = await _db.database;

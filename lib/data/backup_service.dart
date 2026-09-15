@@ -13,6 +13,14 @@ import 'team_workspace_service.dart';
 class BackupService {
   static const _backupChannel = MethodChannel('canton_fair_crm/backup');
   static const _maxBytes = 256 * 1024 * 1024;
+  static const _fieldWorkTables = {
+    'product_categories',
+    'supplier_participations',
+    'exhibitor_booths',
+    'visit_plans',
+    'visit_sessions',
+    'product_category_assignments',
+  };
   final TradeDatabase _database;
   BackupService({TradeDatabase? database})
       : _database = database ?? TradeDatabase.instance;
@@ -42,7 +50,7 @@ class BackupService {
     }
     final payload = {
       'format': 'canton-fair-crm-backup',
-      'version': 3,
+      'version': 4,
       'created_at': DateTime.now().toUtc().toIso8601String(),
       'tables': tables,
       'files': files,
@@ -223,7 +231,7 @@ class BackupService {
     final decoded = jsonDecode(content);
     if (decoded is! Map ||
         decoded['format'] != 'canton-fair-crm-backup' ||
-        ![1, 2, 3].contains(decoded['version']) ||
+        ![1, 2, 3, 4].contains(decoded['version']) ||
         decoded['tables'] is! Map) {
       throw const FormatException('Unsupported Canton Fair CRM backup.');
     }
@@ -232,7 +240,10 @@ class BackupService {
     final tables = <String, List<Map<String, dynamic>>>{};
     for (final table in TradeDatabase.backupTables) {
       if (!rawTables.containsKey(table)) {
-        if (version == 3) throw FormatException('Missing $table section.');
+        if (version == 4 ||
+            (version == 3 && !_fieldWorkTables.contains(table))) {
+          throw FormatException('Missing $table section.');
+        }
         continue;
       }
       final rows = rawTables[table];
@@ -270,7 +281,11 @@ class BackupService {
   void _validateRelations(Map<String, List<Map<String, dynamic>>> tables) {
     final ids = <String, Set<int>>{};
     for (final entry in tables.entries) {
-      final key = entry.key == 'trip_closeouts' ? 'trip_id' : 'id';
+      final key = switch (entry.key) {
+        'trip_closeouts' => 'trip_id',
+        'product_category_assignments' => 'product_id',
+        _ => 'id',
+      };
       final set = <int>{};
       for (final row in entry.value) {
         final id = row[key];
@@ -304,6 +319,38 @@ class BackupService {
     require('rfqs', 'trip_id', 'trips', nullable: true);
     require('expenses', 'trip_id', 'trips', nullable: true);
     require('expenses', 'exhibitor_id', 'exhibitors', nullable: true);
+    require('supplier_participations', 'exhibitor_id', 'exhibitors');
+    require('supplier_participations', 'trip_id', 'trips');
+    require('exhibitor_booths', 'participation_id', 'supplier_participations');
+    require('visit_plans', 'booth_id', 'exhibitor_booths');
+    require('visit_sessions', 'participation_id', 'supplier_participations');
+    require('visit_sessions', 'booth_id', 'exhibitor_booths', nullable: true);
+    require('visit_sessions', 'plan_id', 'visit_plans', nullable: true);
+    require('product_category_assignments', 'product_id', 'products');
+    require('product_category_assignments', 'category_id', 'product_categories');
+
+    final booths = {
+      for (final row in tables['exhibitor_booths']!) row['id']: row,
+    };
+    final plans = {
+      for (final row in tables['visit_plans']!) row['id']: row,
+    };
+    for (final session in tables['visit_sessions']!) {
+      final boothId = session['booth_id'];
+      final planId = session['plan_id'];
+      if (boothId != null &&
+          booths[boothId]!['participation_id'] != session['participation_id']) {
+        throw const FormatException('Visit booth belongs to another exhibitor participation.');
+      }
+      if (planId != null) {
+        final planBoothId = plans[planId]!['booth_id'];
+        if (booths[planBoothId]!['participation_id'] !=
+                session['participation_id'] ||
+            (boothId != null && planBoothId != boothId)) {
+          throw const FormatException('Visit plan does not match the visit participation or booth.');
+        }
+      }
+    }
     for (final row in tables['attachments']!) {
       final table = {
         'exhibitor': 'exhibitors',

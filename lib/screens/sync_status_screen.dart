@@ -17,10 +17,13 @@ class _SyncStatusScreenState extends State<SyncStatusScreen> {
   late Future<List<CloudConflict>> _conflicts = _sync.conflicts();
   bool _syncing = false;
 
-  void _refresh() => setState(() {
-        _current = _status.load();
-        _conflicts = _sync.conflicts();
-      });
+  void _refresh() {
+    if (!mounted) return;
+    setState(() {
+      _current = _status.load();
+      _conflicts = _sync.conflicts();
+    });
+  }
 
   Future<void> _keepLocal(CloudConflict conflict) async {
     try {

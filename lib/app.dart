@@ -20,6 +20,7 @@ import 'screens/activity_feed_screen.dart';
 import 'screens/sourcing_briefs_screen.dart';
 import 'screens/procurement_workspace_screen.dart';
 import 'screens/field_operations_screen.dart';
+import 'screens/field_work_screen.dart';
 import 'screens/advanced_operations_screen.dart';
 import 'screens/intelligence_logistics_screen.dart';
 import 'screens/supplier_detail_screen.dart';
@@ -275,6 +276,13 @@ class _CantonFairAppState extends State<CantonFairApp>
           ]),
           const SizedBox(height: 28),
           _toolGroup('SOURCE & FOLLOW UP', [
+            (
+              'Field visits',
+              'Choose a hall, visit exhibitors and categorize products',
+              Icons.route_outlined,
+              () => Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => const FieldWorkScreen()))
+            ),
             (
               'Suppliers',
               'Contacts, products, files and booth visits',

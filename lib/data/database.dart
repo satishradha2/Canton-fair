@@ -6,6 +6,7 @@ import 'dart:io';
 import '../models/models.dart';
 import 'team_workspace_service.dart';
 import 'approval_policy.dart';
+import 'field_work_schema.dart';
 
 class TradeDatabase {
   static final TradeDatabase instance = TradeDatabase._();
@@ -30,7 +31,7 @@ class TradeDatabase {
     final path = join(dbPath, name);
     return openDatabase(
       path,
-      version: 24,
+      version: 26,
       onCreate: (db, version) async {
         await db.execute('''
         CREATE TABLE trips(
@@ -178,6 +179,7 @@ class TradeDatabase {
         await _createFieldOperationsTables(db);
         await _createWorkflowToolsTable(db);
         await _createSafetyTables(db);
+        await FieldWorkSchema.create(db);
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -304,6 +306,9 @@ class TradeDatabase {
           await _createWorkflowToolsTable(db);
           await _createSafetyTables(db);
         }
+        if (oldVersion < 26) {
+          await FieldWorkSchema.create(db);
+        }
       },
     );
   }
@@ -346,6 +351,12 @@ class TradeDatabase {
     'recycle_bin',
     'record_versions',
     'workflow_items',
+    'product_categories',
+    'supplier_participations',
+    'exhibitor_booths',
+    'visit_plans',
+    'visit_sessions',
+    'product_category_assignments',
   ];
 
   Future<void> _createWorkflowToolsTable(DatabaseExecutor db) async {

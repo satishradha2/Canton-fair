@@ -4,6 +4,7 @@ import '../data/business_card_capture.dart';
 import '../data/database.dart';
 import '../data/supplier_profile.dart';
 import '../data/team_workspace_service.dart';
+import '../data/approval_policy.dart';
 import '../models/models.dart';
 
 class SupplierProfileScreen extends StatefulWidget {
@@ -12,11 +13,17 @@ class SupplierProfileScreen extends StatefulWidget {
       required this.supplierId,
       this.contactId,
       this.card,
-      this.createContact = false});
+      this.createContact = false,
+      this.contactOnly = false,
+      this.expectedScope,
+      this.initialContactFields = const {}});
   final int supplierId;
   final int? contactId;
   final BusinessCardCapture? card;
   final bool createContact;
+  final bool contactOnly;
+  final String? expectedScope;
+  final Map<String, String> initialContactFields;
   @override
   State<SupplierProfileScreen> createState() => _SupplierProfileScreenState();
 }
@@ -48,7 +55,8 @@ class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
   void _setFields(Map<String, String> values) {
     for (final entry in values.entries) {
       _baseline[entry.key] = entry.value;
-      final incoming = widget.card?.fields[entry.key] ?? '';
+      final incoming = widget.contactOnly && SupplierProfile.companyFields.containsKey(entry.key)
+          ? '' : widget.card?.fields[entry.key] ?? widget.initialContactFields[entry.key] ?? '';
       final fill = entry.value.isEmpty && incoming.isNotEmpty;
       if (fill) {
         _selected.add(entry.key);
@@ -62,6 +70,9 @@ class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
   Future<void> _load() async {
     try {
       _scope = await TeamWorkspaceService().scopeKey();
+      if (widget.expectedScope != null && widget.expectedScope != _scope) {
+        throw StateError('Workspace changed. Reopen field visits.');
+      }
       final supplier =
           await TradeDatabase.instance.getExhibitorById(widget.supplierId);
       final contacts =
@@ -188,6 +199,7 @@ class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
       _error = null;
     });
     try {
+      if (widget.contactOnly) await ApprovalPolicy.requireWriter();
       final saved = await SupplierProfile.save(
           original: _supplier!,
           scope: _scope!,
@@ -208,7 +220,7 @@ class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
   }
 
   Widget _field(MapEntry<String, String> entry) {
-    final incoming = widget.card?.fields[entry.key] ?? '';
+    final incoming = widget.card?.fields[entry.key] ?? widget.initialContactFields[entry.key] ?? '';
     return Padding(
         padding: const EdgeInsets.only(bottom: 16),
         child: Column(children: [
@@ -270,7 +282,7 @@ class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
       canPop: !_busy,
       child: Scaffold(
         appBar: AppBar(
-            title: Text(widget.card == null
+            title: Text(widget.contactOnly ? 'Contact details' : widget.card == null
                 ? 'Supplier details'
                 : 'Apply card to supplier')),
         body: SafeArea(
@@ -287,10 +299,13 @@ class _SupplierProfileScreenState extends State<SupplierProfileScreen> {
               const Text(
                   'Blank fields are prefilled. Existing values stay unchanged unless you select or edit a replacement. Review all changes before saving.'),
             const SizedBox(height: 20),
+            if (!widget.contactOnly) ...[
             Text('Company information',
                 style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 16),
             ...SupplierProfile.companyFields.entries.map(_field),
+            ],
+            if (!widget.contactOnly)
             SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 title: const Text('Save contact details'),
