@@ -12,6 +12,8 @@ import 'sync_status_service.dart';
 import 'team_workspace_service.dart';
 import 'field_work_sync_contract.dart';
 
+import 'legacy_participation_reconciliation.dart';
+
 class SyncResult {
   final int uploaded;
   final int downloaded;
@@ -137,12 +139,33 @@ class CloudSyncService {
         for (final row in await _rows(db, entry.key)) {
           await _assertScope(scope);
           final link = await _link(db, entry.key, id: row['id'] as int);
-          if (link == null ||
-              await _hasConflict(db, entry.key, link['record_id'] as String)) {
-            continue;
-          }
+          if (link == null) continue;
           final payload = await _toCloud(
               db, entry.key, row, team.id, link['record_id'] as String);
+          // An older client downloads suppliers before the field-work upgrade.
+          // Migration then creates a legacy participation with a device-specific
+          // timestamp. Adopt the existing cloud row only for untouched seeds.
+          Map<String, dynamic>? legacyMatch;
+          if (entry.key == 'supplier_participation') {
+            for (final record in remote[entry.key]!) {
+              if (record['record_id'] == link['record_id'] &&
+                  isLegacyParticipationSeed(link, payload, record['payload'])) {
+                legacyMatch = record;
+                break;
+              }
+            }
+          }
+          if (legacyMatch != null) {
+            await _apply(db, team.id, entry.key, legacyMatch);
+            await db.delete('cloud_sync_conflicts',
+                where: 'team_id = ? AND record_type = ? AND record_id = ?',
+                whereArgs: [team.id, entry.key, link['record_id']]);
+            downloaded++;
+            continue;
+          }
+          if (await _hasConflict(db, entry.key, link['record_id'] as String)) {
+            continue;
+          }
           if (_hash(payload) == link['content_hash']) continue;
           if (entry.key == 'product') {
             final plan =
