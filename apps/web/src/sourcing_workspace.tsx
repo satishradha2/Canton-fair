@@ -55,7 +55,7 @@ export function SourcingWorkspace({
   );
 
   if (mode === 'suppliers') return <section className="sourcing-module">
-    <div className="module-toolbar"><div><strong>{visibleSuppliers.length} suppliers</strong><span> Filter by hall, then open a supplier to review its synchronized record.</span></div><select value={filter} onChange={(event) => setFilter(event.target.value)}><option value="">All halls</option>{halls.map((hall) => <option key={hall}>{hall}</option>)}</select></div>
+    <div className="module-toolbar"><div><strong>{visibleSuppliers.length} suppliers</strong><span> Filter by hall, then open a supplier to review the complete master record.</span></div><select value={filter} onChange={(event) => setFilter(event.target.value)}><option value="">All halls</option>{halls.map((hall) => <option key={hall}>{hall}</option>)}</select></div>
     <div className="sourcing-grid supplier-grid"><div className="grid-head"><span>Supplier</span><span>Location</span><span>Category</span><span>Contact</span><span /></div>{visibleSuppliers.map((record) => <button className="grid-row" key={record.record_id} onClick={() => onOpen(record)}><span><strong>{text(record, ['name', 'supplier_name', 'company_name']) || 'Unnamed supplier'}</strong><small>{text(record, ['legal_company_name', 'country']) || 'Supplier profile'}</small></span><span>{[text(record, ['hall', 'hall_number']), text(record, ['booth'])].filter(Boolean).join(' / ') || 'Not recorded'}</span><span>{text(record, ['category', 'industry']) || 'Unclassified'}</span><span>{text(record, ['contact_name', 'email', 'phone']) || 'No contact captured'}</span><span>Open ›</span></button>)}{visibleSuppliers.length === 0 && <Empty label="No suppliers match this hall or search." />}</div>
   </section>;
 

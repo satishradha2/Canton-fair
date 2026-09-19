@@ -28,7 +28,6 @@ import '../widgets/field_capture_checklist.dart';
 import '../widgets/voice_note_field.dart';
 import 'scanner_screen.dart';
 import 'ocr_screen.dart';
-import 'supplier_detail_screen.dart';
 import 'supplier_profile_screen.dart';
 import 'photo_annotation_screen.dart';
 import 'hall_route_screen.dart';
@@ -889,10 +888,9 @@ class _CapturesScreenState extends State<CapturesScreen> {
               SupplierProfileScreen(supplierId: destination, card: card),
         ));
         if (!mounted || saved == null) return;
+        _query = saved.name;
+        _queryController.text = saved.name;
         _load();
-        await Navigator.of(context).push<void>(MaterialPageRoute(
-          builder: (_) => SupplierDetailScreen(supplier: saved),
-        ));
       }
     } catch (_) {
       if (mounted) {
@@ -1563,6 +1561,8 @@ class _CapturesScreenState extends State<CapturesScreen> {
     );
   }
 
+  // Retained for existing local records; duplicate administration is web-only.
+  // ignore: unused_element
   Future<void> _openMergeDuplicateDialog(Exhibitor source) async {
     final candidates = await _getDuplicateCandidates(source);
     if (!mounted) return;
@@ -1938,6 +1938,8 @@ class _CapturesScreenState extends State<CapturesScreen> {
     );
   }
 
+  // Retained for existing local records; follow-up management is web-only.
+  // ignore: unused_element
   Future<void> _openMeetingSheet(int exhibitorId) async {
     final formKey = GlobalKey<FormState>();
     DateTime meeting = DateTime.now();
@@ -2757,11 +2759,6 @@ class _CapturesScreenState extends State<CapturesScreen> {
                 onPressed: () => _openEditProductSheet(p),
               ),
               _recordAction(
-                icon: Icons.request_quote_outlined,
-                label: 'Quote',
-                onPressed: () => _openAddQuoteDialog(p),
-              ),
-              _recordAction(
                 icon: Icons.delete_outline,
                 label: 'Delete',
                 destructive: true,
@@ -2813,6 +2810,8 @@ class _CapturesScreenState extends State<CapturesScreen> {
     );
   }
 
+  // Retained for existing local records; scorecard review is web-only.
+  // ignore: unused_element
   Future<void> _openSupplierScorecard(Exhibitor exhibitor) async {
     var quality = exhibitor.qualityScore;
     var responseSpeed = exhibitor.responseSpeedScore;
@@ -3154,6 +3153,8 @@ class _CapturesScreenState extends State<CapturesScreen> {
         .isBefore(DateTime.now().add(const Duration(days: 8)));
   }
 
+  // Retained for existing local records; quotation history is web-only.
+  // ignore: unused_element
   Widget _quoteHistory(Product product) {
     return FutureBuilder<List<Quote>>(
       future: db.getQuotes(product.id!),
@@ -3274,37 +3275,28 @@ class _CapturesScreenState extends State<CapturesScreen> {
           await _openAddContactSheet(e.id!);
         } else if (value == 'product') {
           await _openAddProductSheet(e.id!);
-        } else if (value == 'meeting') {
-          await _openMeetingSheet(e.id!);
         } else if (value == 'attachment') {
           await _openAttachmentPicker(ownerId: e.id!, ownerType: 'exhibitor');
         } else if (value == 'edit') {
           await _openEditExhibitorSheet(e);
-        } else if (value == 'scorecard') {
-          await _openSupplierScorecard(e);
         } else if (value == 'visited') {
           await _setVisited(e, true);
         } else if (value == 'needVisit') {
           await _setVisited(e, false);
         } else if (value == 'scheduleVisit') {
           await _openScheduleVisitDialog(e);
-        } else if (value == 'merge') {
-          await _openMergeDuplicateDialog(e);
         } else if (value == 'delete') {
           await _openDeleteExhibitorDialog(e);
         }
       },
       itemBuilder: (_) => const [
         PopupMenuItem(value: 'edit', child: Text('Edit supplier')),
-        PopupMenuItem(value: 'scorecard', child: Text('Supplier scorecard')),
         PopupMenuItem(value: 'visited', child: Text('Mark visited now')),
         PopupMenuItem(value: 'needVisit', child: Text('Move to need-to-visit')),
         PopupMenuItem(value: 'scheduleVisit', child: Text('Schedule visit')),
-        PopupMenuItem(value: 'merge', child: Text('Merge duplicate')),
         PopupMenuItem(value: 'delete', child: Text('Delete supplier')),
         PopupMenuItem(value: 'contact', child: Text('Add contact')),
         PopupMenuItem(value: 'product', child: Text('Add product')),
-        PopupMenuItem(value: 'meeting', child: Text('Add meeting')),
         PopupMenuItem(value: 'attachment', child: Text('Add attachment')),
       ],
     );
@@ -3542,7 +3534,7 @@ class _CapturesScreenState extends State<CapturesScreen> {
               child: EnterprisePage(
                 title: tr(context, 'supplierCapture'),
                 subtitle:
-                    'Create trips, capture supplier details, scan badges, and manage booth follow-through.',
+                    'Capture suppliers in the field. Expand a supplier card to view contacts, products, visits, photos, and notes together.',
                 actions: [
                   ElevatedButton.icon(
                       onPressed: _openAddExhibitorSheet,
@@ -3830,17 +3822,7 @@ class _CapturesScreenState extends State<CapturesScreen> {
               ],
             ),
           ),
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              IconButton(
-                tooltip: 'Add follow-up',
-                icon: const Icon(Icons.event_note_outlined),
-                onPressed: () => _openMeetingSheet(e.id!),
-              ),
-              _exhibitorActions(e),
-            ],
-          ),
+          trailing: _exhibitorActions(e),
           children: [
             FutureBuilder<List<Contact>>(
               future: db.getContacts(e.id!),
@@ -3882,11 +3864,6 @@ class _CapturesScreenState extends State<CapturesScreen> {
               spacing: 4,
               runSpacing: 4,
               children: [
-                TextButton.icon(
-                  onPressed: () => _openMeetingSheet(e.id!),
-                  icon: const Icon(Icons.event_note_outlined, size: 18),
-                  label: const Text('Follow-up'),
-                ),
                 TextButton.icon(
                   onPressed: () => _openAddProductSheet(e.id!),
                   icon: const Icon(Icons.inventory_2_outlined, size: 18),
@@ -3949,7 +3926,6 @@ class _CapturesScreenState extends State<CapturesScreen> {
                   children: pSnap.data!.expand((p) {
                     return [
                       _productRow(p),
-                      _quoteHistory(p),
                       Padding(
                         padding: const EdgeInsets.only(left: 8),
                         child: _attachmentSection('product', p.id ?? 0),
@@ -3980,17 +3956,8 @@ class _CapturesScreenState extends State<CapturesScreen> {
                 orElse: () => null,
               );
           return Semantics(
-            button: true,
-            label: 'Open ${supplier.name}',
-            child: InkWell(
-              borderRadius: BorderRadius.circular(8),
-              onTap: () async {
-                await Navigator.of(context).push(MaterialPageRoute(
-                  builder: (_) => SupplierDetailScreen(supplier: supplier),
-                ));
-                if (mounted) _load();
-              },
-              child: Ink(
+            label: '${supplier.name} supplier image',
+            child: Ink(
                 width: 44,
                 height: 44,
                 decoration: BoxDecoration(
@@ -4004,7 +3971,6 @@ class _CapturesScreenState extends State<CapturesScreen> {
                         child: Image.file(File(image.path), fit: BoxFit.cover),
                       ),
               ),
-            ),
           );
         },
       );

@@ -6,24 +6,11 @@ import 'data/language_service.dart';
 import 'data/sync_status_service.dart';
 import 'data/database.dart';
 import 'data/auto_sync_service.dart';
-import 'data/reminder_service.dart';
 import 'models/models.dart';
-import 'screens/dashboard_screen.dart';
 import 'screens/captures_screen.dart';
-import 'screens/shortlist_screen.dart';
-import 'screens/followup_screen.dart';
-import 'screens/analytics_screen.dart';
-import 'screens/export_screen.dart';
-import 'screens/settings_screen.dart';
 import 'screens/account_profile_screen.dart';
-import 'screens/activity_feed_screen.dart';
-import 'screens/sourcing_briefs_screen.dart';
-import 'screens/procurement_workspace_screen.dart';
-import 'screens/field_operations_screen.dart';
-import 'screens/field_work_screen.dart';
-import 'screens/advanced_operations_screen.dart';
-import 'screens/intelligence_logistics_screen.dart';
 import 'screens/supplier_detail_screen.dart';
+import 'screens/sync_status_screen.dart';
 import 'widgets/enterprise_widgets.dart';
 import 'theme/app_theme.dart';
 
@@ -46,23 +33,7 @@ class _CantonFairAppState extends State<CantonFairApp>
       ValueNotifier(null);
 
   late final _screens = [
-    DashboardScreen(
-      onCapture: () => _openCapture(CaptureQuickAction.manual),
-      onScanQr: () => _openCapture(CaptureQuickAction.qr),
-      onScanCard: () => _openCapture(CaptureQuickAction.card),
-      onSync: () => setState(() => _index = 6),
-      onFollowUps: () => setState(() => _index = 3),
-    ),
     CapturesScreen(quickAction: _captureQuickAction),
-    ShortlistScreen(),
-    FollowUpScreen(),
-    AnalyticsScreen(),
-    ExportScreen(),
-    SettingsScreen(
-      onLanguageChanged: _changeLanguage,
-    ),
-    const ActivityFeedScreen(),
-    const SourcingBriefsScreen(),
   ];
 
   @override
@@ -71,7 +42,6 @@ class _CantonFairAppState extends State<CantonFairApp>
     WidgetsBinding.instance.addObserver(this);
     _loadLanguage();
     AutoSyncService.instance.start();
-    ReminderService.selectedPayload.addListener(_openReminderPayload);
     WidgetsBinding.instance
         .addPostFrameCallback((_) => _checkForStartupUpdate());
     WidgetsBinding.instance.addPostFrameCallback((_) => _takeQuickAction());
@@ -98,25 +68,12 @@ class _CantonFairAppState extends State<CantonFairApp>
     if (mounted) setState(() => _language = language);
   }
 
-  Future<void> _changeLanguage(String language) async {
-    await _languageService.save(language);
-    if (mounted) setState(() => _language = language);
-  }
-
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _captureQuickAction.dispose();
     AutoSyncService.instance.stop();
-    ReminderService.selectedPayload.removeListener(_openReminderPayload);
     super.dispose();
-  }
-
-  void _openReminderPayload() {
-    final payload = ReminderService.selectedPayload.value;
-    if (payload == null || !payload.startsWith('followup:')) return;
-    ReminderService.selectedPayload.value = null;
-    if (mounted) setState(() => _index = 3);
   }
 
   @override
@@ -125,7 +82,7 @@ class _CantonFairAppState extends State<CantonFairApp>
   }
 
   void _openCapture(CaptureQuickAction action) {
-    setState(() => _index = 1);
+    setState(() => _index = 0);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _captureQuickAction.value = action;
     });
@@ -225,39 +182,26 @@ class _CantonFairAppState extends State<CantonFairApp>
     }
   }
 
-  static const _destinations = [0, 1, 2, 3, 9];
-  static const _labelKeys = [
-    'today',
-    'suppliers',
-    'shortlist',
-    'tasks',
-    'workspace'
-  ];
+  static const _destinations = [0, 1];
   static const _icons = [
-    Icons.dashboard_outlined,
     Icons.storefront_outlined,
-    Icons.star_border_rounded,
-    Icons.checklist_rounded,
-    Icons.grid_view_rounded,
+    Icons.person_outline,
   ];
   static const _selectedIcons = [
-    Icons.dashboard_rounded,
     Icons.storefront_rounded,
-    Icons.star_rounded,
-    Icons.checklist_rounded,
-    Icons.grid_view_rounded,
+    Icons.person,
   ];
 
-  int get _navigationIndex => _index <= 3 ? _index : 4;
+  int get _navigationIndex => _index;
   List<String> _labels(BuildContext context) =>
-      _labelKeys.map((key) => tr(context, key)).toList();
+      const ['Field capture', 'Account'];
   void _selectDestination(int index) =>
       setState(() => _index = _destinations[index]);
 
-  Widget _workspaceHub() => EnterprisePage(
-        title: 'Workspace',
+  Widget _fieldAccountHub() => EnterprisePage(
+        title: 'Account & sync',
         subtitle:
-            'Your sourcing tools, team records, and workspace controls. Choose a task to continue.',
+            'Manage your signed-in account and keep field captures shared with your team.',
         children: [
           _toolGroup('MY ACCOUNT', [
             (
@@ -275,86 +219,13 @@ class _CantonFairAppState extends State<CantonFairApp>
             ),
           ]),
           const SizedBox(height: 28),
-          _toolGroup('SOURCE & FOLLOW UP', [
+          _toolGroup('TEAM SYNC', [
             (
-              'Field visits',
-              'Choose a hall, visit exhibitors and categorize products',
-              Icons.route_outlined,
+              'Sync status',
+              'Review and synchronize your team field captures',
+              Icons.sync,
               () => Navigator.of(context).push(MaterialPageRoute(
-                  builder: (_) => const FieldWorkScreen()))
-            ),
-            (
-              'Suppliers',
-              'Contacts, products, files and booth visits',
-              Icons.storefront_outlined,
-              () => setState(() => _index = 1)
-            ),
-            (
-              'Sourcing briefs',
-              'Define requirements for your next purchase',
-              Icons.assignment_outlined,
-              () => setState(() => _index = 8)
-            ),
-            (
-              'Tasks & follow-ups',
-              'Meetings, reminders and next actions',
-              Icons.checklist_rounded,
-              () => setState(() => _index = 3)
-            ),
-            (
-              'Procurement',
-              'Review quotes, costs and purchase decisions',
-              Icons.account_tree_outlined,
-              () => Navigator.of(context).push(MaterialPageRoute(
-                  builder: (_) => const ProcurementWorkspaceScreen()))
-            ),
-            (
-              'Field operations',
-              'Meeting audio, translation, RFQs, team notes, samples and expenses',
-              Icons.handyman_outlined,
-              () => Navigator.of(context).push(MaterialPageRoute(
-                  builder: (_) => const FieldOperationsScreen()))
-            ),
-            (
-              'Advanced sourcing tools',
-              'Supplier requests, RFQ responses, review queues, negotiation and budget controls',
-              Icons.auto_awesome_motion_outlined,
-              () => Navigator.of(context).push(MaterialPageRoute(
-                  builder: (_) => const AdvancedOperationsScreen()))
-            ),
-            (
-              'Intelligence & logistics',
-              'Communications, route coordination, trade costs, quality and offline transfer',
-              Icons.hub_outlined,
-              () => Navigator.of(context).push(MaterialPageRoute(
-                  builder: (_) => const IntelligenceLogisticsScreen()))
-            ),
-          ]),
-          const SizedBox(height: 28),
-          _toolGroup('REPORT & MANAGE', [
-            (
-              'Analytics',
-              'Track sourcing progress and trip performance',
-              Icons.insights_outlined,
-              () => setState(() => _index = 4)
-            ),
-            (
-              'Export reports',
-              'Share records as CSV or PDF',
-              Icons.ios_share_outlined,
-              () => setState(() => _index = 5)
-            ),
-            (
-              'Team activity',
-              'See the workspace change history',
-              Icons.history_rounded,
-              () => setState(() => _index = 7)
-            ),
-            (
-              'Settings & sync',
-              'Team selection, backups, security and updates',
-              Icons.settings_outlined,
-              () => setState(() => _index = 6)
+                  builder: (_) => const SyncStatusScreen()))
             ),
           ]),
         ],
@@ -458,7 +329,7 @@ class _CantonFairAppState extends State<CantonFairApp>
             return Material(
                 color: Theme.of(context).colorScheme.surface,
                 child: InkWell(
-                  onTap: () => setState(() => _index = 6),
+                  onTap: () => setState(() => _index = 1),
                   child: Semantics(
                       button: true,
                       label: '$label. Open sync settings.',
@@ -554,7 +425,7 @@ class _CantonFairAppState extends State<CantonFairApp>
                     child: ConstrainedBox(
                         constraints: const BoxConstraints(maxWidth: 1320),
                         child:
-                            _index == 9 ? _workspaceHub() : _screens[_index])),
+                            _index == 1 ? _fieldAccountHub() : _screens[0])),
               )),
               const Divider(),
               SafeArea(top: false, bottom: wide, child: _syncStrip()),
@@ -573,7 +444,7 @@ class _CantonFairAppState extends State<CantonFairApp>
                             label: _labels(context)[index],
                           )),
                 ),
-          floatingActionButton: !wide && _index != 1
+          floatingActionButton: !wide && _index == 0
               ? Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.end,

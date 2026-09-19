@@ -20,4 +20,9 @@ export type WorkspaceView =
   | 'products'
   | 'visits'
   | 'shortlist'
-  | 'operations';
+  | 'trips'
+  | 'contacts'
+  | 'followups'
+  | 'activity'
+  | 'procurement'
+  | 'reports';
