@@ -70,6 +70,7 @@ android {
     buildTypes {
         release {
             signingConfig = signingConfigs.getByName(if (hasReleaseSigning) "release" else "debug")
+            proguardFiles("proguard-rules.pro")
         }
     }
 }
