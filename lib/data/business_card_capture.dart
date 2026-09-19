@@ -32,9 +32,6 @@ class BusinessCardCapture {
   static const modes = [
     'Chinese + English',
     'Latin',
-    'Japanese + English',
-    'Korean + English',
-    'Devanagari + English',
   ];
 
   static Future<BusinessCardCapture> open() async {
@@ -174,9 +171,6 @@ class BusinessCardCapture {
     final scripts = <TextRecognitionScript>[
       TextRecognitionScript.latin,
       if (mode == 'Chinese + English') TextRecognitionScript.chinese,
-      if (mode == 'Japanese + English') TextRecognitionScript.japanese,
-      if (mode == 'Korean + English') TextRecognitionScript.korean,
-      if (mode == 'Devanagari + English') TextRecognitionScript.devanagiri,
     ];
     final warnings = <String>[];
     Future<Map<String, dynamic>> recognize(String path, String source) async {
