@@ -92,36 +92,6 @@ class _FieldWorkScreenState extends State<FieldWorkScreen> {
     }
   }
 
-  Future<void> _chooseCategory(FieldWorkSnapshot data,
-      Map<String, Object?> product) async {
-    final categories = await _repository.categories(data.scope);
-    if (!mounted) return;
-    final input = TextEditingController(text: product['category'] as String? ?? '');
-    final name = await showDialog<String>(context: context, builder: (ctx) => AlertDialog(
-      title: Text('Category for ${product['name']}'),
-      content: SizedBox(width: 420, child: SingleChildScrollView(child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          TextField(controller: input, maxLength: 100,
-            decoration: const InputDecoration(labelText: 'Category name',
-              helperText: 'Choose below or enter a new category')),
-          const SizedBox(height: 16),
-          for (final category in categories) ListTile(
-            title: Text(category['name'] as String),
-            onTap: () => Navigator.pop(ctx, category['name'] as String)),
-        ],
-      ))),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-        FilledButton(onPressed: () => Navigator.pop(ctx, input.text),
-          child: const Text('Save category')),
-      ],
-    ));
-    // The dialog route can still reference its controller during exit animation.
-    if (name == null || !mounted) return;
-    await _repository.categorize(data.scope, product['id'] as int, name);
-  }
-
   Future<void> _products(FieldWorkSnapshot data, Map<String, Object?> booth) async {
     final products = await _repository.products(data.scope, booth['exhibitor_id'] as int);
     if (!mounted) return;
