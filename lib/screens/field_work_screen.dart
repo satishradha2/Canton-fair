@@ -1,4 +1,6 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import '../data/database.dart';
 import '../data/field_work_repository.dart';
 import 'field_product_capture_screen.dart';
 import 'visit_recording_screen.dart';
@@ -129,15 +131,72 @@ class _FieldWorkScreenState extends State<FieldWorkScreen> {
         child: ListView(padding: const EdgeInsets.all(24), children: [
           Text('${booth['name']} products', style: Theme.of(ctx).textTheme.titleLarge),
           const SizedBox(height: 12),
-          const Text('Select a product to assign its category. Add new products using the existing supplier capture screen.'),
+          const Text('Review the captured commercial details and evidence. Tap a product to change its category.'),
           const SizedBox(height: 16),
           if (products.isEmpty) const Text('No products captured for this supplier yet.'),
-          for (final product in products) ListTile(
-            contentPadding: EdgeInsets.zero,
-            title: Text(product['name'] as String),
-            subtitle: Text(product['category'] as String? ?? 'Needs classification'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => Navigator.pop(ctx, product)),
+          for (final product in products) Card(
+            margin: const EdgeInsets.only(bottom: 12),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(12),
+              onTap: () => Navigator.pop(ctx, product),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Row(children: [
+                    Expanded(child: Text(product['name'] as String,
+                      style: Theme.of(ctx).textTheme.titleMedium)),
+                    Icon(product['shortlisted'] == 1 ? Icons.star_rounded : Icons.star_border_rounded,
+                      color: product['shortlisted'] == 1 ? Colors.amber.shade800 : null),
+                  ]),
+                  const SizedBox(height: 4),
+                  Text([
+                    product['category'] as String? ?? 'Needs classification',
+                    if ((product['model_code'] as String? ?? '').isNotEmpty)
+                      'Model ${product['model_code']}',
+                  ].join(' | ')),
+                  const SizedBox(height: 10),
+                  Wrap(spacing: 8, runSpacing: 8, children: [
+                    _productChip(Icons.payments_outlined,
+                      product['quoted_price'] == null
+                        ? 'Price not recorded'
+                        : '${product['price_currency']} ${product['quoted_price']}'),
+                    _productChip(Icons.inventory_2_outlined,
+                      product['moq'] == null ? 'MOQ not recorded' : 'MOQ ${product['moq']}'),
+                    _productChip(Icons.schedule_outlined,
+                      (product['lead_time'] as String? ?? '').isEmpty
+                        ? 'Lead time not recorded' : product['lead_time'] as String),
+                    _productChip(Icons.photo_library_outlined,
+                      '${product['photo_count'] ?? 0} photo(s)'),
+                  ]),
+                  FutureBuilder(
+                    future: TradeDatabase.instance.getAttachments('product', product['id'] as int),
+                    builder: (context, snapshot) {
+                      final photos = (snapshot.data ?? const [])
+                        .where((file) => file.kind == 'image')
+                        .toList();
+                      if (photos.isEmpty) return const SizedBox.shrink();
+                      return Padding(
+                        padding: const EdgeInsets.only(top: 12),
+                        child: SizedBox(height: 104, child: ListView.separated(
+                          scrollDirection: Axis.horizontal,
+                          itemCount: photos.length,
+                          separatorBuilder: (_, __) => const SizedBox(width: 8),
+                          itemBuilder: (_, index) => ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: Image.file(File(photos[index].path), width: 140,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) => const SizedBox(width: 140,
+                                child: Center(child: Icon(Icons.broken_image_outlined))),
+                            ),
+                          ),
+                        )),
+                      );
+                    },
+                  ),
+                ]),
+              ),
+            ),
+          ),
         ]),
       )),
     );
@@ -243,8 +302,10 @@ class _FieldWorkScreenState extends State<FieldWorkScreen> {
                     ? _repository.startVisit(data.scope, booth['id'] as int)
                     : _repository.finishVisit(data.scope, booth['active_visit'] as int)),
                     child: Text(booth['active_visit'] == null ? 'Start visit' : 'Finish visit')),
-                  OutlinedButton(onPressed: () => _act(() => _products(data, booth)),
-                    child: const Text('Product categories')),
+                    OutlinedButton.icon(
+                      icon: const Icon(Icons.inventory_2_outlined),
+                      label: const Text('View products'),
+                      onPressed: () => _act(() => _products(data, booth))),
                 ]),
               ],
             ),
@@ -255,4 +316,10 @@ class _FieldWorkScreenState extends State<FieldWorkScreen> {
       ));
     }),
   );
-}
+  }
+
+  Widget _productChip(IconData icon, String label) => Chip(
+    avatar: Icon(icon, size: 17),
+    label: Text(label),
+    visualDensity: VisualDensity.compact,
+  );

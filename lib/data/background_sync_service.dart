@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:workmanager/workmanager.dart';
@@ -30,12 +31,19 @@ void cantonFairBackgroundDispatcher() {
 
 class BackgroundSyncService {
   static Future<void> initialize({required bool enabled}) async {
+    // A background worker starts a second Flutter engine. Avoid competing
+    // debug engines during emulator/hot-reload sessions; foreground sync is
+    // handled independently by AutoSyncService.
+    if (kDebugMode) {
+      await Workmanager().cancelByUniqueName(_backgroundSyncUniqueName);
+      return;
+    }
     await Workmanager().initialize(cantonFairBackgroundDispatcher);
     await setEnabled(enabled);
   }
 
   static Future<void> setEnabled(bool enabled) async {
-    if (!enabled) {
+    if (kDebugMode || !enabled) {
       await Workmanager().cancelByUniqueName(_backgroundSyncUniqueName);
       return;
     }

@@ -138,12 +138,24 @@ class FieldWorkRepository {
     if (categories.isNotEmpty && categories.first['archived'] == 1) {
       throw StateError('This category is archived. Choose another.');
     }
-    final category = categories.isEmpty
-        ? await txn.insert('product_categories', {'name': categoryName,
-            'normalized_name': categoryName.toLowerCase()})
-        : categories.first['id'] as int;
-    final product = await txn.insert('products', {
-      'exhibitor_id': supplier, 'name': name, 'model_code': value('model_code'),
+      final category = categories.isEmpty
+          ? await txn.insert('product_categories', {'name': categoryName,
+              'normalized_name': categoryName.toLowerCase()})
+          : categories.first['id'] as int;
+      final modelCode = value('model_code');
+      final duplicate = await txn.query('products',
+          columns: const ['id', 'name', 'model_code'],
+          where: '''exhibitor_id = ?
+              AND lower(trim(name)) = ?
+              AND lower(trim(coalesce(model_code, ''))) = ?''',
+          whereArgs: [supplier, name.toLowerCase(), modelCode.toLowerCase()],
+          limit: 1);
+      if (duplicate.isNotEmpty) {
+        throw StateError(
+            'This supplier already has "$name" with the same model/SKU. Open the existing product instead of saving a duplicate.');
+      }
+      final product = await txn.insert('products', {
+        'exhibitor_id': supplier, 'name': name, 'model_code': modelCode,
       'specs': value('specs'), 'moq': moq, 'quoted_price': price,
       'price_currency': currency, 'lead_time': value('lead_time'),
       'payment_terms': value('payment_terms'), 'rating': rating,
@@ -283,10 +295,19 @@ class FieldWorkRepository {
   Future<List<Map<String, Object?>>> products(String scope, int supplier) async {
     await _check(scope);
     final db = await TradeDatabase.instance.database;
-    final rows = await db.rawQuery('''SELECT p.id,p.name,c.name AS category
-      FROM products p LEFT JOIN product_category_assignments a ON a.product_id=p.id
-      LEFT JOIN product_categories c ON c.id=a.category_id
-      WHERE p.exhibitor_id=? ORDER BY p.name''', [supplier]);
+      final rows = await db.rawQuery('''SELECT
+          p.id,p.name,p.model_code,p.quoted_price,p.price_currency,p.moq,
+          p.lead_time,p.shortlisted,c.name AS category,
+          COUNT(photo.id) AS photo_count
+        FROM products p
+        LEFT JOIN product_category_assignments a ON a.product_id=p.id
+        LEFT JOIN product_categories c ON c.id=a.category_id
+        LEFT JOIN attachments photo ON photo.owner_type='product'
+          AND photo.owner_id=p.id AND photo.kind='image'
+        WHERE p.exhibitor_id=?
+        GROUP BY p.id,p.name,p.model_code,p.quoted_price,p.price_currency,
+          p.moq,p.lead_time,p.shortlisted,c.name
+        ORDER BY p.name''', [supplier]);
     await _check(scope);
     return rows;
   }
