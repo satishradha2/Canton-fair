@@ -296,8 +296,8 @@ class FieldWorkRepository {
     await _check(scope);
     final db = await TradeDatabase.instance.database;
       final rows = await db.rawQuery('''SELECT
-          p.id,p.name,p.model_code,p.quoted_price,p.price_currency,p.moq,
-          p.lead_time,p.shortlisted,c.name AS category,
+          p.id,p.name,p.model_code,p.specs,p.payment_terms,p.quoted_price,
+          p.price_currency,p.moq,p.lead_time,p.shortlisted,c.name AS category,
           COUNT(photo.id) AS photo_count
         FROM products p
         LEFT JOIN product_category_assignments a ON a.product_id=p.id
@@ -305,12 +305,78 @@ class FieldWorkRepository {
         LEFT JOIN attachments photo ON photo.owner_type='product'
           AND photo.owner_id=p.id AND photo.kind='image'
         WHERE p.exhibitor_id=?
-        GROUP BY p.id,p.name,p.model_code,p.quoted_price,p.price_currency,
-          p.moq,p.lead_time,p.shortlisted,c.name
+        GROUP BY p.id,p.name,p.model_code,p.specs,p.payment_terms,
+          p.quoted_price,p.price_currency,p.moq,p.lead_time,p.shortlisted,c.name
         ORDER BY p.name''', [supplier]);
     await _check(scope);
     return rows;
   }
+
+  Future<void> updateProduct({
+    required String scope,
+    required int supplier,
+    required int product,
+    required Map<String, String> fields,
+    required bool shortlisted,
+  }) => _write(scope, (txn) async {
+    String value(String key) => fields[key]?.trim() ?? '';
+    final name = value('name');
+    final categoryName = value('category').replaceAll(RegExp(r'\s+'), ' ');
+    if (name.isEmpty || categoryName.isEmpty || categoryName.length > 100) {
+      throw const FormatException('Product name and category are required.');
+    }
+    double? number(String key) {
+      if (value(key).isEmpty) return null;
+      final parsed = double.tryParse(value(key));
+      if (parsed == null || !parsed.isFinite || parsed < 0) {
+        throw FormatException('Enter a valid non-negative $key.');
+      }
+      return parsed;
+    }
+
+    final modelCode = value('model_code');
+    final duplicate = await txn.query('products',
+        columns: const ['id'],
+        where: '''exhibitor_id = ? AND id <> ?
+            AND lower(trim(name)) = ?
+            AND lower(trim(coalesce(model_code, ''))) = ?''',
+        whereArgs: [supplier, product, name.toLowerCase(), modelCode.toLowerCase()],
+        limit: 1);
+    if (duplicate.isNotEmpty) {
+      throw StateError(
+          'This supplier already has "$name" with the same model/SKU. Keep the existing product instead of creating a duplicate.');
+    }
+
+    final categories = await txn.query('product_categories',
+        where: 'normalized_name=?', whereArgs: [categoryName.toLowerCase()]);
+    if (categories.isNotEmpty && categories.first['archived'] == 1) {
+      throw StateError('This category is archived. Choose another.');
+    }
+    final category = categories.isEmpty
+        ? await txn.insert('product_categories', {
+            'name': categoryName,
+            'normalized_name': categoryName.toLowerCase(),
+          })
+        : categories.first['id'] as int;
+    final changed = await txn.update('products', {
+      'name': name,
+      'model_code': modelCode,
+      'specs': value('specs'),
+      'quoted_price': number('quoted_price'),
+      'price_currency': value('price_currency').toUpperCase(),
+      'moq': number('moq'),
+      'lead_time': value('lead_time'),
+      'payment_terms': value('payment_terms'),
+      'shortlisted': shortlisted ? 1 : 0,
+    }, where: 'id=? AND exhibitor_id=?', whereArgs: [product, supplier]);
+    if (changed == 0) throw StateError('Product was removed. Refresh and try again.');
+    final assigned = await txn.update('product_category_assignments',
+        {'category_id': category}, where: 'product_id=?', whereArgs: [product]);
+    if (assigned == 0) {
+      await txn.insert('product_category_assignments',
+          {'product_id': product, 'category_id': category});
+    }
+  });
 
   Future<List<Map<String, Object?>>> categories(String scope) async {
     await _check(scope);

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../data/database.dart';
 import '../data/field_work_repository.dart';
 import 'field_product_capture_screen.dart';
+import 'field_product_editor_screen.dart';
 import 'visit_recording_screen.dart';
 import 'visit_history_screen.dart';
 import 'ocr_screen.dart';
@@ -131,7 +132,7 @@ class _FieldWorkScreenState extends State<FieldWorkScreen> {
         child: ListView(padding: const EdgeInsets.all(24), children: [
           Text('${booth['name']} products', style: Theme.of(ctx).textTheme.titleLarge),
           const SizedBox(height: 12),
-          const Text('Review the captured commercial details and evidence. Tap a product to change its category.'),
+          const Text('Review product evidence and commercial details. Tap a product to edit its field record.'),
           const SizedBox(height: 16),
           if (products.isEmpty) const Text('No products captured for this supplier yet.'),
           for (final product in products) Card(
@@ -200,7 +201,17 @@ class _FieldWorkScreenState extends State<FieldWorkScreen> {
         ]),
       )),
     );
-    if (selected != null && mounted) await _chooseCategory(data, selected);
+      if (selected != null && mounted) {
+        final changed = await Navigator.of(context).push<bool>(MaterialPageRoute(
+            builder: (_) => FieldProductEditorScreen(
+                scope: data.scope,
+                supplierId: booth['exhibitor_id'] as int,
+                supplierName: booth['name'] as String,
+                product: selected)));
+        if (changed == true && mounted) {
+          setState(() => _data = _repository.load(_trip));
+        }
+      }
   }
 
   @override

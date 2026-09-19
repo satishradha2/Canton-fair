@@ -1,6 +1,18 @@
 # Mobile field app and web management workspace
 
-Status: implementation baseline; no schema or production changes applied.
+Status: active migration plan. Field-work schema and team sync are deployed;
+web workspace implementation remains pending.
+
+## 0. Confirmed scope decision
+
+Mobile is a focused field-entry app only: supplier/exhibitor, contact, product,
+photo, visit evidence, voice note, product shortlist status, and team sync.
+It must not remain the management surface for analytics, procurement, approvals,
+exports, full reporting, administration, templates, or complex planning.
+
+Those functions move to the desktop web workspace using the same team records.
+Do not delete any existing mobile data or hide a mobile management feature until
+its web replacement preserves the relevant workflow and records.
 
 ## 1. Product boundaries
 

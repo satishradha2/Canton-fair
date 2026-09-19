@@ -1,7 +1,7 @@
 name: canton_fair_crm
 description: Offline-first Canton Fair trade lead capture and supplier shortlisting app.
 publish_to: "none"
-version: 1.2.0+14
+version: 1.2.1+51
 environment:
   sdk: ">=3.3.0 <4.0.0"
 
