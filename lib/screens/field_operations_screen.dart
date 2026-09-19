@@ -1409,7 +1409,7 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
             .take(100)
             .map((row) => Card(
                     child: ListTile(
-                  title: Text(row['record_type']),
+                  title: Text(_restoreRecordLabel(row['record_type']?.toString() ?? '')),
                   subtitle: Text(row[dateKey]),
                   trailing: IconButton(
                       tooltip: 'Restore',
@@ -1420,6 +1420,18 @@ class _RecoveryScreenState extends State<RecoveryScreen> {
                       }),
                 )))
             .toList());
+  }
+
+  String _restoreRecordLabel(String recordType) {
+    const labels = {
+      'supplier': 'Supplier',
+      'product': 'Product',
+      'contact': 'Contact',
+      'meeting': 'Meeting',
+      'quote': 'Quotation',
+      'task': 'Task',
+    };
+    return labels[recordType] ?? 'Saved record';
   }
 }
 

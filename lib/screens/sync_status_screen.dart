@@ -111,9 +111,9 @@ class _SyncStatusScreenState extends State<SyncStatusScreen> {
                         const Divider(),
                         ...conflicts.map((conflict) => ListTile(
                               leading: const Icon(Icons.compare_arrows),
-                              title: Text('${conflict.recordType} conflict'),
+                              title: const Text('A shared record needs review'),
                               subtitle: Text(
-                                  'Local and cloud differ (cloud v${conflict.remoteVersion}). Deletions can also conflict.'),
+                                  'This item changed on another device. Choose which saved version to keep.'),
                               trailing: PopupMenuButton<String>(
                                 onSelected: (value) => value == 'local'
                                     ? _keepLocal(conflict)

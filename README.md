@@ -60,7 +60,7 @@ application ID and signing key. A future migration can pass
 4. Add `cantonfair://auth-callback` to the Supabase Auth redirect URL allow-list.
 5. Open **Settings > Cloud readiness** in the app. Every check must pass.
 
-Never commit a service-role key, Firebase service account, signing keystore, or
+Never commit a service-role key, signing keystore, or
 local `.env` file. The Supabase anon/publishable key is intended for clients;
 security must be enforced by row-level policies.
 

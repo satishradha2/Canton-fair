@@ -7,9 +7,9 @@ CREATE TABLE IF NOT EXISTS teams (
 );
 CREATE TABLE IF NOT EXISTS team_members (
   team_id UUID NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
-  firebase_uid TEXT NOT NULL,
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   role TEXT NOT NULL CHECK (role IN ('admin', 'member', 'viewer')),
-  PRIMARY KEY (team_id, firebase_uid)
+  PRIMARY KEY (team_id, user_id)
 );
 CREATE TABLE IF NOT EXISTS team_records (
   team_id UUID NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS team_records (
   record_id TEXT NOT NULL,
   payload JSONB NOT NULL,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_by TEXT NOT NULL,
+  updated_by UUID NOT NULL REFERENCES auth.users(id),
   PRIMARY KEY (team_id, record_type, record_id)
 );
 CREATE INDEX IF NOT EXISTS team_records_type_updated_idx ON team_records(team_id, record_type, updated_at DESC);

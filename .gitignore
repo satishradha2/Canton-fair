@@ -47,3 +47,11 @@ app.*.map.json
 
 # Widget Preview related
 .widget_preview/
+
+# Web workspace local configuration and generated files
+apps/web/.env.local
+apps/web/node_modules/
+apps/web/dist/
+apps/web/*.tsbuildinfo
+apps/web/vite.config.js
+apps/web/vite.config.d.ts
