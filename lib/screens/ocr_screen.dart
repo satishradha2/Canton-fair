@@ -390,14 +390,47 @@ class _OcrScreenState extends State<OcrScreen> {
                         ? 'Little text detected. A logo-only back is fine; the image is retained.'
                         : warning.toString())),
               for (final entry in (page['passes'] as Map? ?? {}).entries)
-                ListTile(
+                Builder(builder: (context) {
+                  final text = (entry.value as Map)['text'] as String? ?? '';
+                  return ListTile(
                     title: Text(entry.key.toString()),
-                    subtitle: SelectableText(
-                        (entry.value as Map)['text'] as String? ?? ''))
+                    subtitle: Text(
+                      text.isEmpty ? 'No text detected.' : text,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    trailing: text.isEmpty
+                        ? null
+                        : TextButton(
+                            onPressed: () => _showRecognitionText(
+                                '${side == 'front' ? 'Front' : 'Back'} / ${entry.key}', text),
+                            child: const Text('View')),
+                  );
+                })
             ],
           ),
       ]),
     ));
+  }
+
+  void _showRecognitionText(String title, String text) {
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(title),
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 560, maxHeight: 460),
+          child: SingleChildScrollView(
+            child: SelectableText(text),
+          ),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Close')),
+        ],
+      ),
+    );
   }
 
   @override

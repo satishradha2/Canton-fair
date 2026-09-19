@@ -186,11 +186,17 @@ class _BusinessCardArchiveScreenState extends State<BusinessCardArchiveScreen> {
               for (final warning in reading['warnings'] as List? ?? [])
                 ListTile(title: Text(warning.toString())),
               for (final side in ['front', 'back'])
-                ListTile(
-                  title: Text(side),
-                  subtitle: SelectableText(
-                      'Original:\n${(reading['transcript'] as Map)[side] ?? ''}\n\nTranslation:\n${(reading['translation'] as Map)[side] ?? ''}'),
-                ),
+                Builder(builder: (context) {
+                  final text = 'Original:\n${(reading['transcript'] as Map)[side] ?? ''}\n\nTranslation:\n${(reading['translation'] as Map)[side] ?? ''}';
+                  return ListTile(
+                    title: Text(side),
+                    subtitle: Text(text, maxLines: 2, overflow: TextOverflow.ellipsis),
+                    trailing: TextButton(
+                      onPressed: () => _showRecognitionText('$side / OpenAI reading', text),
+                      child: const Text('View'),
+                    ),
+                  );
+                }),
               for (final detail in reading['extra_details'] as List? ?? [])
                 ListTile(
                     title: Text(detail['label'] as String),
@@ -205,13 +211,41 @@ class _BusinessCardArchiveScreenState extends State<BusinessCardArchiveScreen> {
             children: [
               for (final pass
                   in ((side.value as Map)['passes'] as Map? ?? {}).entries)
-                ListTile(
+                Builder(builder: (context) {
+                  final text = (pass.value as Map)['text'] as String? ?? '';
+                  return ListTile(
                     title: Text(pass.key.toString()),
-                    subtitle: SelectableText(
-                        (pass.value as Map)['text'] as String? ?? ''))
+                    subtitle: Text(text.isEmpty ? 'No text detected.' : text,
+                        maxLines: 2, overflow: TextOverflow.ellipsis),
+                    trailing: text.isEmpty
+                        ? null
+                        : TextButton(
+                            onPressed: () => _showRecognitionText(
+                                '${side.key} / ${pass.key}', text),
+                            child: const Text('View')),
+                  );
+                })
             ],
           ),
       ]),
+    );
+  }
+
+  void _showRecognitionText(String title, String text) {
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(title),
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 560, maxHeight: 460),
+          child: SingleChildScrollView(child: SelectableText(text)),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Close')),
+        ],
+      ),
     );
   }
 }
