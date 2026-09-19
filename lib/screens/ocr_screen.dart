@@ -444,22 +444,29 @@ class _OcrScreenState extends State<OcrScreen> {
   Widget _fieldEditor(
       MapEntry<String, String> entry, Map<String, List<String>> candidates) {
     final draft = _draft!;
+    final isMultiline = SupplierProfile.multiline.contains(entry.key);
     return Padding(
         padding: const EdgeInsets.only(bottom: 16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            TextField(
-                controller: _controllers[entry.key],
-                enabled: !_busy,
-                minLines: 1,
-                maxLines: SupplierProfile.multiline.contains(entry.key) ? 4 : 1,
-                decoration: InputDecoration(
-                    labelText: entry.value,
-                    helperText: draft.edited.contains(entry.key)
-                        ? 'Manually reviewed / edited'
-                        : null),
-                onChanged: (value) => _persistEdit(entry.key, value)),
+            SizedBox(
+              height: isMultiline ? 156 : 76,
+              child: TextField(
+                  controller: _controllers[entry.key],
+                  enabled: !_busy,
+                  expands: false,
+                  minLines: isMultiline ? 3 : 1,
+                  maxLines: isMultiline ? 4 : 1,
+                  textAlignVertical:
+                      isMultiline ? TextAlignVertical.top : TextAlignVertical.center,
+                  decoration: InputDecoration(
+                      labelText: entry.value,
+                      helperText: draft.edited.contains(entry.key)
+                          ? 'Manually reviewed / edited'
+                          : null),
+                  onChanged: (value) => _persistEdit(entry.key, value)),
+            ),
             if ((candidates[entry.key]?.length ?? 0) > 1)
               Wrap(spacing: 6, runSpacing: 4, children: [
                 for (final value in candidates[entry.key]!)
