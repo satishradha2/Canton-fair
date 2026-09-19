@@ -91,7 +91,7 @@ class CloudSyncService {
 
   Future<SyncResult> syncTrips() => syncTeamWorkspace();
 
-  Future<SyncResult> syncTeamWorkspace() =>
+  Future<SyncResult> syncTeamWorkspace({bool showBusy = true}) =>
       TeamWorkspaceService.exclusive(() async {
         SyncStatusService.setSyncing(true);
         try {
@@ -107,7 +107,7 @@ class CloudSyncService {
         } finally {
           SyncStatusService.setSyncing(false);
         }
-      });
+      }, showBusy: showBusy);
 
   Future<SyncResult> _sync() async {
     final team = await _requireTeam();

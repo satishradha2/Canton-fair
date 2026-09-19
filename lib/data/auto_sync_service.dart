@@ -108,7 +108,11 @@ class AutoSyncService with WidgetsBindingObserver {
   }
 
   Future<void> syncIfPossible() async {
-    if (_syncing || TeamWorkspaceService.busy.value || !await enabled) return;
+    if (_syncing ||
+        TeamWorkspaceService.isOperationInProgress ||
+        !await enabled) {
+      return;
+    }
     if (Supabase.instance.client.auth.currentUser == null) return;
     if (await TeamWorkspaceService().load() == null) return;
     final connectivity = await _connectivity.checkConnectivity();
@@ -119,7 +123,8 @@ class AutoSyncService with WidgetsBindingObserver {
     lastError = null;
     changes.value++;
     try {
-      final result = await CloudSyncService().syncTeamWorkspace();
+      final result =
+          await CloudSyncService().syncTeamWorkspace(showBusy: false);
       if (result.downloaded > 0) {
         await ReminderService.showTeamUpdate(
           title: 'Team workspace updated',

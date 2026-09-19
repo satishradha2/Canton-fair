@@ -13,6 +13,8 @@ class TeamWorkspace {
 class TeamWorkspaceService {
   static final changes = ValueNotifier<int>(0);
   static final busy = ValueNotifier<bool>(false);
+  static bool _operationInProgress = false;
+  static bool get isOperationInProgress => _operationInProgress;
   final FlutterSecureStorage _storage = const FlutterSecureStorage();
 
   String get userId {
@@ -55,7 +57,9 @@ class TeamWorkspaceService {
   }
 
   Future<void> save(TeamWorkspace workspace) async {
-    if (busy.value) throw StateError('Wait for the current data operation.');
+    if (isOperationInProgress) {
+      throw StateError('Wait for the current data operation.');
+    }
     final user = userId;
     final membership = await Supabase.instance.client
         .from('team_members')
@@ -74,20 +78,25 @@ class TeamWorkspaceService {
   }
 
   Future<void> usePersonal() async {
-    if (busy.value) throw StateError('Wait for the current data operation.');
+    if (isOperationInProgress) {
+      throw StateError('Wait for the current data operation.');
+    }
     await _storage.delete(key: 'workspace_v2_$userId');
     changes.value++;
   }
 
-  static Future<T> exclusive<T>(Future<T> Function() action) async {
-    if (busy.value) {
+  static Future<T> exclusive<T>(Future<T> Function() action,
+      {bool showBusy = true}) async {
+    if (_operationInProgress) {
       throw StateError('Another data operation is already running.');
     }
-    busy.value = true;
+    _operationInProgress = true;
+    if (showBusy) busy.value = true;
     try {
       return await action();
     } finally {
-      busy.value = false;
+      if (showBusy) busy.value = false;
+      _operationInProgress = false;
     }
   }
 }
