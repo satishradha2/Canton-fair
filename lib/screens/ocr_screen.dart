@@ -25,6 +25,7 @@ class _OcrScreenState extends State<OcrScreen> {
   static const _scanner = MethodChannel('canton_fair_crm/card_scanner');
   BusinessCardCapture? _draft;
   bool _busy = true;
+  bool _showEmptyExtraFields = false;
   String? _error;
   String? _cropNotice;
   String _status = 'Opening local card draft...';
@@ -487,6 +488,12 @@ class _OcrScreenState extends State<OcrScreen> {
   Widget build(BuildContext context) {
     final draft = _draft;
     final candidates = draft?.candidates ?? <String, List<String>>{};
+    final extraFields = _fields.entries.where((entry) {
+      if (_primaryFields.contains(entry.key)) return false;
+      return _showEmptyExtraFields ||
+          (_controllers[entry.key]?.text.trim().isNotEmpty ?? false) ||
+          (draft?.edited.contains(entry.key) ?? false);
+    }).toList();
     return PopScope(
       canPop: !_busy,
       child: Scaffold(
@@ -590,9 +597,27 @@ class _OcrScreenState extends State<OcrScreen> {
                   'Address, website, messaging and company information'),
               childrenPadding: const EdgeInsets.all(16),
               children: [
-                for (final entry in _fields.entries)
-                  if (!_primaryFields.contains(entry.key))
-                    _fieldEditor(entry, candidates),
+                if (extraFields.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.only(bottom: 12),
+                    child: Text('No additional supplier details were captured.'),
+                  ),
+                for (final entry in extraFields) _fieldEditor(entry, candidates),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    onPressed: _busy
+                        ? null
+                        : () => setState(
+                            () => _showEmptyExtraFields = !_showEmptyExtraFields),
+                    icon: Icon(_showEmptyExtraFields
+                        ? Icons.keyboard_arrow_up
+                        : Icons.add),
+                    label: Text(_showEmptyExtraFields
+                        ? 'Hide empty fields'
+                        : 'Add supplier details'),
+                  ),
+                ),
               ],
             )),
             const SizedBox(height: 8),
