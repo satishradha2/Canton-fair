@@ -31,6 +31,7 @@ import 'ocr_screen.dart';
 import 'supplier_profile_screen.dart';
 import 'photo_annotation_screen.dart';
 import 'hall_route_screen.dart';
+import 'field_visit_assistant_screen.dart';
 
 enum CaptureQuickAction { quick, manual, qr, card }
 
@@ -3559,6 +3560,13 @@ class _CapturesScreenState extends State<CapturesScreen> {
                           ),
                       icon: const Icon(Icons.route_outlined),
                       label: const Text('Route')),
+                  TextButton.icon(
+                      onPressed: () => Navigator.of(context).push(
+                            MaterialPageRoute(
+                                builder: (_) => const FieldVisitAssistantScreen()),
+                          ),
+                      icon: const Icon(Icons.playlist_add_check_circle_outlined),
+                      label: const Text('Guided visit')),
                 ],
                 children: [
                   _visitQueueSection(),
@@ -3752,16 +3760,6 @@ class _CapturesScreenState extends State<CapturesScreen> {
                   else
                     ...snapshot.data!.map((e) => _supplierCard(e)),
                 ],
-              ),
-            ),
-            Positioned(
-              right: 16,
-              bottom: 16,
-              child: FloatingActionButton.extended(
-                heroTag: 'captureSupplier',
-                onPressed: _openAddExhibitorSheet,
-                icon: const Icon(Icons.add),
-                label: const Text('Add supplier'),
               ),
             ),
           ],

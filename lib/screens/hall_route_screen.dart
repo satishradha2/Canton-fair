@@ -98,6 +98,140 @@ class _HallRouteScreenState extends State<HallRouteScreen> {
     if (mounted) setState(() => _suppliers = _db.getExhibitors(_tripId));
   }
 
+  Future<void> _addManualRouteStop(List<Trip> trips) async {
+    if (trips.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Create a trip before adding a manual route stop.')));
+      return;
+    }
+    final name = TextEditingController();
+    final hall = TextEditingController();
+    final booth = TextEditingController();
+    final country = TextEditingController();
+    final category = TextEditingController();
+    final note = TextEditingController();
+    int? selectedTripId = _tripId ?? trips.first.id;
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Add manual route stop'),
+          content: SingleChildScrollView(
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              DropdownButtonFormField<int>(
+                initialValue: selectedTripId,
+                decoration: const InputDecoration(labelText: 'Trip'),
+                items: trips
+                    .where((trip) => trip.id != null)
+                    .map((trip) => DropdownMenuItem(
+                        value: trip.id!, child: Text(trip.name)))
+                    .toList(),
+                onChanged: (value) => setDialogState(() => selectedTripId = value),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: name,
+                textCapitalization: TextCapitalization.words,
+                decoration: const InputDecoration(
+                    labelText: 'Supplier or stop name', hintText: 'Example: ABC Trading'),
+              ),
+              const SizedBox(height: 12),
+              Row(children: [
+                Expanded(
+                    child: TextField(
+                  controller: hall,
+                  textCapitalization: TextCapitalization.characters,
+                  decoration: const InputDecoration(labelText: 'Hall'),
+                )),
+                const SizedBox(width: 12),
+                Expanded(
+                    child: TextField(
+                  controller: booth,
+                  textCapitalization: TextCapitalization.characters,
+                  decoration: const InputDecoration(labelText: 'Booth'),
+                )),
+              ]),
+              const SizedBox(height: 12),
+              TextField(
+                controller: country,
+                textCapitalization: TextCapitalization.words,
+                decoration: const InputDecoration(labelText: 'Country / region (optional)'),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: category,
+                textCapitalization: TextCapitalization.words,
+                decoration: const InputDecoration(labelText: 'Product category (optional)'),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: note,
+                minLines: 2,
+                maxLines: 4,
+                decoration: const InputDecoration(
+                    labelText: 'Route note', hintText: 'Who to meet, priority, or reason for visit'),
+              ),
+            ]),
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel')),
+            FilledButton(
+                onPressed: () {
+                  if (selectedTripId == null ||
+                      name.text.trim().isEmpty ||
+                      hall.text.trim().isEmpty) {
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                        content: Text('Trip, supplier name, and hall are required.')));
+                    return;
+                  }
+                  Navigator.pop(context, true);
+                },
+                child: const Text('Add to route')),
+          ],
+        ),
+      ),
+    );
+    if (saved != true) {
+      name.dispose();
+      hall.dispose();
+      booth.dispose();
+      country.dispose();
+      category.dispose();
+      note.dispose();
+      return;
+    }
+    try {
+      await _db.insertExhibitor(Exhibitor(
+        tripId: selectedTripId!,
+        name: name.text.trim(),
+        hall: hall.text.trim(),
+        booth: booth.text.trim(),
+        country: country.text.trim(),
+        category: category.text.trim(),
+        contactCompanyNotes: note.text.trim(),
+        plannedVisitAt: DateTime.now(),
+        fieldCaptureJson: jsonEncode({
+          'route_source': 'manual',
+          'route_status': 'Planned',
+        }),
+      ));
+      if (mounted) {
+        setState(() => _suppliers = _db.getExhibitors(_tripId));
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('${name.text.trim()} added to the route.')));
+      }
+    } finally {
+      name.dispose();
+      hall.dispose();
+      booth.dispose();
+      country.dispose();
+      category.dispose();
+      note.dispose();
+    }
+  }
+
   @override
   Widget build(BuildContext context) => Scaffold(
         appBar: AppBar(title: const Text('Hall route')),
@@ -146,6 +280,12 @@ class _HallRouteScreenState extends State<HallRouteScreen> {
                             value: trip.id, child: Text(trip.name))),
                       ],
                       onChanged: _selectTrip,
+                    ),
+                    const SizedBox(height: 12),
+                    FilledButton.icon(
+                      onPressed: () => _addManualRouteStop(trips),
+                      icon: const Icon(Icons.add_location_alt_outlined),
+                      label: const Text('Add manual route stop'),
                     ),
                     const SizedBox(height: 12),
                     OutlinedButton.icon(

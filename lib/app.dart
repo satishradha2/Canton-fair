@@ -10,7 +10,6 @@ import 'models/models.dart';
 import 'screens/captures_screen.dart';
 import 'screens/account_profile_screen.dart';
 import 'screens/field_operations_screen.dart';
-import 'screens/field_visit_assistant_screen.dart';
 import 'screens/supplier_detail_screen.dart';
 import 'screens/sync_status_screen.dart';
 import 'screens/team_setup_screen.dart';
@@ -91,6 +90,8 @@ class _CantonFairAppState extends State<CantonFairApp>
     });
   }
 
+  // Retained for Android launcher shortcuts and future header integrations.
+  // ignore: unused_element
   Future<void> _openCaptureMenu() async {
     final action = await showModalBottomSheet<CaptureQuickAction>(
       context: context,
@@ -141,6 +142,8 @@ class _CantonFairAppState extends State<CantonFairApp>
     if (action != null && mounted) _openCapture(action);
   }
 
+  // Retained for Android launcher shortcuts and future header integrations.
+  // ignore: unused_element
   void _openSupplierSearch() {
     showSearch<void>(
       context: context,
@@ -523,45 +526,7 @@ class _CantonFairAppState extends State<CantonFairApp>
                             label: _labels(context)[index],
                           )),
                 ),
-          floatingActionButton: !wide && _index == 0
-              ? Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Semantics(
-                      button: true,
-                      label: 'Search suppliers',
-                      child: FloatingActionButton.small(
-                        heroTag: 'supplierSearch',
-                        tooltip: 'Search suppliers',
-                        onPressed: _openSupplierSearch,
-                        child: const Icon(Icons.search),
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    Semantics(
-                      button: true,
-                      label: 'Open capture tools',
-                      child: FloatingActionButton.small(
-                        heroTag: 'captureMenu',
-                        tooltip: 'Capture tools',
-                        onPressed: _openCaptureMenu,
-                        child: const Icon(Icons.add_a_photo_outlined),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    FloatingActionButton.extended(
-                      heroTag: 'startVisit',
-                      onPressed: () => Navigator.of(context).push(
-                        MaterialPageRoute(
-                            builder: (_) => const FieldVisitAssistantScreen()),
-                      ),
-                      icon: const Icon(Icons.playlist_add_check_circle_outlined),
-                      label: const Text('Start visit'),
-                    ),
-                  ],
-                )
-              : null,
+          floatingActionButton: null,
         );
       }),
     );
