@@ -10,6 +10,9 @@ import 'models/models.dart';
 import 'screens/captures_screen.dart';
 import 'screens/account_profile_screen.dart';
 import 'screens/field_operations_screen.dart';
+import 'screens/field_visit_assistant_screen.dart';
+import 'screens/hall_route_screen.dart';
+import 'screens/web_operations_hub_screen.dart';
 import 'screens/supplier_detail_screen.dart';
 import 'screens/sync_status_screen.dart';
 import 'screens/team_setup_screen.dart';
@@ -479,7 +482,51 @@ class _CantonFairAppState extends State<CantonFairApp>
                                   fontSize: 12, fontWeight: FontWeight.w800)),
                         ])
                       : const Icon(Icons.business_center_outlined,
-                          color: AppColors.teal),
+                           color: AppColors.teal),
+                 ),
+                trailing: Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 20),
+                  child: Column(mainAxisSize: MainAxisSize.min, children: [
+                    constraints.maxWidth >= 1180
+                        ? FilledButton.tonalIcon(
+                            onPressed: () => Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => const WebOperationsHubScreen(),
+                              ),
+                            ),
+                            icon: const Icon(Icons.grid_view_outlined),
+                            label: const Text('Field tools'),
+                          )
+                        : IconButton(
+                            tooltip: 'Field tools',
+                            onPressed: () => Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => const WebOperationsHubScreen(),
+                              ),
+                            ),
+                            icon: const Icon(Icons.grid_view_outlined),
+                          ),
+                    const SizedBox(height: 8),
+                    constraints.maxWidth >= 1180
+                        ? OutlinedButton.icon(
+                            onPressed: () => Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => const HallRouteScreen(),
+                              ),
+                            ),
+                            icon: const Icon(Icons.route_outlined),
+                            label: const Text('Route planner'),
+                          )
+                        : IconButton(
+                            tooltip: 'Route planner',
+                            onPressed: () => Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => const HallRouteScreen(),
+                              ),
+                            ),
+                            icon: const Icon(Icons.route_outlined),
+                          ),
+                  ]),
                 ),
                 destinations: List.generate(
                     _labels(context).length,

@@ -25,4 +25,7 @@ export type WorkspaceView =
   | 'followups'
   | 'activity'
   | 'procurement'
-  | 'reports';
+  | 'reports'
+  | 'fieldTools'
+  | 'routes'
+  | 'categories';

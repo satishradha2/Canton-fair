@@ -8,6 +8,7 @@ import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 
 import '../data/database.dart';
+import '../data/approval_policy.dart';
 import '../models/models.dart';
 import '../theme/app_theme.dart';
 import '../widgets/enterprise_widgets.dart';
@@ -99,6 +100,16 @@ class _HallRouteScreenState extends State<HallRouteScreen> {
   }
 
   Future<void> _addManualRouteStop(List<Trip> trips) async {
+    try {
+      await ApprovalPolicy.requireWriter();
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(error.toString().replaceFirst('Bad state: ', '')),
+        ));
+      }
+      return;
+    }
     if (trips.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
           content: Text('Create a trip before adding a manual route stop.')));

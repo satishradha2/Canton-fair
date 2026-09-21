@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import type { User } from '@supabase/supabase-js';
-import { isConfigured, loadRecords, loadTeams, supabase, updateRecord } from './api';
+import { createRecord, isConfigured, loadRecords, loadTeams, supabase, updateRecord } from './api';
 import { SourcingWorkspace } from './sourcing_workspace';
 import { VisitEvidenceWorkspace } from './visit_evidence_workspace';
 import { ProcurementControlCenter } from './procurement_control_center';
@@ -21,9 +21,12 @@ const viewMeta: Record<WorkspaceView, { label: string; types: string[] }> = {
   activity: { label: 'Team activity', types: ['activity'] },
   procurement: { label: 'Procurement review', types: ['quote', 'product'] },
   reports: { label: 'Reports & analytics', types: [] },
+  fieldTools: { label: 'Field tools', types: [] },
+  routes: { label: 'Route planner', types: ['visit_plan'] },
+  categories: { label: 'Product categories', types: ['product_category'] },
 };
 
-const sidebarViews: WorkspaceView[] = ['overview', 'suppliers', 'trips', 'procurement', 'reports'];
+const sidebarViews: WorkspaceView[] = ['overview', 'suppliers', 'trips', 'routes', 'categories', 'fieldTools', 'procurement', 'reports'];
 
 function valueOf(payload: JsonRecord, keys: string[]): string {
   for (const key of keys) {
@@ -39,7 +42,7 @@ function recordName(record: TeamRecord): string {
 }
 
 const internalRecordTypes = new Set([
-  'visit_plan', 'assignment', 'product_category', 'product_category_assignment',
+  'assignment', 'product_category_assignment',
   'exhibitor_booth', 'supplier_participation',
 ]);
 
@@ -58,6 +61,7 @@ const fieldLabels: Record<string, string> = {
   city: 'City', start_date: 'Start date', end_date: 'End date', due_date: 'Due date',
   outcome: 'Outcome', assignee_email: 'Assigned to', priority: 'Priority',
   quote_type: 'Quote type', valid_until: 'Valid until', supplier_commitment: 'Supplier commitment',
+  route_status: 'Route status', planned_visit_at: 'Planned visit', trip_record_id: 'Trip',
 };
 
 const visibleFieldKeys = new Set(Object.keys(fieldLabels));
@@ -67,6 +71,7 @@ function businessTypeLabel(record: TeamRecord): string {
     supplier: 'Supplier', exhibitor: 'Exhibitor', product: 'Product', contact: 'Contact',
     meeting: 'Meeting', recording: 'Recording', attachment: 'Attachment',
     activity: 'Activity', trip: 'Trip', visit_session: 'Visit', quote: 'Quotation',
+    visit_plan: 'Route stop', product_category: 'Product category',
   };
   return labels[record.record_type] ?? 'Business';
 }
@@ -144,6 +149,8 @@ function App() {
   const [draft, setDraft] = useState<JsonRecord>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const activeTeam = teams.find((team) => team.id === teamId);
+  const canWrite = activeTeam?.role !== 'viewer';
 
   useEffect(() => {
     if (!supabase) return;
@@ -219,7 +226,56 @@ function App() {
     URL.revokeObjectURL(url);
   };
 
+  const createSharedRecord = async (recordType: string, payload: JsonRecord) => {
+    if (!teamId || !canWrite) {
+      setError('This workspace is read-only for your account.');
+      return;
+    }
+    setBusy(true); setError('');
+    try {
+      const created = await createRecord(teamId, recordType, payload);
+      setRecords((current) => [created, ...current]);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Could not create the shared record.');
+    } finally { setBusy(false); }
+  };
+
+  const createRouteStop = async (details: { tripId: string; supplier: string; hall: string; booth: string; category: string; note: string }) => {
+    if (!teamId || !canWrite) {
+      setError('This workspace is read-only for your account.');
+      return;
+    }
+    setBusy(true); setError('');
+    try {
+      const createdAt = new Date().toISOString();
+      const supplier = await createRecord(teamId, 'supplier', {
+        name: details.supplier, supplier_name: details.supplier, company_name: details.supplier,
+        trip_record_id: details.tripId, hall: details.hall, booth: details.booth,
+        category: details.category, created_at: createdAt,
+      });
+      const participation = await createRecord(teamId, 'supplier_participation', {
+        supplier_record_id: supplier.record_id, trip_record_id: details.tripId, created_at: createdAt,
+      });
+      const booth = await createRecord(teamId, 'exhibitor_booth', {
+        supplier_participation_record_id: participation.record_id, hall: details.hall,
+        booth: details.booth, zone: '', created_at: createdAt,
+      });
+      const route = await createRecord(teamId, 'visit_plan', {
+        exhibitor_booth_record_id: booth.record_id, priority: '1', selected: '1',
+        notes: details.note, route_status: 'Planned', planned_visit_at: createdAt, created_at: createdAt,
+      });
+      setRecords((current) => [route, booth, participation, supplier, ...current]);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Could not create the route stop.');
+    } finally { setBusy(false); }
+  };
+
   const selectedSupplier = selected ? (isSupplierRecord(selected) ? selected : relatedSupplier(selected, records)) : undefined;
+  const productCategories = useMemo(() => records
+    .filter((record) => record.record_type === 'product_category')
+    .map((record) => valueOf(record.payload, ['name']))
+    .filter(Boolean)
+    .sort((left, right) => left.localeCompare(right)), [records]);
   const editKeys = selected && isType(selected, ['product'])
     ? ['name', 'category', 'model_code', 'specs', 'quoted_price', 'price_currency', 'moq', 'lead_time', 'payment_terms', 'shortlisted']
     : selected && isType(selected, ['supplier', 'exhibitor'])
@@ -267,18 +323,19 @@ function App() {
       </header>
       {error && <div className="notice error">{error}</div>}
       <div className="notice">Mobile is reserved for field capture. Use this workspace for review, follow-ups, procurement decisions, reports, and shared team management.</div>
+      {!canWrite && <div className="notice warning">This team role is read-only. Ask an administrator to change your role before creating route stops or product categories.</div>}
       {view === 'overview' && <section className="metrics">
         <Metric label="Suppliers" value={metrics.suppliers} caption="Team records" />
         <Metric label="Products" value={metrics.products} caption="Captured at booths" />
         <Metric label="Shortlisted" value={metrics.shortlist} caption="Ready for review" />
         <Metric label="Visit evidence" value={metrics.evidence} caption="Contacts, media and notes" />
       </section>}
-      {view === 'reports' ? <ReportsWorkspace records={records} metrics={metrics} onExport={exportBusinessCsv} /> : <>
+      {view === 'fieldTools' ? <FieldToolsWorkspace onNavigate={setView} /> : view === 'routes' ? <RoutePlanner records={records} canWrite={canWrite} busy={busy} onCreateRoute={createRouteStop} /> : view === 'categories' ? <CategoryMaster records={records} canWrite={canWrite} busy={busy} onCreate={createSharedRecord} /> : view === 'reports' ? <ReportsWorkspace records={records} metrics={metrics} onExport={exportBusinessCsv} /> : <>
         <section className="content-head"><div><h3>{view === 'overview' ? 'Recent synchronized activity' : viewMeta[view].label}</h3><p>{busy ? 'Loading shared records...' : `${scoped.length} matching record${scoped.length === 1 ? '' : 's'}`}</p></div><input className="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search names, products, fields..." /></section>
         {(view === 'suppliers' || view === 'products' || view === 'shortlist') && <SourcingWorkspace mode={view} records={records} query={search} onOpen={(record) => { setSelected(record); setEditing(false); }} />}
         {view === 'visits' && <VisitEvidenceWorkspace records={records} query={search} onOpen={(record) => { setSelected(record); setEditing(false); }} />}
-        {view === 'procurement' && <ProcurementControlCenter records={records} role={teams.find((team) => team.id === teamId)?.role ?? 'member'} onOpen={(record) => { setSelected(record); setEditing(false); }} onUpdate={async (record, changes) => { const updated = await updateRecord(teamId, record, changes); setRecords((current) => current.map((item) => item.record_type === updated.record_type && item.record_id === updated.record_id ? updated : item)); }} />}
-        {view === 'procurement' && <ProcurementCompletionTools team={teams.find((team) => team.id === teamId)} records={records} onOpen={(record) => { setSelected(record); setEditing(false); }} />}
+        {view === 'procurement' && <ProcurementControlCenter records={records} role={activeTeam?.role ?? 'member'} onOpen={(record) => { setSelected(record); setEditing(false); }} onUpdate={async (record, changes) => { const updated = await updateRecord(teamId, record, changes); setRecords((current) => current.map((item) => item.record_type === updated.record_type && item.record_id === updated.record_id ? updated : item)); }} />}
+        {view === 'procurement' && <ProcurementCompletionTools team={activeTeam} records={records} onOpen={(record) => { setSelected(record); setEditing(false); }} />}
         <section className={(view === 'suppliers' || view === 'products' || view === 'shortlist' || view === 'visits') ? 'record-table secondary-table' : 'record-table'}>
           <div className="table-row table-heading"><span>Record</span><span>Type</span><span>Updated</span><span /></div>
           {!busy && scoped.length === 0 && <div className="empty"><strong>No matching synchronized records</strong><span>Mobile captures will appear here after team sync completes.</span></div>}
@@ -286,12 +343,38 @@ function App() {
         </section>
       </>}
     </section>
-    {selected && (selectedSupplier ? <SupplierMasterPanel supplier={selectedSupplier} records={records} initialRecord={selected} onClose={() => { setSelected(null); setEditing(false); }} onEdit={beginEdit} /> : <aside className="detail-panel"><button className="close" onClick={() => { setSelected(null); setEditing(false); }}>Close</button><p className="eyebrow">{businessTypeLabel(selected)}</p><h3>{recordName(selected)}</h3><p className="muted">Updated {dateLabel(selected.updated_at)}</p>{editKeys.length > 0 && !editing && <button className="edit-button" onClick={beginEdit}>Edit synchronized fields</button>}{editing ? <form className="edit-form" onSubmit={saveEdit}>{editKeys.map((key) => <label key={key}>{fieldLabels[key] ?? key}{key === 'shortlisted' ? <input checked={draft[key] === true || draft[key] === 1 || draft[key] === '1'} onChange={(event) => setDraft((current) => ({ ...current, [key]: event.target.checked }))} type="checkbox" /> : key === 'specs' ? <textarea value={String(draft[key] ?? '')} onChange={(event) => setDraft((current) => ({ ...current, [key]: event.target.value }))} /> : <input value={String(draft[key] ?? '')} onChange={(event) => setDraft((current) => ({ ...current, [key]: event.target.value }))} />}</label>)}<div className="form-actions"><button type="button" onClick={() => setEditing(false)}>Cancel</button><button className="primary" disabled={busy}>Save reviewed changes</button></div></form> : <dl>{visibleDetails(selected).map(([key, value]) => <div key={key}><dt>{fieldLabels[key]}</dt><dd>{String(value ?? '—')}</dd></div>)}</dl>}</aside>)}
+    {selected && (selectedSupplier ? <SupplierMasterPanel supplier={selectedSupplier} records={records} initialRecord={selected} onClose={() => { setSelected(null); setEditing(false); }} onEdit={beginEdit} /> : <aside className="detail-panel"><button className="close" onClick={() => { setSelected(null); setEditing(false); }}>Close</button><p className="eyebrow">{businessTypeLabel(selected)}</p><h3>{recordName(selected)}</h3><p className="muted">Updated {dateLabel(selected.updated_at)}</p>{editKeys.length > 0 && !editing && <button className="edit-button" onClick={beginEdit}>Edit synchronized fields</button>}{editing ? <form className="edit-form" onSubmit={saveEdit}>{editKeys.map((key) => <label key={key}>{fieldLabels[key] ?? key}{key === 'shortlisted' ? <input checked={draft[key] === true || draft[key] === 1 || draft[key] === '1'} onChange={(event) => setDraft((current) => ({ ...current, [key]: event.target.checked }))} type="checkbox" /> : key === 'category' && isProductRecord(selected) ? <select value={String(draft[key] ?? '')} onChange={(event) => setDraft((current) => ({ ...current, [key]: event.target.value }))}><option value="">Choose a category</option>{productCategories.map((category) => <option key={category} value={category}>{category}</option>)}</select> : key === 'specs' ? <textarea value={String(draft[key] ?? '')} onChange={(event) => setDraft((current) => ({ ...current, [key]: event.target.value }))} /> : <input value={String(draft[key] ?? '')} onChange={(event) => setDraft((current) => ({ ...current, [key]: event.target.value }))} />}</label>)}<div className="form-actions"><button type="button" onClick={() => setEditing(false)}>Cancel</button><button className="primary" disabled={busy}>Save reviewed changes</button></div></form> : <dl>{visibleDetails(selected).map(([key, value]) => <div key={key}><dt>{fieldLabels[key]}</dt><dd>{String(value ?? '—')}</dd></div>)}</dl>}</aside>)}
   </main>;
 }
 
 function Metric({ label, value, caption }: { label: string; value: number; caption: string }) {
   return <article className="metric"><span>{label}</span><strong>{value}</strong><small>{caption}</small></article>;
+}
+
+function FieldToolsWorkspace({ onNavigate }: { onNavigate: (view: WorkspaceView) => void }) {
+  const tools: Array<[WorkspaceView, string, string]> = [
+    ['routes', 'Route planner', 'Create manual stops and organise supplier visits by hall and booth.'],
+    ['categories', 'Product categories', 'Maintain the shared category master used during product entry.'],
+    ['suppliers', 'Supplier workspace', 'Review suppliers, contacts, products, and visit evidence.'],
+    ['trips', 'Trips and hall visits', 'Review trips, visits, and fair locations.'],
+    ['procurement', 'Procurement review', 'Compare quotations, pipeline decisions, and supplier scorecards.'],
+    ['reports', 'Reports and analytics', 'Review sourcing progress and export business records.'],
+  ];
+  return <section className="tools-workspace"><div className="tools-hero"><p className="eyebrow">WEB FIELD OPERATIONS</p><h3>Everyday field tools, available at your desk.</h3><p>These controls use the same shared team records and role permissions as the mobile workflow.</p></div><div className="tools-grid">{tools.map(([view, title, detail]) => <button key={view} className="tool-card" onClick={() => onNavigate(view)}><strong>{title}</strong><span>{detail}</span><b>Open</b></button>)}</div></section>;
+}
+
+function RoutePlanner({ records, canWrite, busy, onCreateRoute }: { records: TeamRecord[]; canWrite: boolean; busy: boolean; onCreateRoute: (details: { tripId: string; supplier: string; hall: string; booth: string; category: string; note: string }) => Promise<void> }) {
+  const trips = records.filter((record) => record.record_type === 'trip');
+  const routes = records.filter((record) => record.record_type === 'visit_plan');
+  const [tripId, setTripId] = useState(''); const [supplier, setSupplier] = useState(''); const [hall, setHall] = useState(''); const [booth, setBooth] = useState(''); const [category, setCategory] = useState(''); const [note, setNote] = useState('');
+  const submit = async (event: React.FormEvent) => { event.preventDefault(); if (!tripId || !supplier.trim() || !hall.trim()) return; await onCreateRoute({ tripId, supplier: supplier.trim(), hall: hall.trim(), booth: booth.trim(), category: category.trim(), note: note.trim() }); setSupplier(''); setHall(''); setBooth(''); setCategory(''); setNote(''); };
+  return <section className="operations-layout"><div className="operations-hero"><p className="eyebrow">ROUTE PLANNER</p><h3>Create a practical hall-by-hall visit route.</h3><p>Members and administrators can add manual stops. Viewers can review the shared route.</p></div><div className="operations-grid"><form className="operations-card" onSubmit={(event) => void submit(event)}><h4>Add manual route stop</h4><label>Trip<select value={tripId} onChange={(event) => setTripId(event.target.value)} disabled={!canWrite || busy} required><option value="">Select trip</option>{trips.map((trip) => <option key={trip.record_id} value={trip.record_id}>{recordName(trip)}</option>)}</select></label><label>Supplier or stop name<input value={supplier} onChange={(event) => setSupplier(event.target.value)} disabled={!canWrite || busy} required /></label><div className="two-fields"><label>Hall<input value={hall} onChange={(event) => setHall(event.target.value)} disabled={!canWrite || busy} required /></label><label>Booth<input value={booth} onChange={(event) => setBooth(event.target.value)} disabled={!canWrite || busy} /></label></div><label>Product category<input value={category} onChange={(event) => setCategory(event.target.value)} disabled={!canWrite || busy} /></label><label>Route note<textarea value={note} onChange={(event) => setNote(event.target.value)} disabled={!canWrite || busy} /></label><button className="primary" disabled={!canWrite || busy || !trips.length}>{busy ? 'Saving...' : 'Add to route'}</button>{!trips.length && <p className="muted">Create or synchronize a trip first.</p>}</form><section className="operations-card"><h4>Planned route stops <span>{routes.length}</span></h4><div className="master-list">{routes.map((route) => <article key={route.record_id}><strong>{recordName(route)}</strong><span>Hall {valueOf(route.payload, ['hall']) || 'not recorded'}{valueOf(route.payload, ['booth']) ? ` · Booth ${valueOf(route.payload, ['booth'])}` : ''}</span><small>{valueOf(route.payload, ['category', 'notes']) || 'Planned stop'}</small></article>)}{!routes.length && <p className="muted">No route stops yet. Add the first stop above.</p>}</div></section></div></section>;
+}
+
+function CategoryMaster({ records, canWrite, busy, onCreate }: { records: TeamRecord[]; canWrite: boolean; busy: boolean; onCreate: (recordType: string, payload: JsonRecord) => Promise<void> }) {
+  const categories = records.filter((record) => record.record_type === 'product_category'); const [name, setName] = useState('');
+  const submit = async (event: React.FormEvent) => { event.preventDefault(); const value = name.trim(); if (!value) return; await onCreate('product_category', { name: value, normalized_name: value.toLowerCase(), archived: '0', created_at: new Date().toISOString() }); setName(''); };
+  return <section className="operations-layout"><div className="operations-hero"><p className="eyebrow">PRODUCT MASTER</p><h3>Shared product categories.</h3><p>Categories created here are available to product capture on web and mobile.</p></div><div className="operations-grid"><form className="operations-card" onSubmit={(event) => void submit(event)}><h4>Create product category</h4><label>Category name<input value={name} onChange={(event) => setName(event.target.value)} disabled={!canWrite || busy} placeholder="Example: Home decor" required /></label><button className="primary" disabled={!canWrite || busy}>{busy ? 'Saving...' : 'Create category'}</button></form><section className="operations-card"><h4>Available categories <span>{categories.length}</span></h4><div className="master-list">{categories.map((category) => <article key={category.record_id}><strong>{valueOf(category.payload, ['name'])}</strong><span>Available for product capture</span></article>)}{!categories.length && <p className="muted">No categories yet. Create the first category above.</p>}</div></section></div></section>;
 }
 
 function ReportsWorkspace({ records, metrics, onExport }: { records: TeamRecord[]; metrics: { suppliers: number; products: number; shortlist: number; evidence: number }; onExport: () => void }) {
