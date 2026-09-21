@@ -309,64 +309,112 @@ class _OcrScreenState extends State<OcrScreen> {
   Widget _sidePanel(String side) {
     final draft = _draft!;
     final page = draft.sides[side];
-    return Card(
-        child: Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(side == 'front' ? 'Front of card' : 'Back of card',
-            style: Theme.of(context).textTheme.titleMedium),
-        const SizedBox(height: 12),
+    final scheme = Theme.of(context).colorScheme;
+    final isFront = side == 'front';
+    return Container(
+        margin: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: scheme.surfaceContainerLowest,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: scheme.outlineVariant),
+        ),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: page == null ? scheme.secondaryContainer : scheme.primaryContainer,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(
+              page == null ? Icons.add_a_photo_outlined : Icons.check_circle_outline,
+              color: page == null ? scheme.onSecondaryContainer : scheme.onPrimaryContainer,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(isFront ? 'Front of card' : 'Back of card',
+                style: Theme.of(context).textTheme.titleMedium),
+            Text(
+                page == null
+                    ? (isFront ? 'Required to begin extraction' : 'Capture or confirm single-sided')
+                    : 'Captured and ready for review',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: scheme.onSurfaceVariant)),
+          ])),
+        ]),
+        const SizedBox(height: 16),
         if (page != null) ...[
-          InkWell(
-              onTap: _busy ? null : () => _preview(side),
-              child: SizedBox(
-                height: 130,
-                width: double.infinity,
-                child: Image.file(File(draft.imagePath(side)),
-                    fit: BoxFit.contain,
-                    cacheWidth: 1000,
-                    errorBuilder: (_, error, stack) => const Center(
-                        child: Text('Original unavailable. Capture again.'))),
-              )),
-          const Text('Tap image to enlarge.'),
+          Semantics(
+            button: true,
+            label: 'Preview ${isFront ? 'front' : 'back'} of card',
+            child: InkWell(
+                borderRadius: BorderRadius.circular(12),
+                onTap: _busy ? null : () => _preview(side),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    height: 154,
+                    width: double.infinity,
+                    color: scheme.surfaceContainerHigh,
+                    child: Image.file(File(draft.imagePath(side)),
+                        fit: BoxFit.contain,
+                        cacheWidth: 1000,
+                        errorBuilder: (_, error, stack) => const Center(
+                            child: Text('Original unavailable. Capture again.'))),
+                  ),
+                )),
+          ),
+          const SizedBox(height: 8),
+          Text('Tap the image to inspect the original at full size.',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: scheme.onSurfaceVariant)),
         ],
-        const SizedBox(height: 12),
-        Wrap(spacing: 8, runSpacing: 8, children: [
-          FilledButton.tonalIcon(
+        if (page != null) const SizedBox(height: 14),
+        Row(children: [
+          Expanded(child: FilledButton.icon(
               onPressed:
                   _busy ? null : () => _capture(side, ImageSource.camera),
               icon: const Icon(Icons.camera_alt_outlined),
-              label: Text(page == null ? 'Capture $side' : 'Retake $side')),
-          OutlinedButton.icon(
-              onPressed:
-                  _busy ? null : () => _capture(side, ImageSource.gallery),
+              label: Text(page == null ? 'Capture' : 'Retake'))),
+          const SizedBox(width: 10),
+          Expanded(child: OutlinedButton.icon(
+              onPressed: _busy ? null : () => _capture(side, ImageSource.gallery),
               icon: const Icon(Icons.photo_library_outlined),
-              label: const Text('Import image')),
+              label: const Text('Import'))),
         ]),
         if (side == 'back' && page == null)
-          CheckboxListTile(
-            contentPadding: EdgeInsets.zero,
-            title:
-                const Text('The back is blank / this is a single-sided card'),
-            value: draft.backBlank,
-            onChanged: _busy
-                ? null
-                : (value) async {
-                    setState(() => draft.backBlank = value ?? false);
-                    try {
-                      await draft.save();
-                    } catch (_) {
-                      if (mounted) {
-                        setState(() =>
-                            _error = 'Could not save the draft. Please retry.');
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: CheckboxListTile(
+              contentPadding: EdgeInsets.zero,
+              controlAffinity: ListTileControlAffinity.leading,
+              title: const Text('This is a single-sided card'),
+              subtitle: const Text('Skip the back image and continue to review.'),
+              value: draft.backBlank,
+              onChanged: _busy
+                  ? null
+                  : (value) async {
+                      setState(() => draft.backBlank = value ?? false);
+                      try {
+                        await draft.save();
+                      } catch (_) {
+                        if (mounted) {
+                          setState(() =>
+                              _error = 'Could not save the draft. Please retry.');
+                        }
                       }
-                    }
-                  },
+                    },
+            ),
           ),
         if (page != null)
           ExpansionTile(
             tilePadding: EdgeInsets.zero,
-            title: const Text('Scan options and reading notes'),
+            leading: const Icon(Icons.tune_outlined),
+            title: const Text('Reading tools and scan notes'),
             children: [
               Wrap(spacing: 8, children: [
                 TextButton(
@@ -410,8 +458,28 @@ class _OcrScreenState extends State<OcrScreen> {
                 })
             ],
           ),
+      ]));
+  }
+
+  Widget _noticeBanner({
+    required IconData icon,
+    required String message,
+    required Color color,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(top: 12),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
+      ),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Icon(icon, color: color),
+        const SizedBox(width: 10),
+        Expanded(child: Text(message)),
       ]),
-    ));
+    );
   }
 
   void _showRecognitionText(String title, String text) {
@@ -497,67 +565,117 @@ class _OcrScreenState extends State<OcrScreen> {
     return PopScope(
       canPop: !_busy,
       child: Scaffold(
-        appBar: AppBar(title: const Text('Scan business card')),
+        appBar: AppBar(
+          title: const Text('Scan business card'),
+          actions: [
+            if (draft != null)
+              Padding(
+                padding: const EdgeInsets.only(right: 16),
+                child: Center(
+                  child: Text('${draft.sides.length}/2',
+                      style: Theme.of(context).textTheme.labelLarge),
+                ),
+              ),
+          ],
+        ),
         bottomNavigationBar: draft == null
             ? null
-            : SafeArea(
-                top: false,
-                child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Column(mainAxisSize: MainAxisSize.min, children: [
-                      Text('Review before saving',
-                          style: Theme.of(context).textTheme.labelMedium),
-                      const SizedBox(height: 8),
-                      Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          alignment: WrapAlignment.center,
-                          children: [
-                            FilledButton.icon(
+            : Material(
+                elevation: 12,
+                color: Theme.of(context).colorScheme.surfaceContainerLowest,
+                child: SafeArea(
+                    top: false,
+                    child: Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+                        child: Column(mainAxisSize: MainAxisSize.min, children: [
+                          Text('Review and save',
+                              style: Theme.of(context).textTheme.labelLarge),
+                          const SizedBox(height: 8),
+                          SizedBox(
+                            width: double.infinity,
+                            child: FilledButton.icon(
                                 onPressed: _busy ? null : () => _useDetails(),
                                 icon: const Icon(Icons.add_business_outlined),
                                 label: Text(widget.supplierId == null
-                                    ? 'Save new supplier' : 'Review contact')),
-                            if (widget.supplierId == null) OutlinedButton(
+                                    ? 'Save as new supplier' : 'Review contact')),
+                          ),
+                          if (widget.supplierId == null) ...[
+                            const SizedBox(height: 4),
+                            TextButton(
                                 onPressed: _busy
                                     ? null
                                     : () => _useDetails(existing: true),
-                                child: const Text('Update existing supplier')),
-                          ]),
-                    ]))),
+                                child: const Text('Update an existing supplier instead')),
+                          ],
+                        ])))),
         body: SafeArea(
-            child: ListView(padding: const EdgeInsets.all(20), children: [
-          Text(widget.supplierName ?? 'Card to supplier',
-              style: Theme.of(context).textTheme.headlineSmall),
-          const SizedBox(height: 8),
-          Text('Scan. Review. Save.',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant)),
-          const SizedBox(height: 12),
+            child: ListView(padding: const EdgeInsets.fromLTRB(20, 16, 20, 28), children: [
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  Theme.of(context).colorScheme.primary,
+                  Theme.of(context).colorScheme.primaryContainer,
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('CONTACT CAPTURE',
+                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                      color: Theme.of(context).colorScheme.onPrimary,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 1.2)),
+              const SizedBox(height: 8),
+              Text(widget.supplierName ?? 'Business card to supplier',
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      color: Theme.of(context).colorScheme.onPrimary,
+                      fontWeight: FontWeight.w700)),
+              const SizedBox(height: 8),
+              Text('Capture both sides, confirm the extracted details, then save a reliable supplier record.',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: Theme.of(context).colorScheme.onPrimary.withValues(alpha: 0.88))),
+              const SizedBox(height: 18),
+              Row(children: [
+                _progressPill('1', 'Capture', draft?.sides.isNotEmpty == true),
+                const SizedBox(width: 8),
+                _progressPill('2', 'Review', draft?.sides.containsKey('front') == true),
+                const SizedBox(width: 8),
+                _progressPill('3', 'Save', false),
+              ]),
+            ]),
+          ),
           if (_busy) ...[
-            const LinearProgressIndicator(),
-            const SizedBox(height: 8),
-            Text(_status)
+            _noticeBanner(
+                icon: Icons.sync,
+                message: _status,
+                color: Theme.of(context).colorScheme.primary),
           ],
           if (_error != null)
-            Padding(
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                child: Semantics(
-                    liveRegion: true,
-                    child: Text(_error!,
-                        style: TextStyle(
-                            color: Theme.of(context).colorScheme.error)))),
+            Semantics(
+                liveRegion: true,
+                child: _noticeBanner(
+                    icon: Icons.error_outline,
+                    message: _error!,
+                    color: Theme.of(context).colorScheme.error)),
           if (_cropNotice != null)
-            Padding(
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                child: Semantics(liveRegion: true, child: Text(_cropNotice!))),
+            Semantics(
+                liveRegion: true,
+                child: _noticeBanner(
+                    icon: Icons.crop_outlined,
+                    message: _cropNotice!,
+                    color: Theme.of(context).colorScheme.tertiary)),
           if (draft != null) ...[
-            const SizedBox(height: 16),
+            const SizedBox(height: 18),
             Card(
+                clipBehavior: Clip.antiAlias,
                 child: ExpansionTile(
               key: const PageStorageKey('card-images'),
               initiallyExpanded: draft.sides.isEmpty,
-              leading: const Icon(Icons.contact_page_outlined),
+              leading: const Icon(Icons.document_scanner_outlined),
               title: const Text('Business card images'),
               subtitle: Text(
                   '${draft.sides.length} of 2 sides captured${draft.backBlank ? ' - single-sided card' : ''}'),
@@ -581,8 +699,12 @@ class _OcrScreenState extends State<OcrScreen> {
               },
             ),
             const SizedBox(height: 24),
-            Text('Supplier details',
-                style: Theme.of(context).textTheme.titleLarge),
+            Row(children: [
+              const Icon(Icons.fact_check_outlined),
+              const SizedBox(width: 10),
+              Text('Supplier details',
+                  style: Theme.of(context).textTheme.titleLarge),
+            ]),
             const SizedBox(height: 4),
             Text('Check the extracted details. All fields are editable.',
                 style: Theme.of(context).textTheme.bodySmall),
@@ -659,6 +781,30 @@ class _OcrScreenState extends State<OcrScreen> {
                 style: Theme.of(context).textTheme.bodySmall),
           ],
         ])),
+      ),
+    );
+  }
+
+  Widget _progressPill(String step, String label, bool complete) {
+    final scheme = Theme.of(context).colorScheme;
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
+        decoration: BoxDecoration(
+          color: scheme.onPrimary.withValues(alpha: complete ? 0.24 : 0.12),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: scheme.onPrimary.withValues(alpha: 0.25)),
+        ),
+        child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+          Icon(complete ? Icons.check : Icons.looks_one_outlined,
+              size: 15, color: scheme.onPrimary),
+          const SizedBox(width: 4),
+          Flexible(
+              child: Text('$step $label',
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: scheme.onPrimary, fontWeight: FontWeight.w700))),
+        ]),
       ),
     );
   }
