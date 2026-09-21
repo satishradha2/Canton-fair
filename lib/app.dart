@@ -10,8 +10,10 @@ import 'models/models.dart';
 import 'screens/captures_screen.dart';
 import 'screens/account_profile_screen.dart';
 import 'screens/field_operations_screen.dart';
+import 'screens/field_visit_assistant_screen.dart';
 import 'screens/supplier_detail_screen.dart';
 import 'screens/sync_status_screen.dart';
+import 'screens/team_setup_screen.dart';
 import 'widgets/enterprise_widgets.dart';
 import 'theme/app_theme.dart';
 
@@ -102,6 +104,17 @@ class _CantonFairAppState extends State<CantonFairApp>
               title: Text(tr(context, 'quickCapture')),
               subtitle: const Text('Supplier, booth, contact, and category'),
               onTap: () => Navigator.pop(context, CaptureQuickAction.quick),
+            ),
+            ListTile(
+              leading: const Icon(Icons.assignment_turned_in_outlined),
+              title: const Text('Guided field visit'),
+              subtitle: const Text(
+                  'Check in, capture evidence, set next actions, and hand over'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.of(context).push(MaterialPageRoute(
+                    builder: (_) => const FieldVisitAssistantScreen()));
+              },
             ),
             ListTile(
               leading: const Icon(Icons.add_business_outlined),
@@ -223,6 +236,13 @@ class _CantonFairAppState extends State<CantonFairApp>
           ]),
           const SizedBox(height: 28),
           _toolGroup('TEAM SYNC', [
+            (
+              'Team workspace',
+              'Create a shared workspace, invite members, and manage access',
+              Icons.groups_outlined,
+              () => Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => const TeamSetupScreen()))
+            ),
             (
               'Sync status',
               'Review and synchronize your team field captures',

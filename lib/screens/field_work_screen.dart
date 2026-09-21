@@ -12,6 +12,7 @@ import 'supplier_profile_screen.dart';
 import '../data/business_card_capture.dart';
 import '../data/contact_qr_parser.dart';
 import '../data/team_workspace_service.dart';
+import 'field_command_center_screen.dart';
 
 class FieldWorkScreen extends StatefulWidget {
   const FieldWorkScreen({super.key});
@@ -187,6 +188,8 @@ class _FieldWorkScreenState extends State<FieldWorkScreen> {
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: const Text('Field visits'), actions: [
+      IconButton(tooltip: 'Field command center', onPressed: _busy ? null : () => Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => const FieldCommandCenterScreen())), icon: const Icon(Icons.dashboard_customize_outlined)),
       IconButton(tooltip: 'Refresh', onPressed: _busy ? null : () =>
         setState(() { _data = _repository.load(_trip); }), icon: const Icon(Icons.refresh)),
     ]),
