@@ -12,6 +12,7 @@ import android.os.Build
 import android.os.ParcelFileDescriptor
 import android.os.PowerManager
 import android.os.SystemClock
+import androidx.core.content.FileProvider
 import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -24,6 +25,7 @@ class MainActivity : FlutterFragmentActivity() {
     private val documentPickerRequestCode = 7232
     private val quickActionChannel = "canton_fair_crm/quick_action"
     private val pdfChannel = "canton_fair_crm/pdf"
+    private val updaterChannel = "canton_fair_crm/updater"
     private var pendingQuickAction: String? = null
     private var pendingResult: MethodChannel.Result? = null
     private var pendingPrefix = "backup"
@@ -129,6 +131,34 @@ class MainActivity : FlutterFragmentActivity() {
                     result.success(pages)
                 } catch (error: Exception) {
                     result.error("pdf_render_failed", error.message, null)
+                }
+            }
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, updaterChannel)
+            .setMethodCallHandler { call, result ->
+                if (call.method != "installApk") {
+                    result.notImplemented()
+                    return@setMethodCallHandler
+                }
+                val path = call.argument<String>("path")
+                val apk = path?.let(::File)
+                if (apk == null || !apk.exists() || apk.length() < 4096) {
+                    result.error("invalid_apk", "The downloaded APK is missing or incomplete.", null)
+                    return@setMethodCallHandler
+                }
+                try {
+                    val uri = FileProvider.getUriForFile(
+                        this,
+                        "$packageName.fileprovider",
+                        apk,
+                    )
+                    startActivity(Intent(Intent.ACTION_VIEW).apply {
+                        setDataAndType(uri, "application/vnd.android.package-archive")
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    })
+                    result.success(null)
+                } catch (error: Exception) {
+                    result.error("installer_unavailable", error.message, null)
                 }
             }
         if (!screenReceiverRegistered) {

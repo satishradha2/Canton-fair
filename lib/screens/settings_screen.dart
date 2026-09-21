@@ -302,7 +302,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ElevatedButton(
                 onPressed: () {
                   Navigator.pop(ctx);
-                  _openUrl(update.apkUrl ?? update.releaseUrl);
+                  _downloadAndInstallUpdate(update);
                 },
                 child: const Text('Download'),
               ),
@@ -476,6 +476,52 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Could not open $url')),
       );
+    }
+  }
+
+  Future<void> _downloadAndInstallUpdate(AppUpdateInfo update) async {
+    final progress = ValueNotifier<ApkDownloadProgress?>(null);
+    if (!mounted) return;
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => PopScope(
+        canPop: false,
+        child: AlertDialog(
+          title: const Text('Downloading update'),
+          content: ValueListenableBuilder<ApkDownloadProgress?>(
+            valueListenable: progress,
+            builder: (context, value, _) {
+              final percentage = value?.fraction == null
+                  ? 'Preparing secure download...'
+                  : '${(value!.fraction! * 100).clamp(0, 100).round()}% downloaded';
+              return Column(mainAxisSize: MainAxisSize.min, children: [
+                LinearProgressIndicator(value: value?.fraction),
+                const SizedBox(height: 16),
+                Text(percentage),
+                const SizedBox(height: 8),
+                const Text('The installer will open automatically when the file is ready.'),
+              ]);
+            },
+          ),
+        ),
+      ),
+    );
+    try {
+      await _updates.downloadAndInstall(update, onProgress: (value) => progress.value = value);
+    } catch (error) {
+      if (mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Could not install the update: $error'),
+          action: SnackBarAction(
+            label: 'OPEN RELEASE',
+            onPressed: () => _openUrl(update.releaseUrl),
+          ),
+        ));
+      }
+    } finally {
+      progress.dispose();
     }
   }
 
