@@ -345,7 +345,11 @@ class _CantonFairAppState extends State<CantonFairApp>
             final label = syncing
                 ? tr(context, 'syncInProgress')
                 : attention
-                    ? tr(context, 'syncAttention')
+                    ? status.conflicts > 0
+                        ? '${status.conflicts} record${status.conflicts == 1 ? '' : 's'} need a sync decision'
+                        : status.lastError != null
+                            ? 'Sync failed. Tap to review and retry the affected records.'
+                            : 'Sync needs setup. Tap to review the required action.'
                     : status.lastSyncedAt == null
                         ? tr(context, 'savedOnDevice')
                         : tr(context, 'lastSyncCompleted');
@@ -480,20 +484,23 @@ class _CantonFairAppState extends State<CantonFairApp>
                   children: [
                     Semantics(
                       button: true,
-                      label: 'Search suppliers',
+                      label: 'Open capture tools',
                       child: FloatingActionButton.small(
-                        heroTag: 'supplierSearch',
-                        tooltip: 'Search suppliers',
-                        onPressed: _openSupplierSearch,
-                        child: const Icon(Icons.search),
+                        heroTag: 'captureMenu',
+                        tooltip: 'Capture tools',
+                        onPressed: _openCaptureMenu,
+                        child: const Icon(Icons.add_a_photo_outlined),
                       ),
                     ),
                     const SizedBox(height: 12),
                     FloatingActionButton.extended(
-                      heroTag: 'quickCapture',
-                      onPressed: _openCaptureMenu,
-                      icon: const Icon(Icons.add),
-                      label: const Text('Capture'),
+                      heroTag: 'startVisit',
+                      onPressed: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                            builder: (_) => const FieldVisitAssistantScreen()),
+                      ),
+                      icon: const Icon(Icons.playlist_add_check_circle_outlined),
+                      label: const Text('Start visit'),
                     ),
                   ],
                 )

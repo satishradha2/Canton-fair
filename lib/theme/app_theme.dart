@@ -3,18 +3,18 @@ import 'package:flutter/services.dart';
 
 /// Shared visual tokens for the field workspace and procurement screens.
 class AppColors {
-  static const ink = Color(0xFF142B35);
-  static const muted = Color(0xFF5B6D74);
-  static const line = Color(0xFFD7E1E0);
-  static const surface = Color(0xFFF2F6F5);
+  static const ink = Color(0xFF102C37);
+  static const muted = Color(0xFF60747C);
+  static const line = Color(0xFFD6E1DE);
+  static const surface = Color(0xFFF4F7F4);
   static const controlSurface = Colors.white;
-  static const primary = Color(0xFF103D4A);
-  static const primaryBright = Color(0xFF245B6A);
-  static const controlSelected = Color(0xFFDDF1ED);
-  static const teal = Color(0xFF007F73);
-  static const tealBright = Color(0xFF10A493);
-  static const amber = Color(0xFFB96B12);
-  static const gold = Color(0xFFE6A23C);
+  static const primary = Color(0xFF123F4C);
+  static const primaryBright = Color(0xFF245D69);
+  static const controlSelected = Color(0xFFDDF2ED);
+  static const teal = Color(0xFF007B70);
+  static const tealBright = Color(0xFF0B9A88);
+  static const amber = Color(0xFFAD6918);
+  static const gold = Color(0xFFD8AD5A);
   static const cobalt = Color(0xFF3567A9);
   static const danger = Color(0xFFB83B47);
 }
@@ -58,18 +58,18 @@ ThemeData buildAppTheme() {
     outline: Color(0xFF7B9095),
     outlineVariant: AppColors.line,
   );
-  final shape = RoundedRectangleBorder(borderRadius: BorderRadius.circular(8));
+  final shape = RoundedRectangleBorder(borderRadius: BorderRadius.circular(12));
   final input = OutlineInputBorder(
-    borderRadius: BorderRadius.circular(8),
+    borderRadius: BorderRadius.circular(12),
     borderSide: const BorderSide(color: Color(0xFFB6C3CA)),
   );
   const typography = TextTheme(
     headlineLarge:
-        TextStyle(fontSize: 30, height: 1.18, fontWeight: FontWeight.w800),
+        TextStyle(fontSize: 32, height: 1.12, fontWeight: FontWeight.w800, letterSpacing: -0.7),
     headlineMedium:
-        TextStyle(fontSize: 26, height: 1.2, fontWeight: FontWeight.w800),
+        TextStyle(fontSize: 27, height: 1.16, fontWeight: FontWeight.w800, letterSpacing: -0.5),
     headlineSmall:
-        TextStyle(fontSize: 22, height: 1.25, fontWeight: FontWeight.w800),
+        TextStyle(fontSize: 22, height: 1.2, fontWeight: FontWeight.w800, letterSpacing: -0.25),
     titleLarge:
         TextStyle(fontSize: 20, height: 1.3, fontWeight: FontWeight.w800),
     titleMedium:
@@ -123,12 +123,12 @@ ThemeData buildAppTheme() {
     cardTheme: CardThemeData(
       color: Colors.white,
       surfaceTintColor: Colors.transparent,
-      elevation: 1,
-      shadowColor: const Color(0x24142B35),
+      elevation: 0,
+      shadowColor: const Color(0x1F102C37),
       margin: EdgeInsets.zero,
       shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
-          side: const BorderSide(color: Color(0xFFC9D6D4))),
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: Color(0xFFCFE0DC))),
     ),
     dividerTheme:
         const DividerThemeData(color: AppColors.line, thickness: 1, space: 1),
@@ -143,7 +143,7 @@ ThemeData buildAppTheme() {
           input.copyWith(borderSide: const BorderSide(color: AppColors.danger)),
       focusedErrorBorder: input.copyWith(
           borderSide: const BorderSide(color: AppColors.danger, width: 2)),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
       labelStyle: const TextStyle(
           color: AppColors.muted, fontSize: 14, fontWeight: FontWeight.w500),
       floatingLabelStyle:
@@ -161,7 +161,7 @@ ThemeData buildAppTheme() {
       elevation: 0,
       minimumSize: const Size(48, 48),
       shape: shape,
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
       textStyle: const TextStyle(
           fontFamily: 'PublicSans', fontWeight: FontWeight.w600, fontSize: 14),
     )),
@@ -171,7 +171,7 @@ ThemeData buildAppTheme() {
       foregroundColor: Colors.white,
       minimumSize: const Size(48, 48),
       shape: shape,
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
       textStyle: const TextStyle(
           fontFamily: 'PublicSans', fontWeight: FontWeight.w700, fontSize: 14),
     )),
@@ -182,7 +182,7 @@ ThemeData buildAppTheme() {
       minimumSize: const Size(48, 48),
       shape: shape,
       side: const BorderSide(color: Color(0xFFB6C3CA)),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
     )),
     textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
@@ -198,9 +198,9 @@ ThemeData buildAppTheme() {
     floatingActionButtonTheme: FloatingActionButtonThemeData(
       backgroundColor: AppColors.teal,
       foregroundColor: Colors.white,
-      elevation: 4,
-      focusElevation: 5,
-      hoverElevation: 5,
+      elevation: 2,
+      focusElevation: 3,
+      hoverElevation: 3,
       shape: shape,
       extendedTextStyle: const TextStyle(
           fontFamily: 'PublicSans', fontSize: 14, fontWeight: FontWeight.w600),
@@ -210,7 +210,7 @@ ThemeData buildAppTheme() {
       selectedColor: AppColors.controlSelected,
       disabledColor: const Color(0xFFF0F2F3),
       side: const BorderSide(color: AppColors.line),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
       labelStyle: const TextStyle(
           fontFamily: 'PublicSans',
@@ -290,8 +290,8 @@ ThemeData buildAppTheme() {
       backgroundColor: AppColors.primary,
       surfaceTintColor: Colors.transparent,
       indicatorColor: const Color(0xFF2D6470),
-      elevation: 4,
-      height: 76,
+      elevation: 8,
+      height: 80,
       labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
       labelTextStyle: WidgetStateProperty.resolveWith((states) => TextStyle(
             fontFamily: 'PublicSans',
@@ -326,7 +326,7 @@ ThemeData buildAppTheme() {
     dialogTheme: DialogThemeData(
       backgroundColor: Colors.white,
       surfaceTintColor: Colors.transparent,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       titleTextStyle: typography.titleLarge
           ?.copyWith(fontFamily: 'PublicSans', color: AppColors.ink),
       contentTextStyle: typography.bodyMedium
@@ -337,13 +337,13 @@ ThemeData buildAppTheme() {
       surfaceTintColor: Colors.transparent,
       showDragHandle: true,
       shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(12))),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
     ),
     popupMenuTheme: PopupMenuThemeData(
       color: Colors.white,
       surfaceTintColor: Colors.transparent,
       elevation: 6,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       textStyle: typography.bodyMedium?.copyWith(color: AppColors.ink),
     ),
     expansionTileTheme: const ExpansionTileThemeData(
@@ -360,7 +360,7 @@ ThemeData buildAppTheme() {
       contentTextStyle:
           const TextStyle(fontFamily: 'PublicSans', color: Colors.white),
       actionTextColor: const Color(0xFFA8DED2),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
     ),
     listTileTheme: const ListTileThemeData(
       iconColor: AppColors.muted,

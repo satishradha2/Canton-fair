@@ -708,8 +708,8 @@ Please respond by ${_date(due)} with unit price, MOQ, lead time, payment terms, 
                     Icons.fact_check_outlined,
                     () => _open(const FieldWorkScreen())),
                 _tile(
-                    'Complete visit checklist',
-                    'Save booth visit, sample, brochure, and follow-up decisions',
+                    'Close visit & follow-up',
+                    'Save the visit outcome, samples, brochures, and next action',
                     Icons.checklist_outlined,
                     () => _visitChecklist(data)),
                 _tile(
