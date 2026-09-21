@@ -484,6 +484,17 @@ class _CantonFairAppState extends State<CantonFairApp>
                   children: [
                     Semantics(
                       button: true,
+                      label: 'Search suppliers',
+                      child: FloatingActionButton.small(
+                        heroTag: 'supplierSearch',
+                        tooltip: 'Search suppliers',
+                        onPressed: _openSupplierSearch,
+                        child: const Icon(Icons.search),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Semantics(
+                      button: true,
                       label: 'Open capture tools',
                       child: FloatingActionButton.small(
                         heroTag: 'captureMenu',
