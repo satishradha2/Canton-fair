@@ -18,6 +18,7 @@ import '../data/camera_capture_service.dart';
 import '../data/database.dart';
 import '../data/meeting_ai_service.dart';
 import '../data/photo_similarity_service.dart';
+import '../data/reminder_service.dart';
 import '../data/team_workspace_service.dart';
 import '../models/models.dart';
 import '../theme/app_theme.dart';
@@ -25,9 +26,17 @@ import '../widgets/enterprise_widgets.dart';
 import '../widgets/voice_note_field.dart';
 import 'procurement_workspace_screen.dart';
 import 'settings_screen.dart';
+import 'dashboard_screen.dart';
+import 'catalogue_vault_screen.dart';
+import 'field_product_capture_screen.dart';
+import 'field_work_screen.dart';
+import 'followup_screen.dart';
+import 'sync_status_screen.dart';
 
 class FieldOperationsScreen extends StatefulWidget {
-  const FieldOperationsScreen({super.key});
+  const FieldOperationsScreen({super.key, this.onScanCard});
+
+  final VoidCallback? onScanCard;
 
   @override
   State<FieldOperationsScreen> createState() => _FieldOperationsScreenState();
@@ -85,6 +94,148 @@ class _FieldOperationsScreenState extends State<FieldOperationsScreen> {
         ));
     _refresh();
   }
+
+  Future<void> _quickProduct(_FieldData data) async {
+    final supplier =
+        await _pick('Add product for', data.suppliers, (e) => e.name);
+    if (supplier == null || !mounted || supplier.id == null) return;
+    final scope = await TeamWorkspaceService().scopeKey();
+    if (!mounted) return;
+    await _open(FieldProductCaptureScreen(
+      scope: scope,
+      supplierId: supplier.id!,
+      supplierName: supplier.name,
+    ));
+  }
+
+  Future<void> _visitChecklist(_FieldData data) async {
+    final supplier = await _pick(
+        'Complete visit checklist for', data.suppliers, (e) => e.name);
+    if (supplier == null || !mounted || supplier.id == null) return;
+
+    var boothVisited = true;
+    var samplesCollected = false;
+    var brochureReceived = false;
+    var followUpRequired = true;
+    var action = 'Call';
+    var dueAt = DateTime.now().add(const Duration(days: 1));
+    final notes = TextEditingController();
+    final save = await showDialog<bool>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text('Visit checklist: ${supplier.name}'),
+          content: SingleChildScrollView(
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              SwitchListTile.adaptive(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Booth visited'),
+                value: boothVisited,
+                onChanged: (value) => setDialogState(() => boothVisited = value),
+              ),
+              SwitchListTile.adaptive(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Samples collected'),
+                value: samplesCollected,
+                onChanged: (value) =>
+                    setDialogState(() => samplesCollected = value),
+              ),
+              SwitchListTile.adaptive(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Brochure received'),
+                value: brochureReceived,
+                onChanged: (value) =>
+                    setDialogState(() => brochureReceived = value),
+              ),
+              SwitchListTile.adaptive(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Follow-up required'),
+                value: followUpRequired,
+                onChanged: (value) =>
+                    setDialogState(() => followUpRequired = value),
+              ),
+              if (followUpRequired) ...[
+                DropdownButtonFormField<String>(
+                  value: action,
+                  decoration: const InputDecoration(labelText: 'Next action'),
+                  items: const ['Call', 'Email', 'Sample request', 'Quotation deadline']
+                      .map((value) => DropdownMenuItem(
+                          value: value, child: Text(value)))
+                      .toList(),
+                  onChanged: (value) => setDialogState(() => action = value!),
+                ),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Reminder date'),
+                  subtitle: Text(_date(dueAt)),
+                  trailing: const Icon(Icons.calendar_today_outlined),
+                  onTap: () async {
+                    final value = await showDatePicker(
+                      context: context,
+                      initialDate: dueAt,
+                      firstDate: DateTime.now(),
+                      lastDate: DateTime.now().add(const Duration(days: 365)),
+                    );
+                    if (value != null) setDialogState(() => dueAt = value);
+                  },
+                ),
+              ],
+              TextField(
+                controller: notes,
+                minLines: 2,
+                maxLines: 5,
+                decoration: const InputDecoration(
+                  labelText: 'Visit notes',
+                  hintText: 'Key discussion points, samples, and commitments',
+                ),
+              ),
+            ]),
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel')),
+            FilledButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Save checklist')),
+          ],
+        ),
+      ),
+    );
+    if (save != true) return;
+    final checklist = [
+      'Booth visited: ${boothVisited ? 'Yes' : 'No'}',
+      'Samples collected: ${samplesCollected ? 'Yes' : 'No'}',
+      'Brochure received: ${brochureReceived ? 'Yes' : 'No'}',
+      'Follow-up required: ${followUpRequired ? 'Yes' : 'No'}',
+      if (notes.text.trim().isNotEmpty) notes.text.trim(),
+    ].join('\n');
+    final meetingId = await _db.insert('meetings', {
+      'exhibitor_id': supplier.id!,
+      'meeting_date': DateTime.now().toIso8601String(),
+      'follow_up_date': followUpRequired ? dueAt.toIso8601String() : null,
+      'outcome': followUpRequired ? action : 'Visit completed',
+      'priority': followUpRequired ? 'Medium' : 'Low',
+      'notes': checklist,
+    });
+    if (followUpRequired) {
+      await ReminderService.scheduleFollowUp(
+        id: meetingId,
+        title: '$action: ${supplier.name}',
+        body: checklist.replaceAll('\n', ' | '),
+        at: DateTime(dueAt.year, dueAt.month, dueAt.day, 9),
+      );
+    }
+    await _db.logAudit('Completed visit checklist', supplier.name);
+    _refresh();
+  }
+
+  void _openTripDashboard() => _open(DashboardScreen(
+        onCapture: widget.onScanCard,
+        onScanCard: widget.onScanCard,
+        onSync: () => _open(const SyncStatusScreen()),
+        onFollowUps: () => _open(const FollowUpScreen()),
+      ));
 
   Future<void> _addCalendarEvent(_FieldData data) async {
     final meetings =
@@ -545,6 +696,33 @@ Please respond by ${_date(due)} with unit price, MOQ, lead time, payment terms, 
               }
               final data = snapshot.data!;
               return ListView(padding: const EdgeInsets.all(16), children: [
+                const _FieldSectionHeader('TODAY AT THE FAIR'),
+                _tile(
+                    'Trip dashboard',
+                    'Today\'s visits, pending follow-ups, and field progress',
+                    Icons.dashboard_outlined,
+                    _openTripDashboard),
+                _tile(
+                    'Booth visits & checklist',
+                    'Plan visits, record booth outcomes, samples, brochures, and next actions',
+                    Icons.fact_check_outlined,
+                    () => _open(const FieldWorkScreen())),
+                _tile(
+                    'Complete visit checklist',
+                    'Save booth visit, sample, brochure, and follow-up decisions',
+                    Icons.checklist_outlined,
+                    () => _visitChecklist(data)),
+                _tile(
+                    'Follow-up reminders',
+                    'Call, email, sample request, and quotation deadlines',
+                    Icons.event_available_outlined,
+                    () => _open(const FollowUpScreen())),
+                _tile(
+                    'Offline sync center',
+                    'Review pending records, failed uploads, retries, and last sync time',
+                    Icons.sync_problem_outlined,
+                    () => _open(const SyncStatusScreen())),
+                const SizedBox(height: 24),
                 const _FieldSectionHeader('AUTOMATE & COLLABORATE'),
                 _tile(
                     'Automatic team sync',
@@ -572,6 +750,18 @@ Please respond by ${_date(due)} with unit price, MOQ, lead time, payment terms, 
                 const SizedBox(height: 24),
                 const _FieldSectionHeader('CAPTURE & COMMUNICATE'),
                 _tile(
+                    'Business-card scan & quality review',
+                    'Check crop coverage before saving and retake unclear cards',
+                    Icons.badge_outlined,
+                    widget.onScanCard ??
+                        () => ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Card scanning is unavailable.')))),
+                _tile(
+                    'Quick product capture',
+                    'Photo, product name, MOQ, unit price, lead time, and notes',
+                    Icons.inventory_2_outlined,
+                    () => _quickProduct(data)),
+                _tile(
                     'Meeting recorder & minutes',
                     'Record audio and create structured meeting minutes',
                     Icons.mic_none_outlined,
@@ -588,6 +778,11 @@ Please respond by ${_date(due)} with unit price, MOQ, lead time, payment terms, 
                     () => _open(
                         CatalogueScannerScreen(suppliers: data.suppliers))),
                 _tile(
+                    'Supplier catalogue vault',
+                    'Archive supplier PDFs, links, QR catalogues, and hard-copy brochures for permanent access',
+                    Icons.inventory_2_outlined,
+                    () => _open(CatalogueVaultScreen(suppliers: data.suppliers))),
+                _tile(
                     'Phone calendar',
                     'Send a supplier follow-up to the device calendar',
                     Icons.calendar_month_outlined,
@@ -600,6 +795,11 @@ Please respond by ${_date(due)} with unit price, MOQ, lead time, payment terms, 
                         _open(const ProcurementWorkspaceScreen(initialTab: 2))),
                 const SizedBox(height: 24),
                 const _FieldSectionHeader('SOURCE & VERIFY'),
+                _tile(
+                    'Duplicate review',
+                    'Check visually similar product photos before adding another record',
+                    Icons.content_copy_outlined,
+                    () => _open(PhotoMatchScreen(suppliers: data.suppliers))),
                 _tile(
                     'RFQ builder',
                     'Create one request and share it with selected suppliers',

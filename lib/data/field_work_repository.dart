@@ -387,6 +387,27 @@ class FieldWorkRepository {
     return rows;
   }
 
+  Future<String> createCategory(String scope, String name) =>
+      _write(scope, (txn) async {
+        final clean = name.trim().replaceAll(RegExp(r'\s+'), ' ');
+        if (clean.isEmpty || clean.length > 100) {
+          throw const FormatException('Enter a category name of 1 to 100 characters.');
+        }
+        final matches = await txn.query('product_categories',
+            where: 'normalized_name=?', whereArgs: [clean.toLowerCase()]);
+        if (matches.isNotEmpty) {
+          if (matches.first['archived'] == 1) {
+            throw StateError('This category is archived. Ask an administrator to restore it.');
+          }
+          return matches.first['name'] as String;
+        }
+        await txn.insert('product_categories', {
+          'name': clean,
+          'normalized_name': clean.toLowerCase(),
+        });
+        return clean;
+      });
+
   Future<void> categorize(String scope, int product, String name) =>
       _write(scope, (txn) async {
         final clean = name.trim().replaceAll(RegExp(r'\s+'), ' ');

@@ -113,6 +113,53 @@ class _FieldProductEditorScreenState extends State<FieldProductEditorScreen> {
     );
   }
 
+  Future<void> _createCategory() async {
+    final name = TextEditingController();
+    final created = await showDialog<bool>(context: context, builder: (context) => AlertDialog(
+      title: const Text('Create product category'),
+      content: TextField(controller: name, autofocus: true,
+        textCapitalization: TextCapitalization.words,
+        decoration: const InputDecoration(labelText: 'Category name')),
+      actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+        FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Create'))],
+    ));
+    if (created != true || name.text.trim().isEmpty || !mounted) return;
+    try {
+      final category = await _repository.createCategory(widget.scope, name.text);
+      if (!mounted) return;
+      setState(() {
+        _controller('category').text = category;
+        _categories = _repository.categories(widget.scope);
+      });
+    } catch (error) {
+      if (mounted) setState(() => _error = 'Could not create category: $error');
+    }
+  }
+
+  Widget _categoryPicker() => FutureBuilder<List<Map<String, Object?>>(
+    future: _categories,
+    builder: (context, snapshot) {
+      final names = (snapshot.data ?? const <Map<String, Object?>>[])
+          .map((category) => category['name'] as String).toList();
+      final selected = names.contains(_controller('category').text)
+          ? _controller('category').text : null;
+      return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        DropdownButtonFormField<String>(
+          value: selected,
+          isExpanded: true,
+          decoration: const InputDecoration(labelText: 'Product category'),
+          hint: const Text('Choose a category'),
+          items: names.map((name) => DropdownMenuItem(value: name, child: Text(name))).toList(),
+          onChanged: _busy ? null : (value) => setState(() => _controller('category').text = value ?? ''),
+          validator: (value) => value == null ? 'Product category is required' : null,
+        ),
+        Align(alignment: Alignment.centerLeft, child: TextButton.icon(
+          onPressed: _busy ? null : _createCategory,
+          icon: const Icon(Icons.add), label: const Text('Create category'))),
+      ]);
+    },
+  );
+
   @override
   Widget build(BuildContext context) => Scaffold(
         appBar: AppBar(title: const Text('Edit product')),
@@ -132,24 +179,7 @@ class _FieldProductEditorScreenState extends State<FieldProductEditorScreen> {
               ),
               const SizedBox(height: 20),
               _field('name', 'Product name', required: true),
-              _field('category', 'Category', required: true),
-              FutureBuilder<List<Map<String, Object?>>>(
-                future: _categories,
-                builder: (context, snapshot) => Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    for (final category in snapshot.data ?? const [])
-                      ActionChip(
-                        label: Text(category['name'] as String),
-                        onPressed: _busy
-                            ? null
-                            : () => setState(() => _controller('category').text =
-                                category['name'] as String),
-                      ),
-                  ],
-                ),
-              ),
+              _categoryPicker(),
               const SizedBox(height: 20),
               _field('model_code', 'Model / SKU'),
               _field('specs', 'Description and specifications', multiline: true),

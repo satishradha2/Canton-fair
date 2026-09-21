@@ -71,4 +71,46 @@ export async function updateRecord(
   };
 }
 
+export async function createRecord(
+  teamId: string,
+  recordType: string,
+  payload: JsonRecord,
+): Promise<TeamRecord> {
+  const record: TeamRecord = {
+    record_type: recordType,
+    record_id: crypto.randomUUID(),
+    payload: {},
+    version: 0,
+    updated_at: new Date().toISOString(),
+  };
+  return updateRecord(teamId, record, payload);
+}
+
+export interface TeamMember {
+  user_id: string;
+  email: string;
+  role: 'admin' | 'member' | 'viewer';
+}
+
+export async function loadTeamMembers(teamId: string): Promise<TeamMember[]> {
+  const { data, error } = await client().rpc('list_team_members', { target_team: teamId });
+  if (error) throw new Error(error.message);
+  return (data ?? []) as TeamMember[];
+}
+
+export async function inviteTeamMember(teamId: string, email: string, role: TeamMember['role']): Promise<void> {
+  const { error } = await client().rpc('invite_team_member', { target_team: teamId, member_email: email.trim(), member_role: role });
+  if (error) throw new Error(error.message);
+}
+
+export async function updateTeamMemberRole(teamId: string, userId: string, role: TeamMember['role']): Promise<void> {
+  const { error } = await client().rpc('update_team_member_role', { target_team: teamId, target_user: userId, member_role: role });
+  if (error) throw new Error(error.message);
+}
+
+export async function removeTeamMember(teamId: string, userId: string): Promise<void> {
+  const { error } = await client().rpc('remove_team_member', { target_team: teamId, target_user: userId });
+  if (error) throw new Error(error.message);
+}
+
 export const isConfigured = () => Boolean(supabase);

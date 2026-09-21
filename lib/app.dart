@@ -9,6 +9,7 @@ import 'data/auto_sync_service.dart';
 import 'models/models.dart';
 import 'screens/captures_screen.dart';
 import 'screens/account_profile_screen.dart';
+import 'screens/field_operations_screen.dart';
 import 'screens/supplier_detail_screen.dart';
 import 'screens/sync_status_screen.dart';
 import 'widgets/enterprise_widgets.dart';
@@ -182,19 +183,21 @@ class _CantonFairAppState extends State<CantonFairApp>
     }
   }
 
-  static const _destinations = [0, 1];
+  static const _destinations = [0, 1, 2];
   static const _icons = [
     Icons.storefront_outlined,
+    Icons.work_outline,
     Icons.person_outline,
   ];
   static const _selectedIcons = [
     Icons.storefront_rounded,
+    Icons.work,
     Icons.person,
   ];
 
   int get _navigationIndex => _index;
   List<String> _labels(BuildContext context) =>
-      const ['Field capture', 'Account'];
+      const ['Field capture', 'Field operations', 'Account'];
   void _selectDestination(int index) =>
       setState(() => _index = _destinations[index]);
 
@@ -424,8 +427,14 @@ class _CantonFairAppState extends State<CantonFairApp>
                     alignment: Alignment.topCenter,
                     child: ConstrainedBox(
                         constraints: const BoxConstraints(maxWidth: 1320),
-                        child:
-                            _index == 1 ? _fieldAccountHub() : _screens[0])),
+                        child: _index == 2
+                            ? _fieldAccountHub()
+                            : _index == 1
+                                ? FieldOperationsScreen(
+                                    onScanCard: () => _openCapture(
+                                        CaptureQuickAction.card),
+                                  )
+                                : _screens[0])),
               )),
               const Divider(),
               SafeArea(top: false, bottom: wide, child: _syncStrip()),

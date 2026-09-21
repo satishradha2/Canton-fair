@@ -7,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 
 import 'business_card_parser.dart';
 import 'card_crop_text_check.dart';
+import 'card_scan_quality_check.dart';
 import 'phone_number_normalizer.dart';
 import 'team_workspace_service.dart';
 
@@ -211,6 +212,15 @@ class BusinessCardCapture {
     // Never use an unverified crop for cloud extraction. Verification is an
     // OCR-based safeguard, not proof that every printed character was detected.
     page['crop_verified'] = false;
+    final quality = await CardScanQualityCheck.evaluate(imagePath(side));
+    page['image_quality'] = {
+      'method': 'local-focus-and-glare-v1',
+      'checked_at': DateTime.now().toUtc().toIso8601String(),
+      'edge_detail': quality.edgeDetail,
+      'glare_ratio': quality.glareRatio,
+      'warnings': quality.warnings,
+    };
+    warnings.addAll(quality.warnings);
     final originals = await recognize(imagePath(side), 'original');
     page['original_passes'] = originals;
     var selected = originals;
@@ -235,7 +245,7 @@ class BusinessCardCapture {
         selected = cropped;
       } else {
         warnings.add(
-            'Using the original: the crop could not be confirmed to retain all readable text. Both images and recognition results are preserved.');
+            'Possible cropped card: the adjusted image could not be confirmed to retain all readable text. Retake or adjust the crop before saving. The original image is preserved.');
       }
     }
     final previous = Map<String, dynamic>.from(page['passes'] as Map? ?? {});

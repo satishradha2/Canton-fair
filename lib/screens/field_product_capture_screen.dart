@@ -19,8 +19,7 @@ class _FieldProductCaptureScreenState extends State<FieldProductCaptureScreen> {
   final _form = GlobalKey<FormState>();
   final _fields = <String, TextEditingController>{};
   final _photos = <String>[];
-  late final Future<List<Map<String, Object?>>> _categories =
-      _repository.categories(widget.scope);
+  late Future<List<Map<String, Object?>>> _categories;
   bool _busy = false;
   bool _shortlisted = false;
   bool _dirty = false;
@@ -31,6 +30,12 @@ class _FieldProductCaptureScreenState extends State<FieldProductCaptureScreen> {
 
   TextEditingController _controller(String key) => _fields.putIfAbsent(key,
       () => TextEditingController(text: key == 'price_currency' ? 'USD' : ''));
+
+  @override
+  void initState() {
+    super.initState();
+    _categories = _repository.categories(widget.scope);
+  }
 
   @override
   void dispose() {
@@ -127,6 +132,57 @@ class _FieldProductCaptureScreenState extends State<FieldProductCaptureScreen> {
       },
     ));
 
+  Future<void> _createCategory() async {
+    final name = TextEditingController();
+    final created = await showDialog<bool>(context: context, builder: (context) => AlertDialog(
+      title: const Text('Create product category'),
+      content: TextField(controller: name, autofocus: true,
+        textCapitalization: TextCapitalization.words,
+        decoration: const InputDecoration(labelText: 'Category name')),
+      actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+        FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Create'))],
+    ));
+    if (created != true || name.text.trim().isEmpty || !mounted) return;
+    try {
+      final category = await _repository.createCategory(widget.scope, name.text);
+      if (!mounted) return;
+      setState(() {
+        _controller('category').text = category;
+        _categories = _repository.categories(widget.scope);
+        _dirty = true;
+      });
+    } catch (error) {
+      if (mounted) setState(() => _error = 'Could not create category: $error');
+    }
+  }
+
+  Widget _categoryPicker() => FutureBuilder<List<Map<String, Object?>>(
+    future: _categories,
+    builder: (context, snapshot) {
+      final names = (snapshot.data ?? const <Map<String, Object?>>[])
+          .map((category) => category['name'] as String).toList();
+      final selected = names.contains(_controller('category').text)
+          ? _controller('category').text : null;
+      return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        DropdownButtonFormField<String>(
+          value: selected,
+          isExpanded: true,
+          decoration: const InputDecoration(labelText: 'Product category'),
+          hint: const Text('Choose a category'),
+          items: names.map((name) => DropdownMenuItem(value: name, child: Text(name))).toList(),
+          onChanged: _busy ? null : (value) => setState(() {
+            _controller('category').text = value ?? '';
+            _dirty = true;
+          }),
+          validator: (value) => value == null ? 'Product category is required' : null,
+        ),
+        Align(alignment: Alignment.centerLeft, child: TextButton.icon(
+          onPressed: _busy ? null : _createCategory,
+          icon: const Icon(Icons.add), label: const Text('Create category'))),
+      ]);
+    },
+  );
+
   Widget _section(String title, List<Widget> children) => Card(
     margin: const EdgeInsets.only(bottom: 18), child: Padding(
       padding: const EdgeInsets.all(18), child: Column(
@@ -157,13 +213,7 @@ class _FieldProductCaptureScreenState extends State<FieldProductCaptureScreen> {
             const SizedBox(height: 20),
             _section('Product identity', [
               _field('name', 'Product name', required: true),
-              _field('category', 'Category', required: true),
-              FutureBuilder<List<Map<String, Object?>>>(future: _categories,
-                builder: (context, snapshot) => Wrap(spacing: 8, runSpacing: 8,
-                  children: [for (final category in snapshot.data ?? <Map<String, Object?>>[])
-                    ActionChip(label: Text(category['name'] as String),
-                      onPressed: _busy ? null : () { _controller('category').text =
-                        category['name'] as String; _dirty = true; })])),
+              _categoryPicker(),
               const SizedBox(height: 16),
               _field('model_code', 'Model / SKU'),
               _field('specs', 'Description and specifications', multiline: true),
