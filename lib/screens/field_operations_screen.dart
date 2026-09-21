@@ -101,7 +101,7 @@ class _FieldOperationsScreenState extends State<FieldOperationsScreen> {
     if (supplier == null || !mounted || supplier.id == null) return;
     final scope = await TeamWorkspaceService().scopeKey();
     if (!mounted) return;
-    await _open(FieldProductCaptureScreen(
+    _open(FieldProductCaptureScreen(
       scope: scope,
       supplierId: supplier.id!,
       supplierName: supplier.name,
@@ -156,7 +156,7 @@ class _FieldOperationsScreenState extends State<FieldOperationsScreen> {
               ),
               if (followUpRequired) ...[
                 DropdownButtonFormField<String>(
-                  value: action,
+                  initialValue: action,
                   decoration: const InputDecoration(labelText: 'Next action'),
                   items: const ['Call', 'Email', 'Sample request', 'Quotation deadline']
                       .map((value) => DropdownMenuItem(

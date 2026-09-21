@@ -186,7 +186,9 @@ class _CatalogueVaultScreenState extends State<CatalogueVaultScreen> {
         received += chunk.length;
         if (received > _maximumBytes) {
           await sink.close();
-          await temporary.delete().catchError((_) {});
+          try {
+            await temporary.delete();
+          } catch (_) {}
           throw StateError('The supplier file is larger than 120 MB.');
         }
         sink.add(chunk);
@@ -195,7 +197,9 @@ class _CatalogueVaultScreenState extends State<CatalogueVaultScreen> {
       await _archiveFile(temporary,
           sourceType: 'catalogue_link', sourceValue: uri.toString(),
           originalName: path.basename(uri.path).isEmpty ? 'supplier_catalogue$extension' : path.basename(uri.path));
-      await temporary.delete().catchError((_) {});
+      try {
+        await temporary.delete();
+      } catch (_) {}
     } catch (error) {
       if (mounted) setState(() => _message = 'Could not download catalogue: $error');
     } finally {

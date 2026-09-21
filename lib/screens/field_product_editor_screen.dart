@@ -136,7 +136,7 @@ class _FieldProductEditorScreenState extends State<FieldProductEditorScreen> {
     }
   }
 
-  Widget _categoryPicker() => FutureBuilder<List<Map<String, Object?>>(
+  Widget _categoryPicker() => FutureBuilder<List<Map<String, Object?>>>(
     future: _categories,
     builder: (context, snapshot) {
       final names = (snapshot.data ?? const <Map<String, Object?>>[])
@@ -145,7 +145,7 @@ class _FieldProductEditorScreenState extends State<FieldProductEditorScreen> {
           ? _controller('category').text : null;
       return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         DropdownButtonFormField<String>(
-          value: selected,
+          initialValue: selected,
           isExpanded: true,
           decoration: const InputDecoration(labelText: 'Product category'),
           hint: const Text('Choose a category'),

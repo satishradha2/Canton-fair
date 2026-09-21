@@ -46,8 +46,8 @@ class CardScanQualityCheck {
         pixels++;
       }
     }
-    final detail = detailCount == 0 ? 0 : detailTotal / detailCount;
-    final glare = pixels == 0 ? 0 : glarePixels / pixels;
+    final detail = detailCount == 0 ? 0.0 : detailTotal / detailCount;
+    final glare = pixels == 0 ? 0.0 : glarePixels / pixels;
     final warnings = <String>[];
     if (detail < 13) {
       warnings.add('Possible blur detected. Retake the card with steady focus before saving.');
