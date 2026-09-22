@@ -46,6 +46,7 @@ class FieldOperationsScreen extends StatefulWidget {
 class _FieldOperationsScreenState extends State<FieldOperationsScreen> {
   final _db = TradeDatabase.instance;
   late Future<_FieldData> _data = _load();
+  bool _showCompleteToolList = false;
 
   Future<_FieldData> _load() async => _FieldData(
         await _db.getTrips(),
@@ -55,6 +56,161 @@ class _FieldOperationsScreenState extends State<FieldOperationsScreen> {
       );
 
   void _refresh() => setState(() => _data = _load());
+
+  void _openAllFieldTools() {
+    Navigator.of(context).pop();
+    setState(() => _showCompleteToolList = true);
+  }
+
+  void _openToolHub(String title, String description,
+      List<_FieldToolLink> links) {
+    _open(_FieldToolHubScreen(
+        title: title, description: description, links: links));
+  }
+
+  Widget _buildSimplifiedHome(BuildContext context, _FieldData data) {
+    final scheme = Theme.of(context).colorScheme;
+    void unavailableCardScan() => ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Card scanning is unavailable.')));
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
+      children: [
+        Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: scheme.primary,
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('FIELD WORKSPACE',
+                style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                    color: scheme.onPrimary,
+                    letterSpacing: 1.2,
+                    fontWeight: FontWeight.w800)),
+            const SizedBox(height: 8),
+            Text('Everything for today\'s fair visit.',
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    color: scheme.onPrimary, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 6),
+            Text('Capture evidence, plan visits and keep your team aligned.',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: scheme.onPrimary.withValues(alpha: 0.86))),
+          ]),
+        ),
+        const SizedBox(height: 16),
+        _FieldQuickActions(actions: [
+          _FieldToolLink('Scan card', 'Capture contact details',
+              Icons.document_scanner_outlined, widget.onScanCard ?? unavailableCardScan),
+          _FieldToolLink('Add product', 'Record a supplier product',
+              Icons.add_box_outlined, () => _quickProduct(data)),
+          _FieldToolLink('Start visit', 'Open the booth visit workpad',
+              Icons.playlist_add_check_circle_outlined,
+              () => _open(const FieldWorkScreen())),
+        ]),
+        const SizedBox(height: 22),
+        _FieldHubCard(
+          title: 'Today',
+          description: 'Visits, follow-ups and trip progress',
+          icon: Icons.today_outlined,
+          onTap: () => _openToolHub('Today', 'Stay on top of this fair day.', [
+            _FieldToolLink('Trip dashboard',
+                'Today\'s visits, follow-ups and field progress',
+                Icons.dashboard_outlined, _openTripDashboard),
+            _FieldToolLink('Booth visits & checklist',
+                'Record outcomes, samples, brochures and next actions',
+                Icons.fact_check_outlined, () => _open(const FieldWorkScreen())),
+            _FieldToolLink('Close visit & follow-up',
+                'Save visit outcomes and set the next action',
+                Icons.checklist_outlined, () => _visitChecklist(data)),
+            _FieldToolLink('Follow-up reminders',
+                'Calls, emails, samples and quotation deadlines',
+                Icons.event_available_outlined,
+                () => _open(const FollowUpScreen())),
+          ]),
+        ),
+        _FieldHubCard(
+          title: 'Capture',
+          description: 'Cards, products, catalogues and meetings',
+          icon: Icons.document_scanner_outlined,
+          onTap: () => _openToolHub('Capture',
+              'Capture complete supplier evidence while you are at the booth.', [
+            _FieldToolLink('Business-card scan',
+                'Scan, review and save a contact card', Icons.badge_outlined,
+                widget.onScanCard ?? unavailableCardScan),
+            _FieldToolLink('Quick product capture',
+                'Product, category, MOQ, price, lead time and photos',
+                Icons.inventory_2_outlined, () => _quickProduct(data)),
+            _FieldToolLink('Products & categories',
+                'Create the shared category master and capture products',
+                Icons.category_outlined,
+                () => _open(const ProductCategoryMasterScreen())),
+            _FieldToolLink('Meeting recorder & minutes',
+                'Record discussions and save structured minutes',
+                Icons.mic_none_outlined, () => _openRecorder(data)),
+            _FieldToolLink('Supplier catalogue vault',
+                'Archive brochures, PDFs, QR catalogues and links',
+                Icons.inventory_2_outlined,
+                () => _open(const CatalogueVaultScreen())),
+          ]),
+        ),
+        _FieldHubCard(
+          title: 'Plan',
+          description: 'Visit priorities, halls and appointments',
+          icon: Icons.route_outlined,
+          onTap: () => _openToolHub('Plan',
+              'Prepare the next stop and keep appointments practical.', [
+            _FieldToolLink('Visit planning',
+                'Review selected booths and organise visit priorities',
+                Icons.map_outlined, () => _open(const FieldWorkScreen())),
+            _FieldToolLink('Phone calendar',
+                'Add an existing supplier follow-up to your calendar',
+                Icons.calendar_month_outlined,
+                () => _addCalendarEvent(data)),
+            _FieldToolLink('Trip dashboard',
+                'Use today\'s visit progress to decide the next stop',
+                Icons.dashboard_outlined, _openTripDashboard),
+          ]),
+        ),
+        _FieldHubCard(
+          title: 'Team & sync',
+          description: 'Sync status, alerts and shared notes',
+          icon: Icons.sync_outlined,
+          onTap: () => _openToolHub('Team & sync',
+              'Keep field records safe, current and visible to the team.', [
+            _FieldToolLink('Offline sync center',
+                'Pending records, failed uploads, retries and last sync',
+                Icons.sync_problem_outlined,
+                () => _open(const SyncStatusScreen())),
+            _FieldToolLink('Automatic team sync',
+                'Control sync on resume and connection recovery',
+                Icons.sync_outlined, () => _open(const SettingsScreen())),
+            _FieldToolLink('Team update alerts',
+                'Download and notify about live cloud changes',
+                Icons.notifications_active_outlined,
+                () => AutoSyncService.instance.syncIfPossible()),
+            _FieldToolLink('Team notes & mentions',
+                'Discuss suppliers and mention teammates', Icons.alternate_email,
+                () => _supplierComments(data)),
+          ]),
+        ),
+        _FieldHubCard(
+          title: 'More field tools',
+          description: 'Specialist utilities, imports and settings',
+          icon: Icons.handyman_outlined,
+          onTap: () => _openToolHub('More field tools',
+              'Less-frequent utilities remain available without cluttering the daily workspace.', [
+            _FieldToolLink('Supplier catalogue vault',
+                'Find permanently saved brochures and supplier catalogues',
+                Icons.folder_copy_outlined,
+                () => _open(const CatalogueVaultScreen())),
+            _FieldToolLink('All field tools',
+                'Open the complete legacy tool list', Icons.apps_outlined,
+                _openAllFieldTools),
+          ]),
+        ),
+      ],
+    );
+  }
 
   Future<T?> _pick<T>(String title, List<T> items, String Function(T) label) {
     return showModalBottomSheet<T>(
@@ -696,7 +852,18 @@ Please respond by ${_date(due)} with unit price, MOQ, lead time, payment terms, 
                 return const Center(child: CircularProgressIndicator());
               }
               final data = snapshot.data!;
+              if (!_showCompleteToolList) {
+                return _buildSimplifiedHome(context, data);
+              }
               return ListView(padding: const EdgeInsets.all(16), children: [
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    onPressed: () => setState(() => _showCompleteToolList = false),
+                    icon: const Icon(Icons.arrow_back),
+                    label: const Text('Back to simplified workspace'),
+                  ),
+                ),
                 const _FieldSectionHeader('TODAY AT THE FAIR'),
                 _tile(
                     'Trip dashboard',
@@ -1737,6 +1904,153 @@ class _FieldData {
   final List<Sample> samples;
   const _FieldData(this.trips, this.suppliers, this.meetings, this.samples);
 }
+
+class _FieldToolLink {
+  const _FieldToolLink(this.title, this.description, this.icon, this.onTap);
+
+  final String title;
+  final String description;
+  final IconData icon;
+  final VoidCallback onTap;
+}
+
+class _FieldQuickActions extends StatelessWidget {
+  const _FieldQuickActions({required this.actions});
+
+  final List<_FieldToolLink> actions;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Row(
+          children: [
+            for (var index = 0; index < actions.length; index++) ...[
+              if (index > 0)
+                SizedBox(
+                    height: 52,
+                    child: VerticalDivider(color: scheme.outlineVariant)),
+              Expanded(
+                child: InkWell(
+                  onTap: actions[index].onTap,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    child: Column(mainAxisSize: MainAxisSize.min, children: [
+                      Icon(actions[index].icon, color: scheme.primary),
+                      const SizedBox(height: 6),
+                      Text(actions[index].title,
+                          textAlign: TextAlign.center,
+                          style: Theme.of(context)
+                              .textTheme
+                              .labelLarge
+                              ?.copyWith(fontWeight: FontWeight.w700)),
+                    ]),
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _FieldHubCard extends StatelessWidget {
+  const _FieldHubCard({
+    required this.title,
+    required this.description,
+    required this.icon,
+    required this.onTap,
+  });
+
+  final String title;
+  final String description;
+  final IconData icon;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(children: [
+            Container(
+              width: 52,
+              height: 52,
+              decoration: BoxDecoration(
+                color: scheme.primaryContainer,
+                borderRadius: BorderRadius.circular(15),
+              ),
+              child: Icon(icon, color: scheme.onPrimaryContainer),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(title,
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleMedium
+                        ?.copyWith(fontWeight: FontWeight.w800)),
+                const SizedBox(height: 4),
+                Text(description,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: scheme.onSurfaceVariant)),
+              ]),
+            ),
+            const SizedBox(width: 8),
+            Icon(Icons.chevron_right, color: scheme.onSurfaceVariant),
+          ]),
+        ),
+      ),
+    );
+  }
+}
+
+class _FieldToolHubScreen extends StatelessWidget {
+  const _FieldToolHubScreen({
+    required this.title,
+    required this.description,
+    required this.links,
+  });
+
+  final String title;
+  final String description;
+  final List<_FieldToolLink> links;
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        appBar: AppBar(title: Text(title)),
+        body: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            Text(description, style: Theme.of(context).textTheme.bodyLarge),
+            const SizedBox(height: 18),
+            for (final link in links)
+              Card(
+                margin: const EdgeInsets.only(bottom: 10),
+                child: ListTile(
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  leading: Icon(link.icon),
+                  title: Text(link.title,
+                      style: const TextStyle(fontWeight: FontWeight.w700)),
+                  subtitle: Text(link.description),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: link.onTap,
+                ),
+              ),
+          ],
+        ),
+      );
 
 class _FieldSectionHeader extends StatelessWidget {
   final String label;
