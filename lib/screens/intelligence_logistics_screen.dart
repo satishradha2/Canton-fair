@@ -2078,7 +2078,7 @@ class _IntelligenceLogisticsScreenState
         actions: [
           TextButton(
               onPressed: () => SharePlus.instance.share(ShareParams(
-                  text: code, subject: 'Canton Fair supplier transfer')),
+                  text: code, subject: 'Fair Expert supplier transfer')),
               child: const Text('Share code')),
           FilledButton(
               onPressed: () => Navigator.pop(context),

@@ -88,7 +88,7 @@ class _AppLockScreenState extends State<AppLockScreen> {
                             Theme.of(context).colorScheme.onPrimaryContainer),
                   ),
                   const SizedBox(height: 20),
-                  const Text('Canton Fair CRM',
+                  const Text('Fair Expert',
                       style:
                           TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
                   const SizedBox(height: 6),

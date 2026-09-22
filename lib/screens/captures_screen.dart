@@ -25,6 +25,7 @@ import '../models/models.dart';
 import '../theme/app_theme.dart';
 import '../widgets/enterprise_widgets.dart';
 import '../widgets/field_capture_checklist.dart';
+import '../widgets/supplier_category_picker.dart';
 import '../widgets/voice_note_field.dart';
 import 'scanner_screen.dart';
 import 'ocr_screen.dart';
@@ -136,24 +137,29 @@ class _CapturesScreenState extends State<CapturesScreen> {
     }
     final draftService = QuickCaptureDraftService();
     final draft = await draftService.load();
+    final captureScope = await TeamWorkspaceService().scopeKey();
     if (!mounted) return;
     var tripId = int.tryParse(draft['trip_id'] ?? '') ?? trips.first.id!;
     final name = TextEditingController(text: draft['name'] ?? '');
     final booth = TextEditingController(text: draft['booth'] ?? '');
     final contact = TextEditingController(text: draft['contact'] ?? '');
-    final category = TextEditingController(text: draft['category'] ?? '');
+    final categories = (draft['categories'] ?? draft['category'] ?? '')
+        .split(',')
+        .map((value) => value.trim())
+        .where((value) => value.isNotEmpty)
+        .toSet();
     var saving = false;
     Future<void> saveDraft() => draftService.save({
           'trip_id': '$tripId',
           'name': name.text,
           'booth': booth.text,
           'contact': contact.text,
-          'category': category.text,
+          'category': (categories.toList()..sort()).join(', '),
+          'categories': (categories.toList()..sort()).join(','),
         });
     name.addListener(saveDraft);
     booth.addListener(saveDraft);
     contact.addListener(saveDraft);
-    category.addListener(saveDraft);
     final saved = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
@@ -219,12 +225,19 @@ class _CapturesScreenState extends State<CapturesScreen> {
                           labelText: 'Person met',
                           prefixIcon: Icon(Icons.person_outline))),
                   const SizedBox(height: 12),
-                  TextField(
-                      controller: category,
-                      enabled: !saving,
-                      decoration: const InputDecoration(
-                          labelText: 'Category',
-                          prefixIcon: Icon(Icons.category_outlined))),
+                  SupplierCategoryPicker(
+                    scope: captureScope,
+                    selected: categories,
+                    enabled: !saving,
+                    onChanged: (selected) {
+                      setSheetState(() {
+                        categories
+                          ..clear()
+                          ..addAll(selected);
+                      });
+                      saveDraft();
+                    },
+                  ),
                   const SizedBox(height: 20),
                   FilledButton.icon(
                     onPressed: saving
@@ -238,6 +251,14 @@ class _CapturesScreenState extends State<CapturesScreen> {
                               );
                               return;
                             }
+                            if (categories.isEmpty) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                    content: Text(
+                                        'Select at least one product category to save.')),
+                              );
+                              return;
+                            }
                             setSheetState(() => saving = true);
                             try {
                               final supplierId = await db.insert(
@@ -247,8 +268,16 @@ class _CapturesScreenState extends State<CapturesScreen> {
                                     name: name.text.trim(),
                                     booth: booth.text.trim(),
                                     hall: '',
-                                    category: category.text.trim(),
+                                    category: (categories.toList()..sort()).join(', '),
                                     country: '',
+                                    fieldCaptureJson: jsonEncode({
+                                      'categories': categories.toList()..sort(),
+                                      'supplier_details': {
+                                        'categories': categories.toList()..sort(),
+                                        'category': (categories.toList()..sort())
+                                            .join(', '),
+                                      },
+                                    }),
                                   ).toMap()
                                     ..remove('id'));
                               if (contact.text.trim().isNotEmpty) {
@@ -300,7 +329,6 @@ class _CapturesScreenState extends State<CapturesScreen> {
     name.dispose();
     booth.dispose();
     contact.dispose();
-    category.dispose();
     if (saved == true && mounted) {
       _load();
       ScaffoldMessenger.of(context).showSnackBar(
@@ -947,7 +975,7 @@ class _CapturesScreenState extends State<CapturesScreen> {
 
   Future<void> _openAddTripSheet() async {
     final formKey = GlobalKey<FormState>();
-    String name = 'Canton Fair Trip';
+    String name = 'Fair Expert Trip';
     String city = 'Guangzhou';
     String start = '';
     String end = '';
@@ -1048,7 +1076,7 @@ class _CapturesScreenState extends State<CapturesScreen> {
                             textInputAction: TextInputAction.next,
                             decoration: const InputDecoration(
                                 labelText: 'Trip name',
-                                hintText: 'e.g. Canton Fair - October 2026',
+                                hintText: 'e.g. Fair Expert - October 2026',
                                 prefixIcon: Icon(Icons.work_outline)),
                             validator: (value) =>
                                 value == null || value.trim().isEmpty
@@ -1199,6 +1227,7 @@ class _CapturesScreenState extends State<CapturesScreen> {
       decision: capture.shortlisted ? 'Shortlist' : 'Maybe',
       fieldCaptureJson: jsonEncode({
         ...capture.fieldCapture,
+        'categories': capture.categories,
         'supplier_details': {
           if (businessCard != null)
             ...SupplierProfile.companySubset(businessCard.fields),
@@ -1207,6 +1236,7 @@ class _CapturesScreenState extends State<CapturesScreen> {
           'hall': capture.hall,
           'country': capture.country,
           'category': capture.category,
+          'categories': capture.categories,
           'notes': capture.notes,
         },
         if (businessCard != null)
@@ -1408,7 +1438,7 @@ class _CapturesScreenState extends State<CapturesScreen> {
       country: capture.country,
     );
     await db.logAudit(
-        'Canton Fair field capture', '${capture.name} | ${capture.nextAction}');
+        'Fair Expert field capture', '${capture.name} | ${capture.nextAction}');
     _load();
     if (!mounted) return;
     final newlyCreatedSupplierId = savedSupplierId;
@@ -2180,7 +2210,7 @@ class _CapturesScreenState extends State<CapturesScreen> {
       ProductScore.fromRating(rating);
 
   static const _messageTemplates = [
-    'Hi {name}, nice meeting you at Canton Fair. Thank you for sharing product details.',
+    'Hi {name}, nice meeting you at Fair Expert. Thank you for sharing product details.',
     'Hi {name}, please send the latest official quotation and sample photos for {company}.',
     'Hi {name}, could you share MOQ, lead time, payment terms, and Incoterm for the products we discussed?',
     'Hi {name}, please share your catalog, price list, and best-seller recommendations.',
@@ -2424,7 +2454,7 @@ class _CapturesScreenState extends State<CapturesScreen> {
   Future<void> _openEmailTemplate(
       Contact c, Exhibitor e, String message) async {
     final subject =
-        Uri.encodeComponent('Follow-up from Canton Fair: ${e.name}');
+        Uri.encodeComponent('Follow-up from Fair Expert: ${e.name}');
     final body = Uri.encodeComponent(message);
     await _launchAction(
         Uri.parse('mailto:${c.email}?subject=$subject&body=$body'));

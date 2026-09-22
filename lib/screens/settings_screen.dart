@@ -687,7 +687,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 icon: Icons.settings_backup_restore,
                 title: 'Restore backup',
                 subtitle:
-                    'Replace this device data from a Canton Fair JSON backup',
+                    'Replace this device data from a Fair Expert JSON backup',
                 trailing: _restoringBackup
                     ? const SizedBox(
                         width: 22,

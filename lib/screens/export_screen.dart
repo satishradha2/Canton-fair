@@ -65,7 +65,7 @@ class _ExportScreenState extends State<ExportScreen> {
     await file.writeAsBytes(bytes, flush: true);
     await SharePlus.instance.share(ShareParams(
       files: [XFile(file.path)],
-      text: 'Canton Fair CRM Excel workbook',
+      text: 'Fair Expert Excel workbook',
     ));
   }
 
@@ -248,7 +248,7 @@ class _ExportScreenState extends State<ExportScreen> {
         build: (context) {
           final children = <pw.Widget>[
             pw.Text(
-              'Canton Fair Trip Ranked Shortlist Report',
+              'Fair Expert Trip Ranked Shortlist Report',
               style: pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold),
             ),
             pw.SizedBox(height: 8),
@@ -413,7 +413,7 @@ class _ExportScreenState extends State<ExportScreen> {
           return pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
-              pw.Text('Canton Fair Shortlist Report',
+              pw.Text('Fair Expert Shortlist Report',
                   style: pw.TextStyle(
                       fontSize: 24, fontWeight: pw.FontWeight.bold)),
               pw.SizedBox(height: 8),
@@ -492,7 +492,7 @@ class _ExportScreenState extends State<ExportScreen> {
         pageFormat: PdfPageFormat.a4,
         margin: const pw.EdgeInsets.all(18),
         build: (context) => [
-          pw.Text('Canton Fair Daily Debrief',
+          pw.Text('Fair Expert Daily Debrief',
               style:
                   pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold)),
           pw.SizedBox(height: 6),

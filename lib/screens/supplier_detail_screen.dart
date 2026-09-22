@@ -666,7 +666,7 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
           (status == 'Ready to order' || status == 'Approved for order');
     }).toList();
     final lines = [
-      'Canton Fair purchase handover: ${widget.supplier.name}',
+      'Fair Expert purchase handover: ${widget.supplier.name}',
       if (ready.isEmpty) 'No products are purchase-ready yet.',
       ...ready.map((item) {
         final plan = _purchasePlan(item.product);

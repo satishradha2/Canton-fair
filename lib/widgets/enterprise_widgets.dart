@@ -67,7 +67,7 @@ class EnterprisePage extends StatelessWidget {
                             color: AppColors.controlSelected,
                             borderRadius: BorderRadius.circular(20),
                           ),
-                          child: const Text('CANTON FAIR / SOURCING WORKSPACE',
+                          child: const Text('FAIR EXPERT / SOURCING WORKSPACE',
                               style: TextStyle(
                                   fontSize: 10,
                                   letterSpacing: 1.1,

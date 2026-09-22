@@ -126,7 +126,7 @@ function Login({ onError }: { onError: (message: string) => void }) {
     }
   };
   return <main className="login-shell"><section className="login-card">
-    <p className="eyebrow">CANTON FAIR / SOURCING WORKSPACE</p>
+    <p className="eyebrow">FAIR EXPERT / SOURCING WORKSPACE</p>
     <h1>Bring the fair back to your desk.</h1>
     <p className="muted">Review synchronized supplier and product evidence without taking field-entry work away from the team.</p>
     <form onSubmit={submit}>
@@ -222,7 +222,7 @@ function App() {
     const blob = new Blob([[fields.map(quote).join(','), ...rows].join('\n')], { type: 'text/csv;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
-    anchor.href = url; anchor.download = 'canton-fair-business-export.csv'; anchor.click();
+    anchor.href = url; anchor.download = 'fair-expert-business-export.csv'; anchor.click();
     URL.revokeObjectURL(url);
   };
 
@@ -312,7 +312,7 @@ function App() {
 
   return <main className="app-shell">
     <aside className="sidebar">
-      <div className="brand"><span className="brand-mark">CF</span><div><strong>Canton Fair</strong><small>Sourcing workspace</small></div></div>
+      <div className="brand"><span className="brand-mark">FE</span><div><strong>Fair Expert</strong><small>Sourcing workspace</small></div></div>
       <nav>{sidebarViews.map((key) => <button key={key} className={view === key ? 'nav-item active' : 'nav-item'} onClick={() => setView(key)}>{viewMeta[key].label}</button>)}</nav>
       <div className="sidebar-footer"><span className="sync-dot" /> Shared team data<br /><small>Mobile captures sync here</small></div>
     </aside>

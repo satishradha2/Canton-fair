@@ -52,7 +52,7 @@ class _CantonFairRootState extends State<CantonFairRoot> {
   Widget build(BuildContext context) => ValueListenableBuilder<ThemeMode>(
         valueListenable: AppearanceService.changes,
         builder: (context, themeMode, _) => MaterialApp(
-          title: 'Canton Fair CRM',
+          title: 'Fair Expert',
           debugShowCheckedModeBanner: false,
           theme: buildAppTheme(),
           darkTheme: buildDarkAppTheme(),

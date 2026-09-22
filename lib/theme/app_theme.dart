@@ -3,18 +3,18 @@ import 'package:flutter/services.dart';
 
 /// Shared visual tokens for the field workspace and procurement screens.
 class AppColors {
-  static const ink = Color(0xFF102C37);
-  static const muted = Color(0xFF60747C);
-  static const line = Color(0xFFD6E1DE);
-  static const surface = Color(0xFFF4F7F4);
+  static const ink = Color(0xFF12343C);
+  static const muted = Color(0xFF607178);
+  static const line = Color(0xFFD7E3E0);
+  static const surface = Color(0xFFF5F7F5);
   static const controlSurface = Colors.white;
-  static const primary = Color(0xFF123F4C);
-  static const primaryBright = Color(0xFF245D69);
-  static const controlSelected = Color(0xFFDDF2ED);
-  static const teal = Color(0xFF007B70);
-  static const tealBright = Color(0xFF0B9A88);
-  static const amber = Color(0xFFAD6918);
-  static const gold = Color(0xFFD8AD5A);
+  static const primary = Color(0xFF123B44);
+  static const primaryBright = Color(0xFF245A64);
+  static const controlSelected = Color(0xFFDDF4EE);
+  static const teal = Color(0xFF16806F);
+  static const tealBright = Color(0xFF259785);
+  static const amber = Color(0xFF9B621B);
+  static const gold = Color(0xFFE4B64B);
   static const cobalt = Color(0xFF3567A9);
   static const danger = Color(0xFFB83B47);
 }
@@ -58,9 +58,9 @@ ThemeData buildAppTheme() {
     outline: Color(0xFF7B9095),
     outlineVariant: AppColors.line,
   );
-  final shape = RoundedRectangleBorder(borderRadius: BorderRadius.circular(12));
+  final shape = RoundedRectangleBorder(borderRadius: BorderRadius.circular(14));
   final input = OutlineInputBorder(
-    borderRadius: BorderRadius.circular(12),
+    borderRadius: BorderRadius.circular(14),
     borderSide: const BorderSide(color: Color(0xFFB6C3CA)),
   );
   const typography = TextTheme(
@@ -105,7 +105,7 @@ ThemeData buildAppTheme() {
       elevation: 0,
       scrolledUnderElevation: 0,
       centerTitle: false,
-      toolbarHeight: 64,
+      toolbarHeight: 68,
       titleSpacing: 20,
       iconTheme: IconThemeData(color: Colors.white),
       actionsIconTheme: IconThemeData(color: Colors.white),
@@ -124,10 +124,10 @@ ThemeData buildAppTheme() {
       color: Colors.white,
       surfaceTintColor: Colors.transparent,
       elevation: 0,
-      shadowColor: const Color(0x1F102C37),
+      shadowColor: const Color(0x1412343C),
       margin: EdgeInsets.zero,
       shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(18),
           side: const BorderSide(color: Color(0xFFCFE0DC))),
     ),
     dividerTheme:
@@ -143,7 +143,7 @@ ThemeData buildAppTheme() {
           input.copyWith(borderSide: const BorderSide(color: AppColors.danger)),
       focusedErrorBorder: input.copyWith(
           borderSide: const BorderSide(color: AppColors.danger, width: 2)),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       labelStyle: const TextStyle(
           color: AppColors.muted, fontSize: 14, fontWeight: FontWeight.w500),
       floatingLabelStyle:
@@ -289,9 +289,9 @@ ThemeData buildAppTheme() {
     navigationBarTheme: NavigationBarThemeData(
       backgroundColor: AppColors.primary,
       surfaceTintColor: Colors.transparent,
-      indicatorColor: const Color(0xFF2D6470),
+      indicatorColor: const Color(0xFF2B6970),
       elevation: 8,
-      height: 80,
+      height: 76,
       labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
       labelTextStyle: WidgetStateProperty.resolveWith((states) => TextStyle(
             fontFamily: 'PublicSans',
@@ -313,7 +313,7 @@ ThemeData buildAppTheme() {
     ),
     navigationRailTheme: const NavigationRailThemeData(
       backgroundColor: AppColors.primary,
-      indicatorColor: Color(0xFF2D6470),
+      indicatorColor: Color(0xFF2B6970),
       selectedIconTheme: IconThemeData(color: Color(0xFF8FE0D3)),
       unselectedIconTheme: IconThemeData(color: Color(0xFFB8CBD0)),
       selectedLabelTextStyle: TextStyle(

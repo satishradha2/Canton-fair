@@ -7,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 import '../data/camera_capture_service.dart';
 
 import '../models/models.dart';
+import 'supplier_category_picker.dart';
 import 'voice_note_field.dart';
 
 class FieldCapturePhoto {
@@ -56,6 +57,7 @@ class FieldCaptureResult {
   final String booth;
   final String hall;
   final String category;
+  final List<String> categories;
   final String country;
   final String notes;
   final int rating;
@@ -87,6 +89,7 @@ class FieldCaptureResult {
     required this.booth,
     required this.hall,
     required this.category,
+    required this.categories,
     required this.country,
     required this.notes,
     required this.rating,
@@ -148,6 +151,7 @@ class _FieldCaptureChecklistDialogState
   final _checked = <String>{};
   final _photos = <FieldCapturePhoto>[];
   final _products = <FieldCaptureProduct>[];
+  final _categories = <String>{};
   String _productKey = 'product_${DateTime.now().microsecondsSinceEpoch}';
   int _productRating = 0;
   bool _productShortlisted = false;
@@ -176,7 +180,6 @@ class _FieldCaptureChecklistDialogState
   late final TextEditingController _name;
   late final TextEditingController _booth;
   late final TextEditingController _hall;
-  late final TextEditingController _category;
   late final TextEditingController _country;
   final _notes = TextEditingController();
   final _factoryLocation = TextEditingController();
@@ -225,7 +228,6 @@ class _FieldCaptureChecklistDialogState
     _name = TextEditingController(text: seed['name'] ?? '');
     _booth = TextEditingController(text: seed['booth'] ?? '');
     _hall = TextEditingController(text: seed['hall'] ?? '');
-    _category = TextEditingController(text: seed['category'] ?? '');
     _country = TextEditingController(
         text: (seed['country']?.isNotEmpty ?? false)
             ? seed['country']
@@ -239,7 +241,6 @@ class _FieldCaptureChecklistDialogState
       _name,
       _booth,
       _hall,
-      _category,
       _country,
       _notes,
       _factoryLocation,
@@ -298,6 +299,14 @@ class _FieldCaptureChecklistDialogState
       if (_scroll.hasClients) _scroll.jumpTo(0);
       return;
     }
+    if (_categories.isEmpty) {
+      setState(() {
+        _step = 0;
+        _error = 'Select at least one product category before saving.';
+      });
+      if (_scroll.hasClients) _scroll.jumpTo(0);
+      return;
+    }
     if (!_commitProduct()) {
       setState(() {
         _step = 3;
@@ -308,6 +317,7 @@ class _FieldCaptureChecklistDialogState
     }
     if (!_formKey.currentState!.validate()) return;
     final checklist = _checked.toList()..sort();
+    final categories = _categories.toList()..sort();
     Navigator.pop(
       context,
       FieldCaptureResult(
@@ -317,7 +327,8 @@ class _FieldCaptureChecklistDialogState
         name: _name.text.trim(),
         booth: _booth.text.trim(),
         hall: _hall.text.trim(),
-        category: _category.text.trim(),
+        category: categories.join(', '),
+        categories: List.unmodifiable(categories),
         country: _country.text.trim(),
         notes: _notes.text.trim(),
         rating: _rating,
@@ -363,6 +374,7 @@ class _FieldCaptureChecklistDialogState
           'oem_odm': _oemOdm,
           'audit_status': _auditStatus,
           'certifications_observed': _certifications.text.trim(),
+          'categories': categories,
           'checklist': checklist,
           'captured_at': DateTime.now().toIso8601String(),
         },
@@ -416,9 +428,15 @@ class _FieldCaptureChecklistDialogState
           TextFormField(
               controller: _hall,
               decoration: const InputDecoration(labelText: 'Hall / zone')),
-          TextFormField(
-              controller: _category,
-              decoration: const InputDecoration(labelText: 'Category')),
+          SupplierCategoryPicker(
+            scope: widget.captureScope,
+            selected: _categories,
+            onChanged: (categories) => setState(() {
+              _categories
+                ..clear()
+                ..addAll(categories);
+            }),
+          ),
           TextFormField(
               controller: _country,
               decoration: const InputDecoration(labelText: 'Country')),

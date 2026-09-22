@@ -975,7 +975,7 @@ Please respond by ${_date(due)} with unit price, MOQ, lead time, payment terms, 
                     Icons.calendar_month_outlined,
                     () => _addCalendarEvent(data)),
                 _tile(
-                    'Canton Fair directory import',
+                    'Fair Expert directory import',
                     'Import exhibitor CSV data into a selected trip',
                     Icons.table_view_outlined,
                     () =>

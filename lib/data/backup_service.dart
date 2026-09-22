@@ -67,7 +67,7 @@ class BackupService {
     final file = await createBackup();
     await SharePlus.instance.share(ShareParams(
       files: [XFile(file.path)],
-      text: 'Canton Fair CRM portable backup',
+      text: 'Fair Expert portable backup',
     ));
   }
 
@@ -103,7 +103,7 @@ class BackupService {
     await target.writeAsString(jsonEncode(envelope), flush: true);
     await SharePlus.instance.share(ShareParams(
       files: [XFile(target.path)],
-      text: 'Password-encrypted Canton Fair CRM backup',
+      text: 'Password-encrypted Fair Expert backup',
     ));
   }
 
@@ -233,7 +233,7 @@ class BackupService {
         decoded['format'] != 'canton-fair-crm-backup' ||
         ![1, 2, 3, 4].contains(decoded['version']) ||
         decoded['tables'] is! Map) {
-      throw const FormatException('Unsupported Canton Fair CRM backup.');
+      throw const FormatException('Unsupported Fair Expert backup.');
     }
     final version = decoded['version'] as int;
     final rawTables = decoded['tables'] as Map;

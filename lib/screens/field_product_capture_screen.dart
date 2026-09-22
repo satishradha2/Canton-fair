@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import '../data/camera_capture_service.dart';
 import '../data/field_work_repository.dart';
+import 'supplier_voice_note_screen.dart';
 
 class FieldProductCaptureScreen extends StatefulWidget {
   const FieldProductCaptureScreen({super.key, required this.scope,
@@ -20,6 +21,7 @@ class _FieldProductCaptureScreenState extends State<FieldProductCaptureScreen> {
   final _form = GlobalKey<FormState>();
   final _fields = <String, TextEditingController>{};
   final _photos = <String>[];
+  final _savedProducts = <_SavedProduct>[];
   late Future<List<Map<String, Object?>>> _categories;
   bool _busy = false;
   bool _shortlisted = false;
@@ -81,18 +83,24 @@ class _FieldProductCaptureScreenState extends State<FieldProductCaptureScreen> {
     }
   }
 
-  Future<void> _save(bool another) async {
+  Future<void> _save(bool another, {bool recordAudio = false}) async {
     if (_busy || !_form.currentState!.validate()) return;
     FocusScope.of(context).unfocus();
     setState(() { _busy = true; _error = null; });
     try {
-      await _repository.captureProduct(scope: widget.scope,
+      final productName = _controller('name').text.trim();
+      final productId = await _repository.captureProduct(scope: widget.scope,
         supplier: widget.supplierId,
         fields: {for (final entry in _fields.entries) entry.key: entry.value.text},
         rating: _rating, shortlisted: _shortlisted, photos: List.of(_photos));
       if (!mounted) return;
+      if (recordAudio) {
+        await _recordProductAudio(productId, productName);
+        if (!mounted) return;
+      }
       if (another) {
         setState(() {
+          _savedProducts.add(_SavedProduct(productId, productName));
           for (final entry in _fields.entries) {
             if (entry.key != 'category' && entry.key != 'price_currency') entry.value.clear();
           }
@@ -111,6 +119,15 @@ class _FieldProductCaptureScreenState extends State<FieldProductCaptureScreen> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  Future<void> _recordProductAudio(int productId, String productName) async {
+    await Navigator.of(context).push<void>(MaterialPageRoute(
+        builder: (_) => SupplierVoiceNoteScreen(
+              productId: productId,
+              productName: productName,
+              contextLabel: 'Product: $productName',
+            )));
   }
 
   Widget _field(String key, String label, {bool required = false,
@@ -289,14 +306,43 @@ class _FieldProductCaptureScreenState extends State<FieldProductCaptureScreen> {
                 })),
               const SizedBox(height: 18), _field('shortlist_reason', 'Decision reason', multiline: true),
             ]),
+            if (_savedProducts.isNotEmpty)
+              _section('Products saved in this session', [
+                const Text('Add more original audio notes directly against the relevant product.'),
+                const SizedBox(height: 8),
+                for (final product in _savedProducts)
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.inventory_2_outlined),
+                    title: Text(product.name),
+                    trailing: TextButton.icon(
+                      onPressed: _busy
+                          ? null
+                          : () => _recordProductAudio(product.id, product.name),
+                      icon: const Icon(Icons.graphic_eq_outlined),
+                      label: const Text('Voice note'),
+                    ),
+                  ),
+              ]),
           ]))),
         SafeArea(top: false, child: Padding(padding: const EdgeInsets.all(16),
           child: Wrap(spacing: 12, runSpacing: 8, alignment: WrapAlignment.end, children: [
             OutlinedButton(onPressed: _busy ? null : () => _save(true),
               child: const Text('Save & add another')),
+            OutlinedButton.icon(
+              onPressed: _busy ? null : () => _save(false, recordAudio: true),
+              icon: const Icon(Icons.graphic_eq_outlined),
+              label: const Text('Save + voice note'),
+            ),
             FilledButton(onPressed: _busy ? null : () => _save(false), child: const Text('Save product')),
           ]))),
       ]),
     ),
   );
+}
+
+class _SavedProduct {
+  const _SavedProduct(this.id, this.name);
+  final int id;
+  final String name;
 }

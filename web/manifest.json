@@ -1,11 +1,11 @@
 {
-    "name": "canton_fair_crm",
-    "short_name": "canton_fair_crm",
+    "name": "Fair Expert",
+    "short_name": "Fair Expert",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "description": "Fair Expert field sourcing workspace.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

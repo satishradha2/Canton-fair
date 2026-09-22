@@ -41,7 +41,7 @@ class AppLockService {
   Future<bool> authenticateWithBiometrics() async {
     try {
       return await _localAuth.authenticate(
-        localizedReason: 'Unlock Canton Fair CRM',
+        localizedReason: 'Unlock Fair Expert',
         options: const AuthenticationOptions(
           biometricOnly: true,
           stickyAuth: true,

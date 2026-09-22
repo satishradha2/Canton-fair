@@ -71,7 +71,7 @@ String tr(BuildContext context, String key) {
       'hindi': 'Hindi',
       'chooseLanguage': 'Choose language',
       'languageSaved': 'Language updated',
-      'operations': 'Canton Fair Operations',
+      'operations': 'Fair Expert Operations',
       'supplierCapture': 'Supplier Capture',
       'shortlistWorkspace': 'Shortlist Workspace',
       'followUpQueue': 'Follow-up Queue',

@@ -368,7 +368,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
   }
 
   Widget _dailyDebriefSection() => SectionPanel(
-        title: 'Canton Fair daily debrief',
+        title: 'Fair Expert daily debrief',
         subtitle: 'Review the day before sharing a concise management update.',
         trailing: Wrap(
           spacing: 2,

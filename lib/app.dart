@@ -167,7 +167,7 @@ class _CantonFairAppState extends State<CantonFairApp>
         builder: (ctx) => AlertDialog(
           title: const Text('Update available'),
           content: Text(
-            'A newer Canton Fair CRM APK is ready.\n\n'
+            'A newer Fair Expert APK is ready.\n\n'
             'Installed: ${update.currentVersion}\n'
             'Latest: ${update.latestVersion}',
           ),
@@ -477,7 +477,7 @@ class _CantonFairAppState extends State<CantonFairApp>
                           Icon(Icons.business_center_outlined,
                               color: AppColors.teal),
                           SizedBox(width: 12),
-                          Text('CANTON FAIR',
+                          Text('FAIR EXPERT',
                               style: TextStyle(
                                   fontSize: 12, fontWeight: FontWeight.w800)),
                         ])

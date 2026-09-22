@@ -3,8 +3,10 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 
 import '../data/database.dart';
+import '../data/team_workspace_service.dart';
 import '../models/models.dart';
 import '../widgets/voice_note_field.dart';
+import 'field_product_capture_screen.dart';
 import 'supplier_voice_note_screen.dart';
 
 class PostFairVisitsScreen extends StatefulWidget {
@@ -196,6 +198,7 @@ class _PostFairVisitWorkpadScreenState extends State<PostFairVisitWorkpadScreen>
   late TextEditingController _quality;
   late TextEditingController _risks;
   late TextEditingController _nextAction;
+  late Future<List<Product>> _capturedProducts;
   late String _recommendation;
   late Map<String, bool> _checklist;
   bool _saving = false;
@@ -225,6 +228,7 @@ class _PostFairVisitWorkpadScreenState extends State<PostFairVisitWorkpadScreen>
     _quality = TextEditingController(text: _details['quality_notes'] as String? ?? '');
     _risks = TextEditingController(text: _details['risks'] as String? ?? '');
     _nextAction = TextEditingController(text: _details['next_action'] as String? ?? '');
+    _capturedProducts = _db.getProducts(widget.supplier.id!);
     _recommendation = _details['recommendation'] as String? ?? 'Request quotation';
     _completed = widget.meeting.completed;
     final source = _details['factory_checklist'];
@@ -289,6 +293,21 @@ class _PostFairVisitWorkpadScreenState extends State<PostFairVisitWorkpadScreen>
               supplier: widget.supplier,
               contextLabel: '${_details['visit_type'] ?? 'Post-fair visit'}: ${widget.supplier.name}',
             )));
+  }
+
+  Future<void> _addProduct() async {
+    if (_completed || widget.supplier.id == null) return;
+    final scope = await TeamWorkspaceService().scopeKey();
+    if (!mounted) return;
+    await Navigator.of(context).push<void>(MaterialPageRoute(
+        builder: (_) => FieldProductCaptureScreen(
+              scope: scope,
+              supplierId: widget.supplier.id!,
+              supplierName: widget.supplier.name,
+            )));
+    if (mounted) {
+      setState(() => _capturedProducts = _db.getProducts(widget.supplier.id!));
+    }
   }
 
   @override
@@ -361,6 +380,7 @@ class _PostFairVisitWorkpadScreenState extends State<PostFairVisitWorkpadScreen>
                 maxLines: 8,
                 enabled: !_completed,
                 onRecordAudio: _completed ? null : _recordAudio,
+                audioSupplier: widget.supplier,
               ),
               const SizedBox(height: 14),
               VoiceNoteField(
@@ -370,6 +390,46 @@ class _PostFairVisitWorkpadScreenState extends State<PostFairVisitWorkpadScreen>
                 maxLines: 6,
                 enabled: !_completed,
                 onRecordAudio: _completed ? null : _recordAudio,
+                audioSupplier: widget.supplier,
+              ),
+            ]),
+          ),
+          _WorkpadCard(
+            title: 'Products captured during this visit',
+            icon: Icons.inventory_2_outlined,
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              const Text(
+                  'Create a complete product record with category, specifications, commercial terms, photos, and product-specific audio notes.'),
+              const SizedBox(height: 12),
+              FutureBuilder<List<Product>>(
+                future: _capturedProducts,
+                builder: (context, snapshot) {
+                  final products = snapshot.data ?? const <Product>[];
+                  if (products.isEmpty) {
+                    return const Padding(
+                      padding: EdgeInsets.only(bottom: 12),
+                      child: Text('No products have been added for this supplier yet.'),
+                    );
+                  }
+                  return Column(children: [
+                    for (final product in products)
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.inventory_2_outlined),
+                        title: Text(product.name),
+                        subtitle: Text([
+                          if (product.modelCode.isNotEmpty) product.modelCode,
+                          if (product.specs.isNotEmpty) product.specs,
+                        ].join(' · ')),
+                      ),
+                    const Divider(),
+                  ]);
+                },
+              ),
+              FilledButton.icon(
+                onPressed: _completed ? null : _addProduct,
+                icon: const Icon(Icons.add_box_outlined),
+                label: const Text('Add product details'),
               ),
             ]),
           ),
@@ -384,6 +444,7 @@ class _PostFairVisitWorkpadScreenState extends State<PostFairVisitWorkpadScreen>
                 maxLines: 5,
                 enabled: !_completed,
                 onRecordAudio: _completed ? null : _recordAudio,
+                audioSupplier: widget.supplier,
               ),
               const SizedBox(height: 14),
               VoiceNoteField(
@@ -393,6 +454,7 @@ class _PostFairVisitWorkpadScreenState extends State<PostFairVisitWorkpadScreen>
                 maxLines: 5,
                 enabled: !_completed,
                 onRecordAudio: _completed ? null : _recordAudio,
+                audioSupplier: widget.supplier,
               ),
             ]),
           ),
@@ -421,6 +483,7 @@ class _PostFairVisitWorkpadScreenState extends State<PostFairVisitWorkpadScreen>
                 maxLines: 4,
                 enabled: !_completed,
                 onRecordAudio: _completed ? null : _recordAudio,
+                audioSupplier: widget.supplier,
               ),
               const SizedBox(height: 14),
               VoiceNoteField(
@@ -430,6 +493,7 @@ class _PostFairVisitWorkpadScreenState extends State<PostFairVisitWorkpadScreen>
                 maxLines: 4,
                 enabled: !_completed,
                 onRecordAudio: _completed ? null : _recordAudio,
+                audioSupplier: widget.supplier,
               ),
             ]),
           ),

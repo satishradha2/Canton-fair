@@ -261,7 +261,7 @@ class _ProcurementWorkspaceScreenState extends State<ProcurementWorkspaceScreen>
         .where((item) => item['approval_status'] == 'Pending approval')
         .length;
     final openTasks = data.meetings.where((item) => !item.completed).length;
-    final text = '''Canton Fair Management Report
+    final text = '''Fair Expert Management Report
 Generated: ${now.toLocal().toString().substring(0, 16)}
 
 Suppliers captured: ${data.suppliers.length}
@@ -277,7 +277,7 @@ Priority certificate actions:
 ${alerts.take(5).map((item) => '- ${item.supplier}: ${item.type} expires ${_date(item.expiry)}').join('\n').ifEmpty('- None')}
 ''';
     await SharePlus.instance.share(
-        ShareParams(text: text, subject: 'Canton Fair management report'));
+        ShareParams(text: text, subject: 'Fair Expert management report'));
   }
 
   String _date(DateTime value) =>
@@ -490,7 +490,7 @@ ${alerts.take(5).map((item) => '- ${item.supplier}: ${item.type} expires ${_date
 
   Widget _dataTools() => ListView(padding: const EdgeInsets.all(16), children: [
         SectionPanel(
-          title: 'Import Canton Fair exhibitor directory',
+          title: 'Import Fair Expert exhibitor directory',
           subtitle:
               'Import an official or prepared CSV with Supplier or Company, Booth, Hall, Category, Country, Notes, and Rating columns. You choose the destination trip before saving.',
           child: FilledButton.icon(

@@ -36,7 +36,7 @@ class DailyDebrief {
 
   String toShareText() {
     final lines = [
-      'Canton Fair Daily Debrief - $dateLabel',
+      'Fair Expert Daily Debrief - $dateLabel',
       '',
       'Captured: $suppliersCaptured suppliers, $productsCaptured products',
       'Field activity: $suppliersVisited visits, $meetingsHeld meetings, $sampleRequests sample requests',

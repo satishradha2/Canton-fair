@@ -162,7 +162,7 @@ class _SignInScreenState extends State<SignInScreen> {
               child: Icon(Icons.business_center_outlined,
                   color: colors.onPrimaryContainer, size: 24)),
           const SizedBox(width: 14),
-          Text('CANTON FAIR',
+          Text('FAIR EXPERT',
               style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w700,

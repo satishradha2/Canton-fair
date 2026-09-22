@@ -1,6 +1,9 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 
+import '../data/database.dart';
 import '../models/models.dart';
 import '../screens/supplier_voice_note_screen.dart';
 
@@ -11,6 +14,8 @@ class VoiceNoteField extends StatefulWidget {
   final int maxLines;
   final bool enabled;
   final VoidCallback? onRecordAudio;
+  final Exhibitor? audioSupplier;
+  final String? audioContext;
 
   const VoiceNoteField({
     super.key,
@@ -20,6 +25,8 @@ class VoiceNoteField extends StatefulWidget {
     this.maxLines = 3,
     this.enabled = true,
     this.onRecordAudio,
+    this.audioSupplier,
+    this.audioContext,
   });
 
   @override
@@ -87,15 +94,6 @@ class _VoiceNoteFieldState extends State<VoiceNoteField> {
     );
   }
 
-  void _recordOriginalAudio() {
-    if (widget.onRecordAudio != null) {
-      widget.onRecordAudio!();
-      return;
-    }
-    Navigator.of(context).push(MaterialPageRoute(
-        builder: (_) => SupplierVoiceNoteScreen(contextLabel: widget.label)));
-  }
-
   @override
   void dispose() {
     _speech.stop();
@@ -134,35 +132,114 @@ class _VoiceNoteFieldState extends State<VoiceNoteField> {
               child: Text(_error,
                   style: TextStyle(color: Theme.of(context).colorScheme.error)),
             ),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: TextButton.icon(
-              onPressed: _listening || !widget.enabled ? null : _recordOriginalAudio,
-              icon: const Icon(Icons.graphic_eq_outlined),
-              label: const Text('Record original audio note'),
-            ),
+          VoiceNoteAction(
+            contextLabel: widget.audioContext ?? widget.label,
+            supplier: widget.audioSupplier,
+            enabled: widget.enabled && !_listening,
           ),
         ],
       );
 }
 
-class VoiceNoteAction extends StatelessWidget {
-  const VoiceNoteAction({super.key, required this.contextLabel, this.supplier});
+class VoiceNoteAction extends StatefulWidget {
+  const VoiceNoteAction({super.key, required this.contextLabel, this.supplier, this.enabled = true});
 
   final String contextLabel;
   final Exhibitor? supplier;
+  final bool enabled;
 
   @override
-  Widget build(BuildContext context) => Align(
-        alignment: Alignment.centerLeft,
-        child: TextButton.icon(
-          onPressed: () => Navigator.of(context).push(MaterialPageRoute(
-              builder: (_) => SupplierVoiceNoteScreen(
-                    supplier: supplier,
-                    contextLabel: contextLabel,
-                  ))),
-          icon: const Icon(Icons.graphic_eq_outlined),
-          label: const Text('Record original audio note'),
-        ),
+  State<VoiceNoteAction> createState() => _VoiceNoteActionState();
+}
+
+class _VoiceNoteActionState extends State<VoiceNoteAction> {
+  Exhibitor? _supplier;
+  Future<List<Attachment>>? _recordings;
+
+  @override
+  void initState() {
+    super.initState();
+    _supplier = widget.supplier;
+    _refresh();
+  }
+
+  void _refresh() {
+    if (_supplier?.id == null) return;
+    _recordings = TradeDatabase.instance
+        .getAttachments('exhibitor', _supplier!.id!)
+        .then((items) => items.where(_matchesContext).toList());
+  }
+
+  bool _matchesContext(Attachment attachment) {
+    if (attachment.kind != 'audio') return false;
+    try {
+      final metadata = jsonDecode(attachment.note);
+      return metadata is Map && metadata['context'] == widget.contextLabel;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  String _summary(Attachment attachment) {
+    try {
+      final metadata = jsonDecode(attachment.note);
+      if (metadata is Map) {
+        return [metadata['recorded_at'], metadata['notes']]
+            .whereType<String>()
+            .where((item) => item.isNotEmpty)
+            .join(' · ');
+      }
+    } catch (_) {
+      // Keep the attachment visible if legacy metadata is incomplete.
+    }
+    return 'Saved audio note';
+  }
+
+  Future<void> _openRecorder() async {
+    final supplier = await Navigator.of(context).push<Exhibitor>(MaterialPageRoute(
+        builder: (_) => SupplierVoiceNoteScreen(
+              supplier: _supplier,
+              contextLabel: widget.contextLabel,
+            )));
+    if (!mounted || supplier?.id == null) return;
+    setState(() {
+      _supplier = supplier;
+      _refresh();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          TextButton.icon(
+            onPressed: widget.enabled ? _openRecorder : null,
+            icon: const Icon(Icons.graphic_eq_outlined),
+            label: const Text('Record original audio note'),
+          ),
+          if (_recordings != null)
+            FutureBuilder<List<Attachment>>(
+              future: _recordings,
+              builder: (context, snapshot) {
+                final recordings = snapshot.data ?? const <Attachment>[];
+                if (recordings.isEmpty) return const SizedBox.shrink();
+                return Column(children: [
+                  for (final recording in recordings)
+                    Card(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      child: ListTile(
+                        dense: true,
+                        leading: const Icon(Icons.graphic_eq_outlined),
+                        title: Text('Audio note · ${_supplier?.name ?? 'Supplier'}'),
+                        subtitle: Text(_summary(recording),
+                            maxLines: 2, overflow: TextOverflow.ellipsis),
+                        trailing: const Icon(Icons.play_circle_outline),
+                        onTap: widget.enabled ? _openRecorder : null,
+                      ),
+                    ),
+                ]);
+              },
+            ),
+        ],
       );
 }

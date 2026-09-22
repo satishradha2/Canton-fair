@@ -301,7 +301,7 @@ class _FollowUpScreenState extends State<FollowUpScreen> {
     final contact = candidate.contact;
     final uri = switch (channel) {
       'email' when contact != null && contact.email.isNotEmpty => Uri.parse(
-          'mailto:${contact.email}?subject=${Uri.encodeComponent('Canton Fair follow-up')}&body=${Uri.encodeComponent(candidate.message)}'),
+          'mailto:${contact.email}?subject=${Uri.encodeComponent('Fair Expert follow-up')}&body=${Uri.encodeComponent(candidate.message)}'),
       'whatsapp'
           when contact != null &&
               (contact.whatsapp.isNotEmpty || contact.phone.isNotEmpty) =>
@@ -572,7 +572,7 @@ class _FollowUpScreenState extends State<FollowUpScreen> {
   }
 
   Widget _followUpPackSection() => SectionPanel(
-        title: 'Canton Fair follow-up pack',
+        title: 'Fair Expert follow-up pack',
         subtitle: 'Request the supplier details that are still missing.',
         child: FutureBuilder<List<_FollowUpPackCandidate>>(
           future: _packFuture,
@@ -668,7 +668,7 @@ class _FollowUpPackCandidate {
     final recipient = contact?.name.trim().isNotEmpty == true
         ? contact!.name.trim()
         : 'there';
-    return 'Hi $recipient, it was great meeting you at Canton Fair. '
+    return 'Hi $recipient, it was great meeting you at Fair Expert. '
         'Could you please share ${missing.join(', ')} for ${supplier.name}? '
         'Thank you.';
   }

@@ -136,7 +136,7 @@ class FieldIntelligenceService {
 
   Map<String, dynamic> decodeTransfer(String value) {
     if (!value.startsWith('CFC-XFER1:')) {
-      throw const FormatException('This is not a Canton Fair transfer code.');
+      throw const FormatException('This is not a Fair Expert transfer code.');
     }
     final raw = value.substring('CFC-XFER1:'.length);
     final padded = raw.padRight((raw.length + 3) ~/ 4 * 4, '=');

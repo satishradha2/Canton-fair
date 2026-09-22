@@ -346,7 +346,7 @@ class _ShortlistScreenState extends State<ShortlistScreen> {
       await SharePlus.instance.share(ShareParams(
         files: [XFile(path)],
         text:
-            'Canton Fair shortlist export (filter: $filter, sort: ${_sortFieldLabel()} $direction)',
+            'Fair Expert shortlist export (filter: $filter, sort: ${_sortFieldLabel()} $direction)',
       ));
       _showExportSnack('Shortlist CSV exported.');
     } catch (error) {
@@ -390,7 +390,7 @@ class _ShortlistScreenState extends State<ShortlistScreen> {
           build: (context) {
             final widgets = <pw.Widget>[
               pw.Text(
-                'Canton Fair Shortlist Export',
+                'Fair Expert Shortlist Export',
                 style:
                     pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold),
               ),
@@ -444,7 +444,7 @@ class _ShortlistScreenState extends State<ShortlistScreen> {
       await out.writeAsBytes(await doc.save());
       await SharePlus.instance.share(ShareParams(
         files: [XFile(out.path)],
-        text: 'Canton Fair shortlist PDF (${products.length} products)',
+        text: 'Fair Expert shortlist PDF (${products.length} products)',
       ));
       _showExportSnack('Shortlist PDF exported.');
     } catch (error) {

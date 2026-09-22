@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Canton Fair CRM</string>
+    <string name="app_name">Fair Expert</string>
     <string name="shortcut_scan_card">Scan card</string>
     <string name="shortcut_scan_card_long">Scan business card</string>
     <string name="shortcut_add_supplier">Add supplier</string>

@@ -9,9 +9,11 @@ import 'package:path_provider/path_provider.dart';
 
 import '../data/database.dart';
 import '../data/approval_policy.dart';
+import '../data/team_workspace_service.dart';
 import '../models/models.dart';
 import '../theme/app_theme.dart';
 import '../widgets/enterprise_widgets.dart';
+import '../widgets/supplier_category_picker.dart';
 import '../widgets/voice_note_field.dart';
 
 class HallRouteScreen extends StatefulWidget {
@@ -112,6 +114,8 @@ class _HallRouteScreenState extends State<HallRouteScreen> {
       return;
     }
     if (!mounted) return;
+    final captureScope = await TeamWorkspaceService().scopeKey();
+    if (!mounted) return;
     if (trips.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
           content: Text('Create a trip before adding a manual route stop.')));
@@ -121,7 +125,7 @@ class _HallRouteScreenState extends State<HallRouteScreen> {
     final hall = TextEditingController();
     final booth = TextEditingController();
     final country = TextEditingController();
-    final category = TextEditingController();
+    final categories = <String>{};
     final note = TextEditingController();
     int? selectedTripId = _tripId ?? trips.first.id;
     final saved = await showDialog<bool>(
@@ -171,10 +175,14 @@ class _HallRouteScreenState extends State<HallRouteScreen> {
                 decoration: const InputDecoration(labelText: 'Country / region (optional)'),
               ),
               const SizedBox(height: 12),
-              TextField(
-                controller: category,
-                textCapitalization: TextCapitalization.words,
-                decoration: const InputDecoration(labelText: 'Product category (optional)'),
+              SupplierCategoryPicker(
+                scope: captureScope,
+                selected: categories,
+                onChanged: (selected) => setDialogState(() {
+                  categories
+                    ..clear()
+                    ..addAll(selected);
+                }),
               ),
               const SizedBox(height: 12),
               TextField(
@@ -195,9 +203,10 @@ class _HallRouteScreenState extends State<HallRouteScreen> {
                 onPressed: () {
                   if (selectedTripId == null ||
                       name.text.trim().isEmpty ||
-                      hall.text.trim().isEmpty) {
+                      hall.text.trim().isEmpty ||
+                      categories.isEmpty) {
                     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                        content: Text('Trip, supplier name, and hall are required.')));
+                        content: Text('Trip, supplier name, hall, and at least one category are required.')));
                     return;
                   }
                   Navigator.pop(context, true);
@@ -212,7 +221,6 @@ class _HallRouteScreenState extends State<HallRouteScreen> {
       hall.dispose();
       booth.dispose();
       country.dispose();
-      category.dispose();
       note.dispose();
       return;
     }
@@ -223,12 +231,17 @@ class _HallRouteScreenState extends State<HallRouteScreen> {
         hall: hall.text.trim(),
         booth: booth.text.trim(),
         country: country.text.trim(),
-        category: category.text.trim(),
+        category: (categories.toList()..sort()).join(', '),
         contactCompanyNotes: note.text.trim(),
         plannedVisitAt: DateTime.now(),
         fieldCaptureJson: jsonEncode({
           'route_source': 'manual',
           'route_status': 'Planned',
+          'categories': categories.toList()..sort(),
+          'supplier_details': {
+            'categories': categories.toList()..sort(),
+            'category': (categories.toList()..sort()).join(', '),
+          },
         }),
       ));
       if (mounted) {
@@ -241,7 +254,6 @@ class _HallRouteScreenState extends State<HallRouteScreen> {
       hall.dispose();
       booth.dispose();
       country.dispose();
-      category.dispose();
       note.dispose();
     }
   }
@@ -261,11 +273,20 @@ class _HallRouteScreenState extends State<HallRouteScreen> {
     final hall = TextEditingController(text: supplier.hall);
     final booth = TextEditingController(text: supplier.booth);
     final country = TextEditingController(text: supplier.country);
-    final category = TextEditingController(text: supplier.category);
+    final captureScope = await TeamWorkspaceService().scopeKey();
+    if (!mounted) {
+      name.dispose();
+      hall.dispose();
+      booth.dispose();
+      country.dispose();
+      return;
+    }
+    final categories = _supplierCategories(supplier);
     final note = TextEditingController(text: supplier.contactCompanyNotes);
     final saved = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
         title: const Text('Edit manual route stop'),
         content: SingleChildScrollView(
           child: Column(mainAxisSize: MainAxisSize.min, children: [
@@ -279,7 +300,15 @@ class _HallRouteScreenState extends State<HallRouteScreen> {
             const SizedBox(height: 12),
             TextField(controller: country, decoration: const InputDecoration(labelText: 'Country / region')),
             const SizedBox(height: 12),
-            TextField(controller: category, decoration: const InputDecoration(labelText: 'Product category')),
+            SupplierCategoryPicker(
+              scope: captureScope,
+              selected: categories,
+              onChanged: (selected) => setDialogState(() {
+                categories
+                  ..clear()
+                  ..addAll(selected);
+              }),
+            ),
             const SizedBox(height: 12),
             TextField(controller: note, minLines: 2, maxLines: 4, decoration: const InputDecoration(labelText: 'Route note')),
           ]),
@@ -288,15 +317,16 @@ class _HallRouteScreenState extends State<HallRouteScreen> {
           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
           FilledButton(
               onPressed: () {
-                if (name.text.trim().isEmpty || hall.text.trim().isEmpty) {
+                if (name.text.trim().isEmpty || hall.text.trim().isEmpty || categories.isEmpty) {
                   ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                      content: Text('Supplier name and hall are required.')));
+                      content: Text('Supplier name, hall, and at least one category are required.')));
                   return;
                 }
                 Navigator.pop(context, true);
               },
               child: const Text('Save changes')),
         ],
+        ),
       ),
     );
     if (saved == true) {
@@ -305,8 +335,9 @@ class _HallRouteScreenState extends State<HallRouteScreen> {
         'hall': hall.text.trim(),
         'booth': booth.text.trim(),
         'country': country.text.trim(),
-        'category': category.text.trim(),
+        'category': (categories.toList()..sort()).join(', '),
         'notes': note.text.trim(),
+        'field_capture_json': jsonEncode(_updatedCategoryPayload(supplier, categories)),
       });
       if (mounted) {
         setState(() => _suppliers = _db.getExhibitors(_tripId));
@@ -318,8 +349,48 @@ class _HallRouteScreenState extends State<HallRouteScreen> {
     hall.dispose();
     booth.dispose();
     country.dispose();
-    category.dispose();
     note.dispose();
+  }
+
+  Set<String> _supplierCategories(Exhibitor supplier) {
+    try {
+      final payload = jsonDecode(supplier.fieldCaptureJson);
+      if (payload is Map && payload['categories'] is List) {
+        return (payload['categories'] as List)
+            .whereType<String>()
+            .map((value) => value.trim())
+            .where((value) => value.isNotEmpty)
+            .toSet();
+      }
+    } catch (_) {
+      // Legacy suppliers use the text summary below.
+    }
+    return supplier.category
+        .split(',')
+        .map((value) => value.trim())
+        .where((value) => value.isNotEmpty)
+        .toSet();
+  }
+
+  Map<String, dynamic> _updatedCategoryPayload(
+      Exhibitor supplier, Set<String> categories) {
+    final payload = <String, dynamic>{};
+    try {
+      final decoded = jsonDecode(supplier.fieldCaptureJson);
+      if (decoded is Map) payload.addAll(Map<String, dynamic>.from(decoded));
+    } catch (_) {
+      // Replace only malformed legacy metadata, not any supplier fields.
+    }
+    final values = categories.toList()..sort();
+    payload['categories'] = values;
+    final details = payload['supplier_details'];
+    final supplierDetails = details is Map
+        ? Map<String, dynamic>.from(details)
+        : <String, dynamic>{};
+    supplierDetails['categories'] = values;
+    supplierDetails['category'] = values.join(', ');
+    payload['supplier_details'] = supplierDetails;
+    return payload;
   }
 
   Future<void> _deleteManualRouteStop(Exhibitor supplier) async {
@@ -442,7 +513,7 @@ class _HallRouteScreenState extends State<HallRouteScreen> {
                           icon: Icons.map_outlined,
                           title: 'No hall map imported',
                           message:
-                              'Import the official Canton Fair map to review it alongside your planned booth route.',
+                              'Import the official Fair Expert map to review it alongside your planned booth route.',
                         ),
                       if (halls.isNotEmpty) ...[
                         const SizedBox(height: 16),
