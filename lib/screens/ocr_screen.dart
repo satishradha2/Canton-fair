@@ -26,6 +26,8 @@ class _OcrScreenState extends State<OcrScreen> {
   BusinessCardCapture? _draft;
   bool _busy = true;
   bool _showEmptyExtraFields = false;
+  String? _additionalField;
+  final Set<String> _manualExtraFields = {};
   String? _error;
   String? _cropNotice;
   String _status = 'Opening local card draft...';
@@ -514,28 +516,27 @@ class _OcrScreenState extends State<OcrScreen> {
       MapEntry<String, String> entry, Map<String, List<String>> candidates) {
     final draft = _draft!;
     final isMultiline = SupplierProfile.multiline.contains(entry.key);
+    final scheme = Theme.of(context).colorScheme;
     return Padding(
-        padding: const EdgeInsets.only(bottom: 16),
+        padding: const EdgeInsets.only(bottom: 12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            SizedBox(
-              height: isMultiline ? 156 : 76,
-              child: TextField(
-                  controller: _controllers[entry.key],
-                  enabled: !_busy,
-                  expands: false,
-                  minLines: isMultiline ? 3 : 1,
-                  maxLines: isMultiline ? 4 : 1,
-                  textAlignVertical:
-                      isMultiline ? TextAlignVertical.top : TextAlignVertical.center,
-                  decoration: InputDecoration(
-                      labelText: entry.value,
-                      helperText: draft.edited.contains(entry.key)
-                          ? 'Manually reviewed / edited'
-                          : null),
-                  onChanged: (value) => _persistEdit(entry.key, value)),
-            ),
+            TextField(
+                controller: _controllers[entry.key],
+                enabled: !_busy,
+                minLines: isMultiline ? 2 : 1,
+                maxLines: isMultiline ? 4 : 1,
+                textAlignVertical:
+                    isMultiline ? TextAlignVertical.top : TextAlignVertical.center,
+                decoration: InputDecoration(
+                    labelText: entry.value,
+                    filled: true,
+                    fillColor: scheme.surfaceContainerLowest,
+                    helperText: draft.edited.contains(entry.key)
+                        ? 'Manually reviewed / edited'
+                        : null),
+                onChanged: (value) => _persistEdit(entry.key, value)),
             if ((candidates[entry.key]?.length ?? 0) > 1)
               Wrap(spacing: 6, runSpacing: 4, children: [
                 for (final value in candidates[entry.key]!)
@@ -558,9 +559,13 @@ class _OcrScreenState extends State<OcrScreen> {
     final candidates = draft?.candidates ?? <String, List<String>>{};
     final extraFields = _fields.entries.where((entry) {
       if (_primaryFields.contains(entry.key)) return false;
-      return _showEmptyExtraFields ||
-          (_controllers[entry.key]?.text.trim().isNotEmpty ?? false) ||
-          (draft?.edited.contains(entry.key) ?? false);
+      return (_controllers[entry.key]?.text.trim().isNotEmpty ?? false) ||
+          (draft?.edited.contains(entry.key) ?? false) ||
+          _manualExtraFields.contains(entry.key);
+    }).toList();
+    final availableExtraFields = _fields.entries.where((entry) {
+      return !_primaryFields.contains(entry.key) &&
+          !extraFields.any((field) => field.key == entry.key);
     }).toList();
     return PopScope(
       canPop: !_busy,
@@ -722,9 +727,41 @@ class _OcrScreenState extends State<OcrScreen> {
                 if (extraFields.isEmpty)
                   const Padding(
                     padding: EdgeInsets.only(bottom: 12),
-                    child: Text('No additional supplier details were captured.'),
+                    child: Text(
+                        'No additional supplier details were captured from this card.'),
                   ),
                 for (final entry in extraFields) _fieldEditor(entry, candidates),
+                if (_showEmptyExtraFields && availableExtraFields.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  DropdownButtonFormField<String>(
+                    value: _additionalField,
+                    isExpanded: true,
+                    decoration: const InputDecoration(
+                        labelText: 'Add a supplier detail'),
+                    items: availableExtraFields
+                        .map((entry) => DropdownMenuItem(
+                            value: entry.key, child: Text(entry.value)))
+                        .toList(),
+                    onChanged: _busy
+                        ? null
+                        : (value) => setState(() => _additionalField = value),
+                  ),
+                  const SizedBox(height: 8),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: FilledButton.tonalIcon(
+                      onPressed: _busy || _additionalField == null
+                          ? null
+                          : () => setState(() {
+                                _manualExtraFields.add(_additionalField!);
+                                _additionalField = null;
+                              }),
+                      icon: const Icon(Icons.add),
+                      label: const Text('Add selected field'),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                ],
                 Align(
                   alignment: Alignment.centerLeft,
                   child: TextButton.icon(
@@ -736,8 +773,8 @@ class _OcrScreenState extends State<OcrScreen> {
                         ? Icons.keyboard_arrow_up
                         : Icons.add),
                     label: Text(_showEmptyExtraFields
-                        ? 'Hide empty fields'
-                        : 'Add supplier details'),
+                        ? 'Close additional fields'
+                        : 'Add another supplier detail'),
                   ),
                 ),
               ],

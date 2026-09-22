@@ -31,6 +31,7 @@ import 'catalogue_vault_screen.dart';
 import 'field_product_capture_screen.dart';
 import 'field_work_screen.dart';
 import 'followup_screen.dart';
+import 'product_category_master_screen.dart';
 import 'sync_status_screen.dart';
 
 class FieldOperationsScreen extends StatefulWidget {
@@ -761,6 +762,11 @@ Please respond by ${_date(due)} with unit price, MOQ, lead time, payment terms, 
                     'Photo, product name, MOQ, unit price, lead time, and notes',
                     Icons.inventory_2_outlined,
                     () => _quickProduct(data)),
+                _tile(
+                    'Product categories',
+                    'Create and manage the shared category list used when adding products',
+                    Icons.category_outlined,
+                    () => _open(const ProductCategoryMasterScreen())),
                 _tile(
                     'Meeting recorder & minutes',
                     'Record audio and create structured meeting minutes',

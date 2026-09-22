@@ -32,6 +32,7 @@ import 'supplier_profile_screen.dart';
 import 'photo_annotation_screen.dart';
 import 'hall_route_screen.dart';
 import 'field_visit_assistant_screen.dart';
+import 'field_product_capture_screen.dart';
 
 enum CaptureQuickAction { quick, manual, qr, card }
 
@@ -1227,6 +1228,7 @@ class _CapturesScreenState extends State<CapturesScreen> {
     );
     final allow = await _showDuplicateCheck(candidate);
     if (!allow || !mounted) return;
+    int? savedSupplierId;
     await TeamWorkspaceService.exclusive(() async {
       if (await TeamWorkspaceService().scopeKey() != captureScope) {
         throw StateError(
@@ -1255,6 +1257,7 @@ class _CapturesScreenState extends State<CapturesScreen> {
         // Supplier, contact, images and OCR archive either all commit or none do.
         final exhibitorId =
             await txn.insert('exhibitors', candidate.toMap()..remove('id'));
+        savedSupplierId = exhibitorId;
         if (capture.contactName.isNotEmpty ||
             capture.phone.isNotEmpty ||
             capture.email.isNotEmpty ||
@@ -1404,6 +1407,34 @@ class _CapturesScreenState extends State<CapturesScreen> {
         'Canton Fair field capture', '${capture.name} | ${capture.nextAction}');
     _load();
     if (!mounted) return;
+    final newlyCreatedSupplierId = savedSupplierId;
+    if (businessCard != null && newlyCreatedSupplierId != null) {
+      final addProduct = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+                title: const Text('Add a product from this supplier?'),
+                content: const Text(
+                    'The supplier and business card are saved. Add the first product now to link its category, price, MOQ, lead time, and photo evidence.'),
+                actions: [
+                  TextButton(
+                      onPressed: () => Navigator.pop(context, false),
+                      child: const Text('Not now')),
+                  FilledButton.icon(
+                      onPressed: () => Navigator.pop(context, true),
+                      icon: const Icon(Icons.inventory_2_outlined),
+                      label: const Text('Add product')),
+                ],
+              ));
+      if (addProduct == true && mounted) {
+        await Navigator.of(context).push<void>(MaterialPageRoute(
+            builder: (_) => FieldProductCaptureScreen(
+                  scope: captureScope,
+                  supplierId: newlyCreatedSupplierId,
+                  supplierName: capture.name,
+                )));
+      }
+      if (!mounted) return;
+    }
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: const Text(

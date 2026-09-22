@@ -22,6 +22,7 @@ class FieldProductEditorScreen extends StatefulWidget {
 }
 
 class _FieldProductEditorScreenState extends State<FieldProductEditorScreen> {
+  static const _createCategoryOption = '__create_new_product_category__';
   final _repository = FieldWorkRepository();
   final _form = GlobalKey<FormState>();
   final _fields = <String, TextEditingController>{};
@@ -136,6 +137,15 @@ class _FieldProductEditorScreenState extends State<FieldProductEditorScreen> {
     }
   }
 
+  Future<void> _selectCategory(String? value) async {
+    if (value == _createCategoryOption) {
+      await _createCategory();
+      return;
+    }
+    if (value == null) return;
+    setState(() => _controller('category').text = value);
+  }
+
   Widget _categoryPicker() => FutureBuilder<List<Map<String, Object?>>>(
     future: _categories,
     builder: (context, snapshot) {
@@ -149,8 +159,14 @@ class _FieldProductEditorScreenState extends State<FieldProductEditorScreen> {
           isExpanded: true,
           decoration: const InputDecoration(labelText: 'Product category'),
           hint: const Text('Choose a category'),
-          items: names.map((name) => DropdownMenuItem(value: name, child: Text(name))).toList(),
-          onChanged: _busy ? null : (value) => setState(() => _controller('category').text = value ?? ''),
+          items: [
+            ...names.map(
+                (name) => DropdownMenuItem(value: name, child: Text(name))),
+            const DropdownMenuItem(
+                value: _createCategoryOption,
+                child: Text('+ Create new category')),
+          ],
+          onChanged: _busy ? null : _selectCategory,
           validator: (value) => value == null ? 'Product category is required' : null,
         ),
         Align(alignment: Alignment.centerLeft, child: TextButton.icon(

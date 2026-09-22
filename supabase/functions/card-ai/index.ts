@@ -55,7 +55,10 @@ Deno.serve(async (request) => {
   const url = Deno.env.get("SUPABASE_URL");
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   const apiKey = Deno.env.get("OPENAI_API_KEY");
-  const model = Deno.env.get("OPENAI_CARD_MODEL") || "gpt-4.1-mini";
+  // Keep card extraction on the approved vision + structured-output model.
+  // Do not allow an old OPENAI_CARD_MODEL secret to silently route card data
+  // back to the previous GPT-4.1 Mini configuration.
+  const model = "gpt-5.6-sol";
   if (!url || !serviceKey || !apiKey) return reply(503, { error: "Cloud card reading is not configured yet. Offline OCR remains available." });
   const authorization = request.headers.get("authorization") || "";
   if (!/^Bearer\s+\S+$/i.test(authorization)) return reply(401, { error: "Sign in to use cloud card reading." });
