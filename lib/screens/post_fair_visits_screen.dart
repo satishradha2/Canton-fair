@@ -516,7 +516,7 @@ class _PostFairVisitScheduleSheetState extends State<_PostFairVisitScheduleSheet
             const Text('Plan the visit, then use the live workpad to capture evidence and decisions on site.'),
             const SizedBox(height: 20),
             DropdownButtonFormField<Exhibitor>(
-              value: _selectedSupplier,
+              initialValue: _selectedSupplier,
               isExpanded: true,
               decoration: const InputDecoration(labelText: 'Supplier'),
               items: widget.suppliers.where((item) => item.id != null).map((item) => DropdownMenuItem(

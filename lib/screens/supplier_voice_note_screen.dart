@@ -24,7 +24,8 @@ class _SupplierVoiceNoteScreenState extends State<SupplierVoiceNoteScreen>
   final _db = TradeDatabase.instance;
   final _recorder = AudioRecorder();
   final _note = TextEditingController();
-  late Future<List<Exhibitor>> _suppliers = _db.getExhibitors(null);
+  final Future<List<Exhibitor>> _suppliers =
+      TradeDatabase.instance.getExhibitors(null);
   Exhibitor? _supplier;
   String? _path;
   bool _consent = false;
@@ -141,7 +142,7 @@ class _SupplierVoiceNoteScreenState extends State<SupplierVoiceNoteScreen>
               const Text('Use this for supplier statements, product observations, and factory evidence. The recording is saved with the supplier for later review.'),
               const SizedBox(height: 22),
               DropdownButtonFormField<Exhibitor>(
-                value: _supplier,
+                initialValue: _supplier,
                 isExpanded: true,
                 decoration: const InputDecoration(labelText: 'Supplier'),
                 items: (snapshot.data ?? const <Exhibitor>[])

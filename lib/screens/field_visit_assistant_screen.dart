@@ -269,16 +269,18 @@ Handover: ${_handover.text.trim().ifEmpty('None')}''';
         _section(
           title: 'Decision note',
           subtitle: 'Visible to the next team member and included in your handover.',
-          child: TextField(
-            controller: _note,
-            minLines: 4,
-            maxLines: 7,
-            decoration: const InputDecoration(
-              hintText: 'Price position, product fit, quality observations, decision, or risks...',
-              alignLabelWithHint: true,
+          child: Column(children: [
+            TextField(
+              controller: _note,
+              minLines: 4,
+              maxLines: 7,
+              decoration: const InputDecoration(
+                hintText: 'Price position, product fit, quality observations, decision, or risks...',
+                alignLabelWithHint: true,
+              ),
             ),
-          ),
-          const VoiceNoteAction(contextLabel: 'Field visit decision note'),
+            const VoiceNoteAction(contextLabel: 'Field visit decision note'),
+          ]),
         ),
       ];
 

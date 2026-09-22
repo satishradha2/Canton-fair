@@ -246,6 +246,106 @@ class _HallRouteScreenState extends State<HallRouteScreen> {
     }
   }
 
+  bool _isManualRouteStop(Exhibitor supplier) {
+    try {
+      final details = jsonDecode(supplier.fieldCaptureJson);
+      return details is Map && details['route_source'] == 'manual';
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> _editManualRouteStop(Exhibitor supplier) async {
+    if (supplier.id == null) return;
+    final name = TextEditingController(text: supplier.name);
+    final hall = TextEditingController(text: supplier.hall);
+    final booth = TextEditingController(text: supplier.booth);
+    final country = TextEditingController(text: supplier.country);
+    final category = TextEditingController(text: supplier.category);
+    final note = TextEditingController(text: supplier.contactCompanyNotes);
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Edit manual route stop'),
+        content: SingleChildScrollView(
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            TextField(controller: name, decoration: const InputDecoration(labelText: 'Supplier or stop name')),
+            const SizedBox(height: 12),
+            Row(children: [
+              Expanded(child: TextField(controller: hall, decoration: const InputDecoration(labelText: 'Hall'))),
+              const SizedBox(width: 12),
+              Expanded(child: TextField(controller: booth, decoration: const InputDecoration(labelText: 'Booth'))),
+            ]),
+            const SizedBox(height: 12),
+            TextField(controller: country, decoration: const InputDecoration(labelText: 'Country / region')),
+            const SizedBox(height: 12),
+            TextField(controller: category, decoration: const InputDecoration(labelText: 'Product category')),
+            const SizedBox(height: 12),
+            TextField(controller: note, minLines: 2, maxLines: 4, decoration: const InputDecoration(labelText: 'Route note')),
+          ]),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          FilledButton(
+              onPressed: () {
+                if (name.text.trim().isEmpty || hall.text.trim().isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                      content: Text('Supplier name and hall are required.')));
+                  return;
+                }
+                Navigator.pop(context, true);
+              },
+              child: const Text('Save changes')),
+        ],
+      ),
+    );
+    if (saved == true) {
+      await _db.update('exhibitors', supplier.id!, {
+        'name': name.text.trim(),
+        'hall': hall.text.trim(),
+        'booth': booth.text.trim(),
+        'country': country.text.trim(),
+        'category': category.text.trim(),
+        'notes': note.text.trim(),
+      });
+      if (mounted) {
+        setState(() => _suppliers = _db.getExhibitors(_tripId));
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('${name.text.trim()} route stop updated.')));
+      }
+    }
+    name.dispose();
+    hall.dispose();
+    booth.dispose();
+    country.dispose();
+    category.dispose();
+    note.dispose();
+  }
+
+  Future<void> _deleteManualRouteStop(Exhibitor supplier) async {
+    if (supplier.id == null) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete manual route stop?'),
+        content: Text('Remove ${supplier.name} from this route? This only deletes the manually added stop and its related local records.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          FilledButton.tonal(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Delete stop')),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    await _db.deleteExhibitorCascade(supplier.id!);
+    if (mounted) {
+      setState(() => _suppliers = _db.getExhibitors(_tripId));
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${supplier.name} removed from the route.')));
+    }
+  }
+
   @override
   Widget build(BuildContext context) => Scaffold(
         appBar: AppBar(title: const Text('Hall route')),
@@ -383,6 +483,7 @@ class _HallRouteScreenState extends State<HallRouteScreen> {
                                     grouped[hall]!.asMap().entries.map((entry) {
                                   final supplier = entry.value;
                                   final missed = _isMissed(supplier);
+                                  final manual = _isManualRouteStop(supplier);
                                   return ListTile(
                                     contentPadding: EdgeInsets.zero,
                                     leading: CircleAvatar(
@@ -407,12 +508,25 @@ class _HallRouteScreenState extends State<HallRouteScreen> {
                                                   : Icons.flag_outlined,
                                               color: missed
                                                   ? AppColors.teal
-                                                  : Theme.of(context)
+                                              : Theme.of(context)
                                                       .colorScheme
                                                       .onSurfaceVariant),
                                           onPressed: () =>
                                               _toggleMissed(supplier),
                                         ),
+                                        if (manual)
+                                          IconButton(
+                                            tooltip: 'Edit manual route stop',
+                                            icon: const Icon(Icons.edit_outlined),
+                                            onPressed: () => _editManualRouteStop(supplier),
+                                          ),
+                                        if (manual)
+                                          IconButton(
+                                            tooltip: 'Delete manual route stop',
+                                            icon: Icon(Icons.delete_outline,
+                                                color: Theme.of(context).colorScheme.error),
+                                            onPressed: () => _deleteManualRouteStop(supplier),
+                                          ),
                                       ],
                                     ),
                                   );
