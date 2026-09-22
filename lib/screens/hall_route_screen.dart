@@ -12,6 +12,7 @@ import '../data/approval_policy.dart';
 import '../models/models.dart';
 import '../theme/app_theme.dart';
 import '../widgets/enterprise_widgets.dart';
+import '../widgets/voice_note_field.dart';
 
 class HallRouteScreen extends StatefulWidget {
   const HallRouteScreen({super.key});
@@ -183,6 +184,7 @@ class _HallRouteScreenState extends State<HallRouteScreen> {
                 decoration: const InputDecoration(
                     labelText: 'Route note', hintText: 'Who to meet, priority, or reason for visit'),
               ),
+              const VoiceNoteAction(contextLabel: 'Route planning note'),
             ]),
           ),
           actions: [

@@ -32,6 +32,8 @@ import 'field_product_capture_screen.dart';
 import 'field_work_screen.dart';
 import 'followup_screen.dart';
 import 'product_category_master_screen.dart';
+import 'post_fair_visits_screen.dart';
+import 'supplier_voice_note_screen.dart';
 import 'sync_status_screen.dart';
 
 class FieldOperationsScreen extends StatefulWidget {
@@ -126,6 +128,10 @@ class _FieldOperationsScreenState extends State<FieldOperationsScreen> {
                 'Calls, emails, samples and quotation deadlines',
                 Icons.event_available_outlined,
                 () => _open(const FollowUpScreen())),
+            _FieldToolLink('Post-fair visits',
+                'Schedule factory and office visits, then capture the full visit report',
+                Icons.factory_outlined,
+                () => _open(const PostFairVisitsScreen())),
           ]),
         ),
         _FieldHubCard(
@@ -147,6 +153,10 @@ class _FieldOperationsScreenState extends State<FieldOperationsScreen> {
             _FieldToolLink('Meeting recorder & minutes',
                 'Record discussions and save structured minutes',
                 Icons.mic_none_outlined, () => _openRecorder(data)),
+            _FieldToolLink('Supplier audio note',
+                'Save a clear original voice note with any supplier',
+                Icons.graphic_eq_outlined,
+                () => _open(const SupplierVoiceNoteScreen())),
             _FieldToolLink('Supplier catalogue vault',
                 'Archive brochures, PDFs, QR catalogues and links',
                 Icons.inventory_2_outlined,
@@ -169,6 +179,10 @@ class _FieldOperationsScreenState extends State<FieldOperationsScreen> {
             _FieldToolLink('Trip dashboard',
                 'Use today\'s visit progress to decide the next stop',
                 Icons.dashboard_outlined, _openTripDashboard),
+            _FieldToolLink('Post-fair visit planner',
+                'Plan factory or office meetings with visit objectives and agendas',
+                Icons.business_center_outlined,
+                () => _open(const PostFairVisitsScreen())),
           ]),
         ),
         _FieldHubCard(

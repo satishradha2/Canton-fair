@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../data/sync_status_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/enterprise_widgets.dart';
+import '../widgets/voice_note_field.dart';
 import 'hall_route_screen.dart';
 import 'ocr_screen.dart';
 import 'sync_status_screen.dart';
@@ -277,6 +278,7 @@ Handover: ${_handover.text.trim().ifEmpty('None')}''';
               alignLabelWithHint: true,
             ),
           ),
+          const VoiceNoteAction(contextLabel: 'Field visit decision note'),
         ),
       ];
 
@@ -321,6 +323,7 @@ Handover: ${_handover.text.trim().ifEmpty('None')}''';
                 alignLabelWithHint: true,
               ),
             ),
+            const VoiceNoteAction(contextLabel: 'Field visit handover note'),
           ]),
         ),
         const SizedBox(height: 16),

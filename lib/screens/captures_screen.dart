@@ -913,14 +913,17 @@ class _CapturesScreenState extends State<CapturesScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text('Close trip: ${trip.name}'),
-        content: TextField(
-          controller: noteController,
-          maxLines: 3,
-          decoration: const InputDecoration(
-            labelText: 'Closeout note',
-            hintText: 'Optional notes about outstanding actions',
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          TextField(
+            controller: noteController,
+            maxLines: 3,
+            decoration: const InputDecoration(
+              labelText: 'Closeout note',
+              hintText: 'Optional notes about outstanding actions',
+            ),
           ),
-        ),
+          const VoiceNoteAction(contextLabel: 'Trip closeout note'),
+        ]),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
@@ -1083,6 +1086,7 @@ class _CapturesScreenState extends State<CapturesScreen> {
                                 alignLabelWithHint: true),
                             onSaved: (v) => notes = v?.trim() ?? '',
                           ),
+                          const VoiceNoteAction(contextLabel: 'Trip planning notes'),
                           if (error != null)
                             Padding(
                                 padding: const EdgeInsets.only(top: 16),
@@ -1543,6 +1547,7 @@ class _CapturesScreenState extends State<CapturesScreen> {
                   decoration: const InputDecoration(labelText: 'Company notes'),
                   onSaved: (v) => notes = v?.trim() ?? '',
                 ),
+                const VoiceNoteAction(contextLabel: 'Supplier company notes'),
                 DropdownButtonFormField<int>(
                   initialValue: rating,
                   items: List.generate(
@@ -3124,6 +3129,7 @@ class _CapturesScreenState extends State<CapturesScreen> {
                           const InputDecoration(labelText: 'Quote notes'),
                       onSaved: (value) => note = value?.trim() ?? '',
                     ),
+                    const VoiceNoteAction(contextLabel: 'Supplier quotation notes'),
                   ],
                 ),
               ),

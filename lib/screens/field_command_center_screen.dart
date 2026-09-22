@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 
 import '../data/database.dart';
 import '../data/reminder_service.dart';
+import '../widgets/voice_note_field.dart';
 import 'hall_route_screen.dart';
 import 'ocr_screen.dart';
 import 'sync_status_screen.dart';
@@ -85,6 +86,7 @@ class _FieldCommandCenterScreenState extends State<FieldCommandCenterScreen> {
           const SizedBox(height: 10),
           TextField(controller: notes, minLines: 3, maxLines: 5,
             decoration: const InputDecoration(labelText: 'Agenda and visit notes')),
+          const VoiceNoteAction(contextLabel: 'Supplier appointment agenda'),
         ])),
         actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
           FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Schedule'))],
@@ -122,6 +124,7 @@ class _FieldCommandCenterScreenState extends State<FieldCommandCenterScreen> {
             items: const ['CNY', 'USD', 'AED', 'EUR'].map((item) => DropdownMenuItem(value: item, child: Text(item))).toList(),
             onChanged: (value) => setDialog(() => currency = value!)),
           TextField(controller: note, minLines: 2, maxLines: 4, decoration: const InputDecoration(labelText: 'Note / receipt reference')),
+          const VoiceNoteAction(contextLabel: 'Field expense note'),
         ])),
         actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
           FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Save expense'))],

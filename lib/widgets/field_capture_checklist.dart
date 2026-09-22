@@ -7,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 import '../data/camera_capture_service.dart';
 
 import '../models/models.dart';
+import 'voice_note_field.dart';
 
 class FieldCapturePhoto {
   const FieldCapturePhoto(
@@ -799,6 +800,7 @@ class _FieldCaptureChecklistDialogState
               maxLines: 4,
               decoration: const InputDecoration(
                   labelText: 'Additional supplier notes')),
+          const VoiceNoteAction(contextLabel: 'Additional supplier notes'),
         ],
       );
 

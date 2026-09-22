@@ -19,6 +19,7 @@ import '../data/location_capture_service.dart';
 import '../models/models.dart';
 import '../theme/app_theme.dart';
 import '../widgets/enterprise_widgets.dart';
+import '../widgets/voice_note_field.dart';
 import 'business_card_archive_screen.dart';
 import '../data/supplier_profile.dart';
 import 'supplier_profile_screen.dart';
@@ -234,13 +235,16 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Schedule factory visit'),
-        content: TextField(
-          controller: notes,
-          minLines: 2,
-          maxLines: 4,
-          decoration: const InputDecoration(
-              labelText: 'Agenda, transport, audit focus, or attendees'),
-        ),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          TextField(
+            controller: notes,
+            minLines: 2,
+            maxLines: 4,
+            decoration: const InputDecoration(
+                labelText: 'Agenda, transport, audit focus, or attendees'),
+          ),
+          VoiceNoteAction(contextLabel: 'Factory visit planning', supplier: widget.supplier),
+        ]),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(context, false),
@@ -590,6 +594,7 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
                       maxLines: 4,
                       decoration: const InputDecoration(
                           labelText: 'Procurement notes')),
+                  VoiceNoteAction(contextLabel: 'Supplier procurement notes', supplier: widget.supplier),
                   if (item.blockers.isNotEmpty) ...[
                     const SizedBox(height: 12),
                     const Text('Current blockers',
@@ -1391,6 +1396,7 @@ class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
                   decoration:
                       const InputDecoration(labelText: 'Verification notes'),
                 ),
+                VoiceNoteAction(contextLabel: 'Supplier verification notes', supplier: widget.supplier),
               ],
             ),
           ),
