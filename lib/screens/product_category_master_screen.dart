@@ -37,6 +37,7 @@ class _ProductCategoryMasterScreenState extends State<ProductCategoryMasterScree
       if (mounted) setState(() => _error = error.toString().replaceFirst('Bad state: ', ''));
       return;
     }
+    if (!mounted) return;
     final controller = TextEditingController();
     final name = await showDialog<String>(
       context: context,

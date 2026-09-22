@@ -734,7 +734,7 @@ class _OcrScreenState extends State<OcrScreen> {
                 if (_showEmptyExtraFields && availableExtraFields.isNotEmpty) ...[
                   const SizedBox(height: 4),
                   DropdownButtonFormField<String>(
-                    value: _additionalField,
+                    initialValue: _additionalField,
                     isExpanded: true,
                     decoration: const InputDecoration(
                         labelText: 'Add a supplier detail'),

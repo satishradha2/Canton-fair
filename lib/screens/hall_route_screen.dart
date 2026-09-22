@@ -110,6 +110,7 @@ class _HallRouteScreenState extends State<HallRouteScreen> {
       }
       return;
     }
+    if (!mounted) return;
     if (trips.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
           content: Text('Create a trip before adding a manual route stop.')));

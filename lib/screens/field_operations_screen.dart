@@ -150,7 +150,7 @@ class _FieldOperationsScreenState extends State<FieldOperationsScreen> {
             _FieldToolLink('Supplier catalogue vault',
                 'Archive brochures, PDFs, QR catalogues and links',
                 Icons.inventory_2_outlined,
-                () => _open(const CatalogueVaultScreen())),
+                () => _open(CatalogueVaultScreen(suppliers: data.suppliers))),
           ]),
         ),
         _FieldHubCard(
@@ -202,7 +202,7 @@ class _FieldOperationsScreenState extends State<FieldOperationsScreen> {
             _FieldToolLink('Supplier catalogue vault',
                 'Find permanently saved brochures and supplier catalogues',
                 Icons.folder_copy_outlined,
-                () => _open(const CatalogueVaultScreen())),
+                () => _open(CatalogueVaultScreen(suppliers: data.suppliers))),
             _FieldToolLink('All field tools',
                 'Open the complete legacy tool list', Icons.apps_outlined,
                 _openAllFieldTools),
@@ -2051,6 +2051,7 @@ class _FieldToolHubScreen extends StatelessWidget {
           ],
         ),
       );
+}
 
 class _FieldSectionHeader extends StatelessWidget {
   final String label;
