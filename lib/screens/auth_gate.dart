@@ -80,13 +80,17 @@ class _SignInScreenState extends State<SignInScreen> {
   @override
   void initState() {
     super.initState();
-    _email.text = Supabase.instance.client.auth.currentUser?.email ?? '';
-    _loadBiometric();
+    // Session-dependent enhancements belong to the live authentication flow.
+    // The standalone sign-in form can render without a Supabase session.
+    if (widget.onBiometricUnlock != null) {
+      _loadBiometric();
+    }
   }
 
   Future<void> _loadBiometric() async {
     final service = AppLockService();
     try {
+      _email.text = Supabase.instance.client.auth.currentUser?.email ?? '';
       final available = Supabase.instance.client.auth.currentSession != null &&
           await service.biometricLoginEnabled && await service.canUseBiometrics;
       if (mounted) setState(() => _biometricAvailable = available);
