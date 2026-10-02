@@ -46,7 +46,7 @@ class UpdateService {
         'Accept': 'application/vnd.github+json',
         'X-GitHub-Api-Version': '2022-11-28',
       },
-    );
+    ).timeout(const Duration(seconds: 20));
 
     if (response.statusCode != 200) {
       throw Exception('GitHub update check failed (${response.statusCode})');

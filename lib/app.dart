@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'data/cloud_sync_service.dart';
 import 'data/appearance_service.dart';
 import 'widgets/enterprise_dashboard.dart';
+import 'widgets/app_update_gate.dart';
 import 'data/team_workspace_service.dart';
 import 'data/fair_capture_service.dart';
 import 'models/models.dart';
@@ -19,7 +20,7 @@ class CantonFairApp extends StatelessWidget {
   const CantonFairApp({super.key});
 
   @override
-  Widget build(BuildContext context) => const _FairExpertHome();
+  Widget build(BuildContext context) => const AppUpdateGate(child: _FairExpertHome());
 }
 class _FairExpertHome extends StatefulWidget {
   const _FairExpertHome();
@@ -100,6 +101,9 @@ class _FairExpertHomeState extends State<_FairExpertHome> {
       appBar: AppBar(
         title: const Text('Fair Expert'),
         actions: [
+          IconButton(tooltip: 'Check for updates',
+            onPressed: () => AppUpdateGate.check(context),
+            icon: const Icon(Icons.system_update_outlined)),
           IconButton(
             tooltip: 'Switch light / dark theme',
             onPressed: () => AppearanceService().save(
