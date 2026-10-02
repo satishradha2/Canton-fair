@@ -7,6 +7,7 @@ import 'package:record/record.dart';
 
 import '../data/database.dart';
 import '../data/team_workspace_service.dart';
+import '../data/product_capture_service.dart';
 import '../models/models.dart';
 import 'visit_audio_player_screen.dart';
 
@@ -17,12 +18,14 @@ class SupplierVoiceNoteScreen extends StatefulWidget {
     this.contextLabel = 'Field note',
     this.productId,
     this.productName,
+    this.expectedScope,
   });
 
   final Exhibitor? supplier;
   final String contextLabel;
   final int? productId;
   final String? productName;
+  final String? expectedScope;
 
   @override
   State<SupplierVoiceNoteScreen> createState() => _SupplierVoiceNoteScreenState();
@@ -59,8 +62,14 @@ class _SupplierVoiceNoteScreenState extends State<SupplierVoiceNoteScreen>
 
   Future<List<Attachment>> _audioNotes(int ownerId) async =>
       (await _db.getAttachments(_ownerType, ownerId))
-          .where((attachment) => attachment.kind == 'audio')
+          .where((attachment) => attachment.kind == 'audio' &&
+            (!widget.contextLabel.startsWith('Visit ') || _matchesVisit(attachment)))
           .toList();
+
+  bool _matchesVisit(Attachment attachment) {
+    try { return jsonDecode(attachment.note)['context'] == widget.contextLabel; }
+    catch (_) { return false; }
+  }
 
   String _noteSummary(Attachment attachment) {
     try {
@@ -101,6 +110,10 @@ class _SupplierVoiceNoteScreenState extends State<SupplierVoiceNoteScreen>
     if (_ownerId == null || (!_isProductNote && _supplier == null) || !_consent || _saving) return;
     setState(() => _saving = true);
     try {
+      if (widget.expectedScope != null) {
+        await ProductCaptureService.checkScope(widget.expectedScope!);
+        if (!await ProductCaptureService.canWrite()) throw StateError('Read-only account.');
+      }
       if (!await _recorder.hasPermission()) {
         throw StateError('Microphone permission is required to record a voice note.');
       }
@@ -141,6 +154,11 @@ class _SupplierVoiceNoteScreenState extends State<SupplierVoiceNoteScreen>
       if (!await audio.exists() || await audio.length() == 0) {
         throw StateError('The audio note was not saved. Please record it again.');
       }
+      await TeamWorkspaceService.exclusive(() async {
+      if (widget.expectedScope != null) {
+        await ProductCaptureService.checkScope(widget.expectedScope!);
+        if (!await ProductCaptureService.canWrite()) throw StateError('Read-only account.');
+      }
       await _db.insert('attachments', {
         'owner_type': _ownerType,
         'owner_id': _ownerId!,
@@ -155,6 +173,7 @@ class _SupplierVoiceNoteScreenState extends State<SupplierVoiceNoteScreen>
           'notes': _note.text.trim(),
           'consent_confirmed': true,
         }),
+      });
       });
       if (!mounted) return;
       setState(() {
@@ -208,6 +227,8 @@ class _SupplierVoiceNoteScreenState extends State<SupplierVoiceNoteScreen>
                   decoration: const InputDecoration(labelText: 'Product'),
                   child: Text(widget.productName ?? 'Captured product'),
                 )
+              else if (widget.supplier != null)
+                InputDecorator(decoration: const InputDecoration(labelText: 'Supplier'), child: Text(widget.supplier!.name))
               else
                 DropdownButtonFormField<Exhibitor>(
                 initialValue: _supplier,

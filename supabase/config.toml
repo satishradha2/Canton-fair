@@ -1,2 +1,5 @@
 [functions.card-ai]
 verify_jwt = true
+
+[functions.product-ai]
+verify_jwt = true
