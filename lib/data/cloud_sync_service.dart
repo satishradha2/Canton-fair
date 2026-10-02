@@ -11,8 +11,12 @@ import 'database.dart';
 import 'sync_status_service.dart';
 import 'team_workspace_service.dart';
 import 'field_work_sync_contract.dart';
+import 'phone_cleanup_plan.dart';
+import 'phone_cleanup_service.dart';
 
 import 'legacy_participation_reconciliation.dart';
+
+part 'phone_cleanup_engine.dart';
 
 class SyncResult {
   final int uploaded;
@@ -91,6 +95,32 @@ class CloudSyncService {
 
   Future<SyncResult> syncTrips() => syncTeamWorkspace();
 
+  /// Read-only queue inspection using the same payload comparison as Sync.
+  Future<({int records, int files, int blocked, int deletions})> pendingUploads() =>
+      TeamWorkspaceService.exclusive(() async {
+        final team = await _workspace.load();
+        if (team == null) return (records: 0, files: 0, blocked: 0, deletions: 0);
+        final scope = await _workspace.scopeKey();
+        final db = await _db.database;
+        var records = 0, files = 0, blocked = 0;
+        for (final type in _tables.keys) {
+          for (final row in await _rows(db, type)) {
+            final link = await _link(db, type, id: row['id'] as int);
+            var pending = link == null;
+            if (link != null) {
+              try {
+                final payload = await _toCloud(db, type, row, team.id, link['record_id'] as String);
+                pending = _hash(payload) != link['content_hash'];
+              } catch (_) { pending = true; blocked++; }
+            }
+            if (pending) { records++; if (type == 'attachment') files++; }
+          }
+        }
+        final deletions = await db.query('sync_deletions');
+        await _assertScope(scope);
+        return (records: records, files: files, blocked: blocked, deletions: deletions.length);
+      }, showBusy: false);
+
   Future<SyncResult> syncTeamWorkspace({bool showBusy = true}) =>
       TeamWorkspaceService.exclusive(() async {
         SyncStatusService.setSyncing(true);
@@ -110,6 +140,9 @@ class CloudSyncService {
       }, showBusy: showBusy);
 
   Future<SyncResult> _sync() async {
+    if (await PhoneCleanupService.paused(await _workspace.scopeKey())) {
+      throw StateError('Phone copies were cleared. Use Restore cloud copies in Sync center to resume syncing.');
+    }
     final team = await _requireTeam();
     final scope = await _workspace.scopeKey();
     final db = await _db.database;

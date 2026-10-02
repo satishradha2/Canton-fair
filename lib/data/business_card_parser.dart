@@ -237,6 +237,44 @@ class BusinessCardParser {
         add('address', line);
       }
     }
+    // Keep wrapped postal addresses together instead of choosing only line one.
+    final blocks = <String>[];
+    final lines = text.split(RegExp(r'[\r\n]+')).map((line) => line.trim()).toList();
+    final addressStart = RegExp(
+      r'\b(address|office|street|road|avenue|building|floor|suite|room|business bay|district|industrial park)\b',
+      caseSensitive: false);
+    final location = RegExp(
+      r'\b(dubai|al qusais|abu dhabi|sharjah|ajman|guangzhou|shenzhen|city|province|postal|zip)\b',
+      caseSensitive: false);
+    final stop = RegExp(
+      r'@|https?://|www\.|\[.*\]|^(front|back)$|\b(phone|mobile|tel|fax|manager|director|website|shipping|logistics|llc|ltd|company)\b|^\+?\d[\d ()-]{6,}$',
+      caseSensitive: false);
+    for (var index = 0; index < lines.length; index++) {
+      if (!addressStart.hasMatch(lines[index]) || stop.hasMatch(lines[index])) continue;
+      final parts = <String>[lines[index].replaceFirst(
+        RegExp(r'^address\s*[:\uFF1A]\s*', caseSensitive: false), '')];
+      while (index + 1 < lines.length) {
+        final next = lines[index + 1];
+        if (next.isEmpty || stop.hasMatch(next) ||
+            (!parts.last.endsWith(',') && !location.hasMatch(next) &&
+             !addressStart.hasMatch(next))) {
+          break;
+        }
+        parts.add(next);
+        index++;
+      }
+      blocks.add(parts.join('\n'));
+    }
+    if (blocks.isNotEmpty) {
+      values['address'] = [...blocks, ...?values['address']?.where(
+        (candidate) => !blocks.any((block) => block.contains(candidate)))];
+    }
+    if ((values['country'] ?? []).isEmpty &&
+        (values['address'] ?? []).any((address) => RegExp(
+          r'\b(dubai|abu dhabi|sharjah|ajman|ras al khaimah|umm al quwain|fujairah)\b',
+          caseSensitive: false).hasMatch(address))) {
+      add('country', 'United Arab Emirates');
+    }
     return values;
   }
 }

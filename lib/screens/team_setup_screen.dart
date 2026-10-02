@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../data/cloud_api_service.dart';
 import '../data/team_workspace_service.dart';
+import '../widgets/focused_workspace.dart';
+import '../widgets/field_workspace.dart';
 
 class TeamSetupScreen extends StatefulWidget {
   const TeamSetupScreen({super.key});
@@ -12,6 +14,18 @@ class _TeamSetupScreenState extends State<TeamSetupScreen> {
   final _api = CloudApiService();
   final _workspace = TeamWorkspaceService();
   late Future<List<CloudTeam>> _teams = _api.teams();
+  String? _activeId;
+  int _panel = 0;
+  @override
+  void initState() { super.initState(); _loadActive(); }
+  Future<void> _loadActive() async {
+    try {
+      final active = await _workspace.load();
+      if (mounted) setState(() => _activeId = active?.id);
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not read active workspace: $error')));
+    }
+  }
   Future<void> _create() async {
     var teamName = '';
     final name = await showDialog<String>(
@@ -124,59 +138,52 @@ class _TeamSetupScreenState extends State<TeamSetupScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-      appBar: AppBar(title: const Text('Cloud team'), actions: [
-        TextButton(onPressed: _personal, child: const Text('Personal')),
-      ]),
-      body: FutureBuilder<List<CloudTeam>>(
-          future: _teams,
-          builder: (context, snapshot) {
-            if (snapshot.connectionState != ConnectionState.done) {
-              return const Center(child: CircularProgressIndicator());
-            }
-            if (snapshot.hasError) {
-              return Center(
-                  child: Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Text(
-                          '${snapshot.error}\n\nCheck your Supabase connection and team setup.')));
-            }
-            final teams = snapshot.data!;
-            return ListView(padding: const EdgeInsets.all(16), children: [
-              const Text(
-                  'Each team has a separate local database. Existing records remain in Personal; they are never automatically uploaded to another team. Use Personal for backup restoration.'),
-              const SizedBox(height: 12),
-              ...teams.map((team) => ListTile(
-                  title: Text(team.name),
-                  subtitle: Text(team.role),
-                  leading: const Icon(Icons.groups),
-                  onTap: () => _select(team),
-                  trailing: team.role == 'admin'
-                      ? Row(mainAxisSize: MainAxisSize.min, children: [
-                          IconButton(
-                            icon: const Icon(Icons.person_add_alt_1),
-                            tooltip: 'Add team member',
-                            onPressed: () => _invite(team),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.manage_accounts_outlined),
-                            tooltip: 'Manage team members',
-                            onPressed: () => _manageMembers(team),
-                          ),
-                        ])
-                      : null)),
-              OutlinedButton.icon(
-                  onPressed: _create,
-                  icon: const Icon(Icons.add),
-                  label: const Text('Create team'))
-            ]);
-          }));
+    appBar: AppBar(title: const Text('Team workspace')),
+    body: FutureBuilder<List<CloudTeam>>(future: _teams, builder: (context, snapshot) {
+      if (snapshot.connectionState != ConnectionState.done) return const Center(child: CircularProgressIndicator());
+      if (snapshot.hasError) {
+        return Center(child: TextButton.icon(
+          onPressed: () => setState(() => _teams = _api.teams()), icon: const Icon(Icons.refresh), label: const Text('Retry loading teams')));
+      }
+      final teams = snapshot.data ?? <CloudTeam>[];
+      CloudTeam? active;
+      for (final team in teams) { if (team.id == _activeId) active = team; }
+      final current = active;
+      return FocusedWorkspace(title: current?.name ?? 'Personal workspace',
+        subtitle: current == null ? 'Select a team in Workspace settings to share saved records.' : 'Active team / ${current.role} access',
+        index: _panel, onChanged: (index) => setState(() => _panel = index),
+        labels: const ['Members', 'Workspace settings'], icons: const [Icons.people_outline, Icons.settings_outlined],
+        sections: [
+          current == null ? const Center(child: Padding(padding: EdgeInsets.all(24), child: Text('Choose a team in Workspace settings to view its members.')))
+            : TeamMembersScreen(key: ValueKey(current.id), team: current, api: _api, embedded: true),
+          ListView(key: const PageStorageKey('workspace-settings'), padding: const EdgeInsets.all(16), children: [
+            const FieldWorkspaceSection(title: 'Workspace boundaries', icon: Icons.folder_shared_outlined,
+              child: Text('Each team has a separate local database. Switching teams does not move, delete or upload records from another workspace. Personal records remain separate.')),
+            const SizedBox(height: 12),
+            ...teams.map((team) => Card(color: team.id == _activeId ? Theme.of(context).colorScheme.secondaryContainer : null,
+              child: ListTile(leading: Icon(team.id == _activeId ? Icons.check_circle_outline : Icons.groups_outlined),
+                title: Text(team.name), subtitle: Text('${team.role}${team.id == _activeId ? ' / Active workspace' : ''}'),
+                trailing: const Icon(Icons.chevron_right), onTap: () => _select(team)))),
+            const SizedBox(height: 16),
+            OutlinedButton.icon(onPressed: _create, icon: const Icon(Icons.add), label: const Text('Create team')),
+            TextButton.icon(onPressed: _personal, icon: const Icon(Icons.person_outline), label: const Text('Switch to Personal workspace')),
+          ]),
+        ],
+        footer: current?.role == 'admin' && _panel == 0 ? FieldWorkspaceSection(
+          title: 'Administrator controls', icon: Icons.admin_panel_settings_outlined,
+          child: Wrap(spacing: 8, children: [
+            FilledButton.icon(onPressed: () => _invite(current!), icon: const Icon(Icons.person_add_alt_1), label: const Text('Add member')),
+            OutlinedButton.icon(onPressed: () => _manageMembers(current!), icon: const Icon(Icons.manage_accounts_outlined), label: const Text('Manage roles')),
+          ])) : null,
+      );
+    }));
 }
-
 class TeamMembersScreen extends StatefulWidget {
   final CloudTeam team;
   final CloudApiService api;
+  final bool embedded;
 
-  const TeamMembersScreen({super.key, required this.team, required this.api});
+  const TeamMembersScreen({super.key, required this.team, required this.api, this.embedded = false});
 
   @override
   State<TeamMembersScreen> createState() => _TeamMembersScreenState();
@@ -234,7 +241,7 @@ class _TeamMembersScreenState extends State<TeamMembersScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(title: Text('${widget.team.name} members')),
+        appBar: widget.embedded ? null : AppBar(title: Text('${widget.team.name} members')),
         body: FutureBuilder<List<CloudMember>>(
           future: _members,
           builder: (context, snapshot) {
@@ -262,7 +269,7 @@ class _TeamMembersScreenState extends State<TeamMembersScreen> {
                   leading: const Icon(Icons.person_outline),
                   title: Text(member.email),
                   subtitle: Text(member.role),
-                  trailing: isCurrentUser
+                  trailing: widget.team.role != 'admin' ? Text(member.role) : isCurrentUser
                       ? const Text('You')
                       : PopupMenuButton<String>(
                           tooltip: 'Manage member',

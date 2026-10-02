@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../data/app_lock_service.dart';
+import '../widgets/field_workspace.dart';
 
 class SecuritySettingsScreen extends StatefulWidget {
   const SecuritySettingsScreen({super.key});
@@ -58,10 +59,15 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
   void dispose() { _pin.dispose(); _confirm.dispose(); super.dispose(); }
   @override
   Widget build(BuildContext context) => Scaffold(appBar: AppBar(title: const Text('Security & sign-in')),
-    body: ListView(padding: const EdgeInsets.all(24), children: [
+    body: ListView(padding: const EdgeInsets.all(16), children: [
+      const FieldWorkspaceHeader(eyebrow: 'DEVICE SECURITY', title: 'Your account, protected',
+        subtitle: 'Biometric sign-in and app lock are separate protections for this device.', icon: Icons.shield_outlined),
+      const SizedBox(height: 16),
       Card(child: Padding(padding: const EdgeInsets.all(20), child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         const Icon(Icons.fingerprint, size: 48), const SizedBox(height: 16),
         Text('Biometric sign-in', style: Theme.of(context).textTheme.titleLarge),
+        Align(alignment: Alignment.centerLeft, child: Chip(label: Text(_busy ? 'Checking...' : _enabled ? 'Enabled' : 'Disabled'),
+          avatar: Icon(_enabled ? Icons.check_circle_outline : Icons.lock_open_outlined, size: 18))),
         const SizedBox(height: 8),
         const Text('Sign in with your password first, then enable fingerprint or face unlock for the saved session on this device. Your password is not stored for biometric sign-in.'),
         SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('Use fingerprint / face'), value: _enabled,
@@ -69,7 +75,7 @@ class _SecuritySettingsScreenState extends State<SecuritySettingsScreen> {
         if (!_available && !_busy) const Text('Set up a fingerprint or face in your phone settings. Biometrics require a supported device.'),
       ]))),
       Card(child: Padding(padding: const EdgeInsets.all(20), child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        Text('App lock ${_locked ? '(enabled)' : '(optional)'}', style: Theme.of(context).textTheme.titleLarge),
+        Text('App lock ${_locked ? '(enabled)' : '(disabled)'}', style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(height: 8), const Text('Add a PIN to protect the app when the phone locks or the app goes into the background. Supported biometrics are available on the unlock screen.'),
         const SizedBox(height: 16),
         TextField(controller: _pin, enabled: !_busy, obscureText: true, keyboardType: TextInputType.number,

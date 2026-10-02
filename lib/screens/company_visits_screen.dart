@@ -15,6 +15,10 @@ import '../widgets/company_products_section.dart';
 import '../widgets/company_visit_evidence.dart';
 import 'supplier_contacts_screen.dart';
 
+import '../widgets/database_paged_list.dart';
+import '../data/record_page_service.dart';
+import '../widgets/focused_workspace.dart';
+
 class CompanyVisitsScreen extends StatefulWidget {
   const CompanyVisitsScreen({super.key, this.company, this.fairId});
   final Exhibitor? company;
@@ -25,19 +29,20 @@ class CompanyVisitsScreen extends StatefulWidget {
 class _CompanyVisitsScreenState extends State<CompanyVisitsScreen> {
   String? _scope, _error;
   bool _loading = true, _canEdit = false;
-  List<Map<String, Object?>> _rows = [];
+
   List<Map<String, dynamic>> _drafts = [];
+  int _revision = 0;
   @override
   void initState() { super.initState(); _load(); }
   Future<void> _load() async {
     try {
       final scope = await TeamWorkspaceService().scopeKey();
-      final rows = await CompanyVisitService.list(scope, company: widget.company?.id);
+
       final drafts = widget.company == null ? <Map<String, dynamic>>[] : await CompanyVisitService.unfinished(scope, widget.company!.id!);
       bool canEdit = false;
       try { canEdit = await ProductCaptureService.canWrite(); } catch (_) { /* Read-only until role available. */ }
       await ProductCaptureService.checkScope(scope);
-      if (mounted) setState(() { _scope = scope; _rows = rows; _drafts = drafts; _canEdit = canEdit; _error = null; _loading = false; });
+      if (mounted) setState(() { _scope = scope; _revision++; _drafts = drafts; _canEdit = canEdit; _error = null; _loading = false; });
     } catch (error) { if (mounted) setState(() { _error = '$error'; _loading = false; }); }
   }
   Future<void> _open([Map<String, Object?>? row, String? draftKey]) async {
@@ -50,23 +55,28 @@ class _CompanyVisitsScreenState extends State<CompanyVisitsScreen> {
       if (mounted) await _load();
     } catch (error) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$error'))); }
   }
-  Widget _list(bool history) {
-    final rows = _rows.where((row) => ['Completed', 'Cancelled'].contains(CompanyVisitService.details(row)['status']) == history).toList();
-    if (rows.isEmpty) return Center(child: Text(history ? 'No completed or cancelled visits yet.' : 'No upcoming visits. Schedule one from a company page.'));
-    return ListView.builder(padding: const EdgeInsets.all(20), itemCount: rows.length, itemBuilder: (context, index) {
-      final row = rows[index]; final data = CompanyVisitService.details(row);
-      final at = DateTime.tryParse(row['meeting_date'].toString());
-      return Card(child: ListTile(contentPadding: const EdgeInsets.all(18),
-        leading: CircleAvatar(child: Icon(data['type'] == 'Factory' ? Icons.factory_outlined : Icons.apartment_outlined)),
-        title: Text('${row['company_name']} - ${data['type']} visit'),
-        subtitle: Text('${data['wall_time'].toString().replaceAll('T', ' ')} (${data['zone']})\n${data['status']}${!history && at != null && at.isBefore(DateTime.now()) ? ' - appointment time has passed' : ''}\n${data['purpose']}'),
-        trailing: const Icon(Icons.chevron_right), onTap: () => _open(row)));
-    });
-  }
-  @override
-  Widget build(BuildContext context) => DefaultTabController(length: 2, child: Scaffold(
+  Widget _list(String phase) => Padding(padding: const EdgeInsets.all(20),
+    child: DatabasePagedList(key: ValueKey(phase), refreshToken: _revision,
+      loader: (offset, limit, query) => RecordPageService.visits(
+        phase == 'history', widget.company?.id, offset, limit, query, phase: phase),
+      groupLabel: (row) { final data = CompanyVisitService.details(row); return data['wall_time']?.toString().split('T').first ?? 'Date not recorded'; },
+      searchHint: 'Search company, contact, location or purpose',
+      emptyMessage: phase == 'history' ? 'No completed or cancelled visits yet.'
+        : phase == 'active' ? 'No visits in progress.' : 'No upcoming visits. Schedule one from a company page.',
+      itemBuilder: (context, row) {
+        final data = CompanyVisitService.details(row);
+        final at = DateTime.tryParse(row['meeting_date'].toString());
+        return Card(child: ListTile(contentPadding: const EdgeInsets.all(18),
+          leading: CircleAvatar(child: Icon(data['type'] == 'Factory'
+            ? Icons.factory_outlined : Icons.apartment_outlined)),
+          title: Text('${row['company_name']} - ${data['type']} visit'),
+          subtitle: Text('${data['wall_time'].toString().replaceAll('T', ' ')} (${data['zone']})\n${data['status']}${phase == 'upcoming' && at != null && at.isBefore(DateTime.now()) ? ' - appointment time has passed' : ''}\n${data['purpose']}'),
+          trailing: const Icon(Icons.chevron_right), onTap: () => _open(row)));
+      },
+    ));  @override
+  Widget build(BuildContext context) => DefaultTabController(length: 3, child: Scaffold(
     appBar: AppBar(title: const Text('Visits & appointments'), actions: [IconButton(tooltip: 'Refresh', onPressed: _loading ? null : _load, icon: const Icon(Icons.refresh))],
-      bottom: const TabBar(tabs: [Tab(text: 'Upcoming / active'), Tab(text: 'History')])),
+      bottom: const TabBar(tabs: [Tab(text: 'Upcoming'), Tab(text: 'In Progress'), Tab(text: 'History')])),
     body: _loading ? const Center(child: CircularProgressIndicator()) : _error != null ? Center(child: Text(_error!)) : Column(children: [
       if (widget.company != null) Padding(padding: const EdgeInsets.all(16), child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Text(widget.company!.name, style: Theme.of(context).textTheme.titleLarge),
@@ -80,7 +90,7 @@ class _CompanyVisitsScreenState extends State<CompanyVisitsScreen> {
         ),
         if (_canEdit) Padding(padding: const EdgeInsets.only(top: 12), child: FilledButton.icon(onPressed: () => _open(), icon: const Icon(Icons.add), label: const Text('Schedule factory / office visit'))),
       ])),
-      Expanded(child: TabBarView(children: [_list(false), _list(true)])),
+      Expanded(child: TabBarView(children: [_list('upcoming'), _list('active'), _list('history')])),
     ]),
   ));
 }
@@ -113,6 +123,7 @@ class _CompanyVisitWorkpadScreenState extends State<CompanyVisitWorkpadScreen> {
   List<Map<String, dynamic>> _actions = [];
   bool _loading = true, _busy = false, _allowExit = false;
   String? _error;
+  int _panel = 0;
   String _draftMessage = 'Save appointment to open your visit workspace.';
   Timer? _timer;
   Future<void> _writes = Future.value();
@@ -180,8 +191,9 @@ class _CompanyVisitWorkpadScreenState extends State<CompanyVisitWorkpadScreen> {
   }
   int get _notificationId => int.parse(sha256.convert(utf8.encode('${widget.scope}:$_visitKey')).toString().substring(0, 7), radix: 16) + 500000000;
   Future<void> _save({String? status}) async {
-    if (_busy || !_form.currentState!.validate()) return;
-    if (_wallTime.isEmpty || _contact.isEmpty) { setState(() => _error = 'Choose appointment date/time and a contact.'); return; }
+    if (_busy) return;
+    if (!_form.currentState!.validate()) { setState(() { _panel = 0; _error = 'Complete the required appointment details.'; }); return; }
+    if (_wallTime.isEmpty || _contact.isEmpty) { setState(() { _panel = 0; _error = 'Choose appointment date/time and a contact.'; }); return; }
     setState(() { _busy = true; _error = null; });
     try {
       _timer?.cancel(); _queueDraft(); await _writes;
@@ -226,26 +238,48 @@ class _CompanyVisitWorkpadScreenState extends State<CompanyVisitWorkpadScreen> {
     Future<void>.delayed(const Duration(milliseconds: 400), () { task.dispose(); owner.dispose(); });
   }
   Future<void> _linkProducts() async {
-    try {
-      final products = await TradeDatabase.instance.getProducts(widget.company.id!);
-      if (!mounted) return;
-      final selected = <int>{};
-      final accepted = await showDialog<bool>(context: context, builder: (context) => StatefulBuilder(builder: (context, update) => AlertDialog(
-        title: const Text('Link existing company products'), content: SizedBox(width: double.maxFinite, child: products.isEmpty ? const Text('No saved products yet. Add a product below.') : ListView(shrinkWrap: true, children: [for (final product in products) CheckboxListTile(title: Text(product.name), value: selected.contains(product.id), onChanged: (value) => update(() {
-          if (value == true) {
-            selected.add(product.id!);
-          } else {
-            selected.remove(product.id);
-          }
-        }))])),
-        actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')), FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Link selected'))],
+    final selected = <int>{};
+    final accepted = await showDialog<bool>(context: context,
+      builder: (context) => StatefulBuilder(builder: (context, update) => AlertDialog(
+        title: const Text('Link existing company products'),
+        content: SizedBox(width: double.maxFinite,
+          height: MediaQuery.of(context).size.height * 0.55,
+          child: Column(children: [
+            Text('${selected.length} selected across all batches'),
+            const SizedBox(height: 10),
+            Expanded(child: DatabasePagedList(pageSize: 20,
+              loader: (offset, limit, query) => RecordPageService.products(
+                widget.company.id!, offset, limit, query),
+              searchHint: 'Search product or category',
+              emptyMessage: 'No saved products yet. Add a product from the visit.',
+              itemBuilder: (_, product) => CheckboxListTile(
+                title: Text(product['name'].toString()),
+                subtitle: Text(product['category']?.toString() ?? 'Category not assigned'),
+                value: selected.contains(product['id']),
+                onChanged: (value) => update(() {
+                  if (value == true) {
+                    selected.add(product['id'] as int);
+                  } else {
+                    selected.remove(product['id']);
+                  }
+                })))),
+          ])),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          FilledButton(onPressed: selected.isEmpty ? null : () => Navigator.pop(context, true),
+            child: const Text('Link selected')),
+        ],
       )));
-      if (accepted != true) return;
-      for (final id in selected) { await CompanyVisitService.linkProduct(widget.scope, widget.company.id!, id, _visitKey); }
+    if (accepted != true) return;
+    try {
+      for (final id in selected) {
+        await CompanyVisitService.linkProduct(widget.scope, widget.company.id!, id, _visitKey);
+      }
       if (mounted) setState(() => _productRefresh++);
-    } catch (error) { if (mounted) setState(() => _error = 'Could not link products: $error'); }
-  }
-  int _productRefresh = 0;
+    } catch (error) {
+      if (mounted) setState(() => _error = 'Could not link products: $error');
+    }
+  }  int _productRefresh = 0;
   Future<void> _reviewShortlists() async {
     _timer?.cancel();
     if (widget.canEdit) {
@@ -276,11 +310,20 @@ class _CompanyVisitWorkpadScreenState extends State<CompanyVisitWorkpadScreen> {
   @override
   void dispose() { _timer?.cancel(); for (final field in _fields.values) { field.dispose(); } super.dispose(); }
   @override
-  Widget build(BuildContext context) => PopScope(canPop: _allowExit, onPopInvokedWithResult: (didPop, result) { if (!didPop) _leave(); }, child: Scaffold(
+  Widget build(BuildContext context) => PopScope(canPop: _allowExit,
+    onPopInvokedWithResult: (didPop, result) { if (!didPop) _leave(); },
+    child: Scaffold(
     appBar: AppBar(title: Text('${widget.company.name} - visit'), actions: [if (_id != null) IconButton(tooltip: 'Share visit summary', icon: const Icon(Icons.share_outlined), onPressed: () => SharePlus.instance.share(ShareParams(text: '${widget.company.name}\n$_type visit - $_status\n$_wallTime ($_zone)\nContact: $_contact\n${labels.entries.map((entry) => '${entry.value}: ${_field(entry.key).text}').join('\n')}\nActions:\n${_actions.map((action) => '${action['task']} | ${action['owner']} | ${action['due']} | ${action['done'] == true ? 'Done' : 'Pending'}').join('\n')}')))]),
-    body: _loading ? const Center(child: CircularProgressIndicator()) : Form(key: _form, child: Column(children: [
-      Expanded(child: ListView(padding: const EdgeInsets.all(16), children: [
-        Card(child: Padding(padding: const EdgeInsets.all(20), child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+
+      body: _loading ? const Center(child: CircularProgressIndicator()) : Form(key: _form,
+        child: FocusedWorkspace(title: widget.company.name, subtitle: '$_type visit / $_status / $_draftMessage',
+          busy: _busy, index: _panel, onChanged: (index) => setState(() => _panel = index),
+          labels: const ['Appointment', 'Discussion', 'Products', 'Capacity & Quality', 'Actions'],
+          icons: const [Icons.event_outlined, Icons.forum_outlined, Icons.inventory_2_outlined, Icons.factory_outlined, Icons.task_alt],
+          notice: _error == null ? null : Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+          sections: [
+            ListView(key: const PageStorageKey('visit-appointment'), padding: const EdgeInsets.all(16), children: [
+              Card(child: Padding(padding: const EdgeInsets.all(20), child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           Text('Appointment', style: Theme.of(context).textTheme.headlineSmall), const SizedBox(height: 8), Text('Status: $_status'), const SizedBox(height: 16),
           DropdownButtonFormField<String>(initialValue: _type, decoration: const InputDecoration(labelText: 'Visit type'), items: ['Factory', 'Office'].map((value) => DropdownMenuItem(value: value, child: Text(value))).toList(), onChanged: widget.canEdit && !_busy ? (value) { setState(() => _type = value!); _changed(); } : null),
           if (!['In progress', 'Completed', 'Cancelled'].contains(_status)) DropdownButtonFormField<String>(key: ValueKey(_status), initialValue: _status, decoration: const InputDecoration(labelText: 'Confirmation'), items: ['Tentative', 'Confirmed'].map((value) => DropdownMenuItem(value: value, child: Text(value))).toList(), onChanged: widget.canEdit && !_busy ? (value) { setState(() => _status = value!); _changed(); } : null),
@@ -295,14 +338,17 @@ class _CompanyVisitWorkpadScreenState extends State<CompanyVisitWorkpadScreen> {
           if (_id != null) CompanyVisitEvidence(scope: widget.scope, company: widget.company, visitKey: _visitKey, section: 'Appointment objectives', canEdit: widget.canEdit && !_busy && !['Completed', 'Cancelled'].contains(_status)),
           const SizedBox(height: 12), Text(_draftMessage), if (_error != null) Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
         ]))),
-        if (_id != null) ...[
-          if (widget.canEdit && ['Tentative', 'Confirmed'].contains(_status)) Padding(padding: const EdgeInsets.symmetric(vertical: 12), child: FilledButton.icon(onPressed: _busy ? null : () => _save(status: 'In progress'), icon: const Icon(Icons.play_arrow), label: const Text('Start visit'))),
-          _section('Discussion', 'discussion'), _section('New products and samples', 'products_notes'),
-          if (_type == 'Factory') _section('Production capacity', 'capacity'),
-          _section('Quality and compliance', 'quality'), _section('Cooperation and commercial terms', 'cooperation'),
-          if (widget.canEdit && _status == 'In progress') TextButton.icon(onPressed: _busy ? null : _linkProducts, icon: const Icon(Icons.link), label: const Text('Link existing products to this visit')),
-          CompanyProductsSection(key: ValueKey(_productRefresh), scope: widget.scope, company: widget.company, canEdit: widget.canEdit && !_busy && _status == 'In progress', fairId: widget.fairId ?? widget.company.tripId, visitKey: _visitKey),
-          Card(child: Padding(padding: const EdgeInsets.all(20), child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              if (_id != null && widget.canEdit && ['Tentative', 'Confirmed'].contains(_status))
+                FilledButton.icon(onPressed: _busy ? null : () => _save(status: 'In progress'), icon: const Icon(Icons.play_arrow), label: const Text('Start visit')),
+            ]),
+            _visitPanel('visit-discussion', [_section('Discussion', 'discussion'), _section('Cooperation and commercial terms', 'cooperation')]),
+            _visitPanel('visit-products', [
+              _section('New products and samples', 'products_notes'),
+              if (widget.canEdit && _status == 'In progress') TextButton.icon(onPressed: _busy ? null : _linkProducts, icon: const Icon(Icons.link), label: const Text('Link existing products')),
+              if (_id != null) CompanyProductsSection(key: ValueKey(_productRefresh), scope: widget.scope, company: widget.company, canEdit: widget.canEdit && !_busy && _status == 'In progress', fairId: widget.fairId ?? widget.company.tripId, visitKey: _visitKey),
+            ]),
+            _visitPanel('visit-capacity', [_section('Production capacity', 'capacity'), _section('Quality and compliance', 'quality')]),
+            _visitPanel('visit-actions', [Card(child: Padding(padding: const EdgeInsets.all(20), child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             Text('Agreed actions and deadlines', style: Theme.of(context).textTheme.titleLarge),
             for (final action in _actions) CheckboxListTile(contentPadding: EdgeInsets.zero, value: action['done'] == true,
               title: Text(action['task'].toString()), subtitle: Text('${action['owner']} - Due ${action['due']}'),
@@ -315,14 +361,17 @@ class _CompanyVisitWorkpadScreenState extends State<CompanyVisitWorkpadScreen> {
             if (widget.canEdit && _status == 'Completed') TextButton.icon(icon: const Icon(Icons.event_repeat), label: const Text('Schedule another visit'), onPressed: _busy ? null : () async {
               await Navigator.of(context).push(MaterialPageRoute(builder: (_) => CompanyVisitWorkpadScreen(scope: widget.scope, company: widget.company, canEdit: widget.canEdit, fairId: widget.fairId)));
             }),
-          ]))),
-        ],
-      ])),
-      if (widget.canEdit) SafeArea(top: false, child: Padding(padding: const EdgeInsets.all(16), child: Wrap(spacing: 8, runSpacing: 8, children: [
-        FilledButton.icon(onPressed: _busy ? null : () => _save(), icon: const Icon(Icons.save_outlined), label: Text(_id == null ? 'Save appointment' : 'Save workpad')),
-        if (_status == 'In progress') FilledButton.icon(onPressed: _busy ? null : () => _save(status: 'Completed'), icon: const Icon(Icons.check_circle_outline), label: const Text('Complete visit')),
-        if (_id != null && ['Tentative', 'Confirmed'].contains(_status)) TextButton(onPressed: _busy ? null : () => _save(status: 'Cancelled'), child: const Text('Cancel appointment')),
-      ]))),
-    ])),
-  ));
+          ])))]),
+          ],
+          footer: !widget.canEdit ? null : Wrap(spacing: 8, runSpacing: 8, children: [
+            FilledButton.icon(onPressed: _busy ? null : () => _save(), icon: const Icon(Icons.save_outlined), label: Text(_id == null ? 'Save appointment' : 'Save workpad')),
+            if (_status == 'In progress') FilledButton.icon(onPressed: _busy ? null : () => _save(status: 'Completed'), icon: const Icon(Icons.check_circle_outline), label: const Text('Complete visit')),
+            if (_id != null && ['Tentative', 'Confirmed'].contains(_status)) TextButton(onPressed: _busy ? null : () => _save(status: 'Cancelled'), child: const Text('Cancel appointment')),
+          ]),
+        ))));
+
+  Widget _visitPanel(String key, List<Widget> children) => ListView(
+    key: PageStorageKey(key), padding: const EdgeInsets.all(16),
+    children: _id == null ? [const Card(child: Padding(padding: EdgeInsets.all(20),
+      child: Text('Save the appointment first to open the visit workpad, products and related recordings.')))] : children);
 }

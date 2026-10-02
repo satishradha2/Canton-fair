@@ -9,6 +9,7 @@ import 'cloud_sync_service.dart';
 import 'reminder_service.dart';
 import 'team_workspace_service.dart';
 import 'background_sync_service.dart';
+import 'phone_cleanup_service.dart';
 
 class AutoSyncService with WidgetsBindingObserver {
   AutoSyncService._();
@@ -115,6 +116,7 @@ class AutoSyncService with WidgetsBindingObserver {
     }
     if (Supabase.instance.client.auth.currentUser == null) return;
     if (await TeamWorkspaceService().load() == null) return;
+    if (await PhoneCleanupService.paused(await TeamWorkspaceService().scopeKey())) return;
     final connectivity = await _connectivity.checkConnectivity();
     if (connectivity.contains(ConnectivityResult.none)) return;
 

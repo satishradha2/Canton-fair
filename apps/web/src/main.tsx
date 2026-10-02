@@ -1,3 +1,4 @@
+import { ServerRecordList } from './server_pagination';
 import { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import type { User } from '@supabase/supabase-js';
@@ -332,14 +333,19 @@ function App() {
       </section>}
       {view === 'fieldTools' ? <FieldToolsWorkspace onNavigate={setView} /> : view === 'routes' ? <RoutePlanner records={records} canWrite={canWrite} busy={busy} onCreateRoute={createRouteStop} /> : view === 'categories' ? <CategoryMaster records={records} canWrite={canWrite} busy={busy} onCreate={createSharedRecord} /> : view === 'reports' ? <ReportsWorkspace records={records} metrics={metrics} onExport={exportBusinessCsv} /> : <>
         <section className="content-head"><div><h3>{view === 'overview' ? 'Recent synchronized activity' : viewMeta[view].label}</h3><p>{busy ? 'Loading shared records...' : `${scoped.length} matching record${scoped.length === 1 ? '' : 's'}`}</p></div><input className="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search names, products, fields..." /></section>
-        {(view === 'suppliers' || view === 'products' || view === 'shortlist') && <SourcingWorkspace mode={view} records={records} query={search} onOpen={(record) => { setSelected(record); setEditing(false); }} />}
-        {view === 'visits' && <VisitEvidenceWorkspace records={records} query={search} onOpen={(record) => { setSelected(record); setEditing(false); }} />}
+        {(view === 'suppliers' || view === 'products' || view === 'shortlist') && <SourcingWorkspace teamId={teamId} mode={view} records={records} query={search} onOpen={(record) => { setSelected(record); setEditing(false); }} />}
+        {view === 'visits' && <VisitEvidenceWorkspace teamId={teamId} records={records} query={search} onOpen={(record) => { setSelected(record); setEditing(false); }} />}
         {view === 'procurement' && <ProcurementControlCenter records={records} role={activeTeam?.role ?? 'member'} onOpen={(record) => { setSelected(record); setEditing(false); }} onUpdate={async (record, changes) => { const updated = await updateRecord(teamId, record, changes); setRecords((current) => current.map((item) => item.record_type === updated.record_type && item.record_id === updated.record_id ? updated : item)); }} />}
         {view === 'procurement' && <ProcurementCompletionTools team={activeTeam} records={records} onOpen={(record) => { setSelected(record); setEditing(false); }} />}
         <section className={(view === 'suppliers' || view === 'products' || view === 'shortlist' || view === 'visits') ? 'record-table secondary-table' : 'record-table'}>
           <div className="table-row table-heading"><span>Record</span><span>Type</span><span>Updated</span><span /></div>
-          {!busy && scoped.length === 0 && <div className="empty"><strong>No matching synchronized records</strong><span>Mobile captures will appear here after team sync completes.</span></div>}
-          {scoped.map((record) => <button className="table-row record-row" key={`${record.record_type}:${record.record_id}`} onClick={() => { setSelected(record); setEditing(false); }}><span><strong>{recordName(record)}</strong><small>{valueOf(record.payload, ['category', 'hall', 'booth', 'model_code']) || 'Open details'}</small></span><span><em>{businessTypeLabel(record)}</em>{isShortlisted(record) && <b>Shortlisted</b>}</span><span>{dateLabel(record.updated_at)}</span><span aria-hidden="true">›</span></button>)}
+          <ServerRecordList teamId={teamId} types={view === 'overview' ? ['supplier', 'exhibitor', 'product', 'contact', 'meeting', 'recording', 'activity', 'trip', 'visit_session', 'quote'] : viewMeta[view].types} query={search} shortlisted={view === 'shortlist'} revision={records} renderItem={(record) => (
+            <button className="table-row record-row" key={`${record.record_type}:${record.record_id}`} onClick={() => { setSelected(record); setEditing(false); }}>
+              <span><strong>{recordName(record)}</strong><small>{valueOf(record.payload, ['category', 'hall', 'booth', 'model_code']) || 'Open details'}</small></span>
+              <span><em>{businessTypeLabel(record)}</em>{isShortlisted(record) && <b>Shortlisted</b>}</span>
+              <span>{dateLabel(record.updated_at)}</span><span aria-hidden="true">›</span>
+            </button>
+          )} />
         </section>
       </>}
     </section>

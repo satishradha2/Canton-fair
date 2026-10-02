@@ -6,6 +6,10 @@ import '../data/approval_policy.dart';
 import '../data/database.dart';
 import '../models/models.dart';
 import 'product_category_master_screen.dart';
+import '../widgets/record_search.dart';
+import '../widgets/database_paged_list.dart';
+import '../data/record_page_service.dart';
+import '../widgets/focused_workspace.dart';
 
 class MasterDataScreen extends StatefulWidget {
   const MasterDataScreen({super.key});
@@ -18,6 +22,10 @@ class _MasterDataScreenState extends State<MasterDataScreen> {
   static const _hallMarker = '\n\n[fair-expert-halls]';
   late Future<List<Trip>> _fairs;
   bool _busy = false;
+  int _panel = 0;
+  int? _hallFair;
+  final _categoryKey = GlobalKey<ProductCategoryMasterScreenState>();
+  int _revision = 0;
 
   @override
   void initState() {
@@ -47,7 +55,7 @@ class _MasterDataScreenState extends State<MasterDataScreen> {
     try {
       await TradeDatabase.instance.insertTrip(Trip(name: values.$1.trim(), city: values.$2.trim()));
       if (mounted) {
-        setState(() => _fairs = _load());
+        setState(() { _fairs = _load(); _revision++; });
         _message('Fair created. You can now add its halls.');
       }
     } catch (error) {
@@ -80,7 +88,7 @@ class _MasterDataScreenState extends State<MasterDataScreen> {
         'notes': _withHalls(fair.notes, halls),
       });
       if (mounted) {
-        setState(() => _fairs = _load());
+        setState(() { _fairs = _load(); _revision++; });
         _message('$clean added to ${fair.name}.');
       }
     } catch (error) {
@@ -139,11 +147,10 @@ class _MasterDataScreenState extends State<MasterDataScreen> {
         builder: (context, setModalState) => AlertDialog(
           title: const Text('Create hall'),
           content: Column(mainAxisSize: MainAxisSize.min, children: [
-            DropdownButtonFormField<Trip>(
-              initialValue: selected,
-              isExpanded: true,
+            SearchableSelectionField<Trip>(
+              value: selected,
               decoration: const InputDecoration(labelText: 'Fair'),
-              items: fairs.map((fair) => DropdownMenuItem(value: fair, child: Text(fair.name, overflow: TextOverflow.ellipsis))).toList(),
+              options: fairs, labelFor: (fair) => fair.name,
               onChanged: (fair) { if (fair != null) setModalState(() => selected = fair); },
             ),
             const SizedBox(height: 12),
@@ -164,41 +171,47 @@ class _MasterDataScreenState extends State<MasterDataScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(title: const Text('Masters')),
-        body: FutureBuilder<List<Trip>>(
-          future: _fairs,
-          builder: (context, snapshot) {
-            if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-            final fairs = snapshot.data!;
-            return ListView(
-              padding: const EdgeInsets.all(20),
-              children: [
-                Text('Shared master data', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
-                const SizedBox(height: 6),
-                const Text('Members and administrators can create the shared lists used by Fair Expert.'),
-                const SizedBox(height: 24),
-                _masterTile(Icons.category_outlined, 'Product categories', 'Create the product category list used by your team.', () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ProductCategoryMasterScreen()))),
-                const SizedBox(height: 12),
-                _masterTile(Icons.event_outlined, 'Fair names', 'Create and maintain fairs for supplier capture.', _busy ? null : _createFair),
-                const SizedBox(height: 12),
-                _masterTile(Icons.maps_home_work_outlined, 'Halls', 'Add reusable hall names under a selected fair.', _busy ? null : () => _createHall(fairs)),
-                const SizedBox(height: 28),
-                Text('Fairs and halls', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
-                const SizedBox(height: 12),
-                if (fairs.isEmpty) const Card(child: Padding(padding: EdgeInsets.all(20), child: Text('No fairs created yet. Start by creating the fair name.'))),
-                ...fairs.map((fair) => Card(child: Padding(padding: const EdgeInsets.all(16), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(fair.name, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
-                  if (fair.city.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 3), child: Text(fair.city)),
-                  const SizedBox(height: 10),
-                  Wrap(spacing: 8, runSpacing: 8, children: _halls(fair).isEmpty ? [const Chip(label: Text('No halls yet'))] : _halls(fair).map((hall) => Chip(label: Text(hall))).toList()),
-                ])))),
-              ],
-            );
-          },
-        ),
+    appBar: AppBar(title: const Text('Masters')),
+    body: FutureBuilder<List<Trip>>(future: _fairs, builder: (context, snapshot) {
+      if (snapshot.hasError) return Center(child: Text('Could not load masters: ${snapshot.error}'));
+      if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+      final fairs = snapshot.data!;
+      return FocusedWorkspace(title: 'Shared master data',
+        subtitle: 'Members and administrators can create the lists used across Fair Expert.',
+        busy: _busy, index: _panel, onChanged: (index) => setState(() => _panel = index),
+        labels: const ['Categories', 'Fairs', 'Halls'],
+        icons: const [Icons.category_outlined, Icons.event_outlined, Icons.maps_home_work_outlined],
+        sections: [
+          ProductCategoryMasterScreen(key: _categoryKey, embedded: true),
+          Padding(padding: const EdgeInsets.all(16), child: DatabasePagedList(refreshToken: _revision,
+            loader: RecordPageService.fairs, searchHint: 'Search fair or city', emptyMessage: 'No fairs yet. Use Create new fair.',
+            itemBuilder: (context, row) {
+              final fair = Trip.fromMap(Map<String, dynamic>.from(row));
+              return Card(child: ListTile(leading: const Icon(Icons.event_outlined),
+                title: Text(fair.name), subtitle: Text('${fair.city}\n${_halls(fair).length} halls'), isThreeLine: true,
+                trailing: IconButton(tooltip: 'Add hall to this fair', onPressed: _busy ? null : () => _createHall([fair]), icon: const Icon(Icons.add_location_alt_outlined))));
+            })),
+          Padding(padding: const EdgeInsets.all(16), child: Column(children: [
+            SearchableSelectionField<int>(key: ValueKey(_hallFair), value: _hallFair,
+              decoration: const InputDecoration(labelText: 'Filter by fair (optional)'),
+              options: fairs.map((fair) => fair.id!).toList(), labelFor: (id) => fairs.firstWhere((fair) => fair.id == id).name,
+              onChanged: (value) => setState(() => _hallFair = value)),
+            if (_hallFair != null) Align(alignment: Alignment.centerRight,
+              child: TextButton(onPressed: () => setState(() => _hallFair = null), child: const Text('All fairs'))),
+            const SizedBox(height: 12),
+            Expanded(child: DatabasePagedList(key: ValueKey(_hallFair), refreshToken: _revision,
+              loader: (offset, limit, query) => RecordPageService.halls(offset, limit, query, fairId: _hallFair),
+              searchHint: 'Search hall or fair', emptyMessage: 'No halls yet. Create a fair, then add its halls.',
+              itemBuilder: (_, row) => Card(child: ListTile(leading: const Icon(Icons.maps_home_work_outlined),
+                title: Text(row['name'].toString()), subtitle: Text(row['fair_name'].toString()))))),
+          ])),
+        ],
+        footer: SizedBox(width: double.infinity, child: FilledButton.icon(
+          onPressed: _busy ? null : () {
+            if (_panel == 0) { _categoryKey.currentState?.createCategory(); }
+            else if (_panel == 1) { _createFair(); }
+            else { _createHall(_hallFair == null ? fairs : fairs.where((fair) => fair.id == _hallFair).toList()); }
+          }, icon: const Icon(Icons.add), label: Text('Create new ${['category','fair','hall'][_panel]}'))),
       );
-
-  Widget _masterTile(IconData icon, String title, String subtitle, VoidCallback? onTap) => Card(
-        child: ListTile(leading: Icon(icon), title: Text(title, style: const TextStyle(fontWeight: FontWeight.w700)), subtitle: Text(subtitle), trailing: const Icon(Icons.chevron_right), onTap: onTap),
-      );
+    }));
 }

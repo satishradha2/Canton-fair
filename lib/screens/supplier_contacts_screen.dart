@@ -8,6 +8,9 @@ import '../models/models.dart';
 import '../widgets/supplier_category_picker.dart';
 import '../widgets/company_products_section.dart';
 import '../widgets/supplier_shortlist_card.dart';
+import '../widgets/field_workspace.dart';
+import '../widgets/database_paged_list.dart';
+import '../data/record_page_service.dart';
 import 'company_visits_screen.dart';
 
 class SupplierContactsScreen extends StatefulWidget {
@@ -21,18 +24,19 @@ class SupplierContactsScreen extends StatefulWidget {
 
 class _SupplierContactsScreenState extends State<SupplierContactsScreen> {
   late Future<_CompanyData?> _company;
-  late Future<List<_CompanyData>> _companies;
+  final _directoryKey = GlobalKey<DatabasePagedListState>();
   String? _scope;
   final Set<String> _selectedCategories = {};
   bool _canEdit = false;
   bool _savingCategories = false;
   bool _categoriesChanged = false;
 
+
   @override
   void initState() {
     super.initState();
     _company = widget.companyId == null ? Future.value(null) : _loadCompany(widget.companyId!);
-    _companies = _loadCompanies();
+
   }
 
   Future<_CompanyData?> _loadCompany(int id) async {
@@ -70,121 +74,157 @@ class _SupplierContactsScreenState extends State<SupplierContactsScreen> {
     }
   }
 
-  Future<List<_CompanyData>> _loadCompanies() async {
-    final database = TradeDatabase.instance;
-    final companies = await database.getExhibitors(null);
-    final data = <_CompanyData>[];
-    for (final company in companies) {
-      data.add(_CompanyData(company, await database.getContacts(company.id!)));
-    }
-    return data;
-  }
-
   @override
   Widget build(BuildContext context) {
     if (widget.companyId != null) return _detail();
+    final theme = Theme.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('Companies and contacts')),
-      body: FutureBuilder<List<_CompanyData>>(
-        future: _companies,
-        builder: (context, snapshot) {
-          if (snapshot.hasError) return Center(child: Text('Could not load companies: ${snapshot.error}'));
-          if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-          final companies = snapshot.data!;
-          if (companies.isEmpty) return const Center(child: Padding(padding: EdgeInsets.all(32), child: Text('No companies yet. Scan a business card to create the first company record.', textAlign: TextAlign.center)));
-          return ListView.separated(
-            padding: const EdgeInsets.all(20),
-            itemCount: companies.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 12),
-            itemBuilder: (_, index) {
-              final data = companies[index];
-              return Card(
-                child: ListTile(
-                  leading: const CircleAvatar(child: Icon(Icons.business_outlined)),
-                  title: Text(data.company.name, style: const TextStyle(fontWeight: FontWeight.w700)),
-                  subtitle: Text('${data.contacts.length} contact${data.contacts.length == 1 ? '' : 's'}${data.company.country.isEmpty ? '' : ' • ${data.company.country}'}'),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => SupplierContactsScreen(companyId: data.company.id, fairId: widget.fairId))),
-                ),
-              );
+      appBar: AppBar(title: const Text('Companies')),
+      body: SafeArea(child: Center(child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 960),
+        child: Padding(padding: const EdgeInsets.all(20), child: Column(children: [
+          const FieldWorkspaceHeader(eyebrow: 'Supplier directory',
+            title: 'Your business connections',
+            subtitle: 'One company. Every contact, product and visit together.'),
+          const SizedBox(height: 14),
+          Expanded(child: DatabasePagedList(
+            key: _directoryKey, loader: RecordPageService.companies,
+            searchHint: 'Search company, contact, country or category',
+            emptyMessage: 'Scan a business card to add your first company.',
+            itemBuilder: (context, row) {
+              final company = Exhibitor.fromMap(Map<String, dynamic>.from(row));
+              final categories = SupplierCategoriesService.selected(company);
+              return Card(clipBehavior: Clip.antiAlias,
+                child: InkWell(onTap: () async {
+                  await Navigator.of(context).push(MaterialPageRoute(builder: (_) =>
+                    SupplierContactsScreen(companyId: company.id, fairId: widget.fairId)));
+                  if (mounted) await _directoryKey.currentState?.refresh();
+                }, child: Padding(padding: const EdgeInsets.all(18),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Row(children: [
+                      CircleAvatar(backgroundColor: theme.colorScheme.secondaryContainer,
+                        child: Icon(Icons.business_outlined, color: theme.colorScheme.secondary)),
+                      const SizedBox(width: 14),
+                      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text(company.name, style: theme.textTheme.titleMedium
+                          ?.copyWith(fontWeight: FontWeight.w800)),
+                        const SizedBox(height: 4),
+                        Text('${row['contact_count'] ?? 0} contacts${company.country.isEmpty ? '' : ' | ${company.country}'}',
+                          style: theme.textTheme.bodySmall),
+                      ])),
+                      const Icon(Icons.chevron_right_rounded),
+                    ]),
+                    if (categories.isNotEmpty) ...[const SizedBox(height: 12),
+                      Wrap(spacing: 6, runSpacing: 6, children: [
+                        for (final category in categories) Chip(label: Text(category))])],
+                  ]))));
             },
-          );
-        },
-      ),
+          )),
+        ])),
+      ))),
     );
   }
-
   Widget _detail() => Scaffold(
-        appBar: AppBar(title: const Text('Company contacts')),
-        body: FutureBuilder<_CompanyData?>(
-          future: _company,
-          builder: (context, snapshot) {
-            if (snapshot.hasError) return Center(child: Text('Could not load company: ${snapshot.error}'));
-            if (snapshot.connectionState != ConnectionState.done) return const Center(child: CircularProgressIndicator());
-            final data = snapshot.data;
-            if (data == null) return const Center(child: Text('This company could not be found.'));
-            return ListView(
-              padding: const EdgeInsets.all(20),
-              children: [
-                Text(data.company.name, style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
-                if (data.company.country.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 4), child: Text(data.company.country)),
-                const SizedBox(height: 24),
-                SupplierShortlistCard(scope: _scope!, company: data.company, canEdit: _canEdit, fairId: widget.fairId),
-                Text('Contacts (${data.contacts.length})', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
-                const SizedBox(height: 12),
-                ...data.contacts.map((contact) => Card(
-                  child: ListTile(
-                    leading: CircleAvatar(child: Text(contact.name.isEmpty ? '?' : contact.name[0].toUpperCase())),
-                    title: Text(contact.name),
-                    subtitle: Text([contact.designation, contact.phone, contact.email].where((value) => value.isNotEmpty).join('\n')),
-                    isThreeLine: contact.designation.isNotEmpty && (contact.phone.isNotEmpty || contact.email.isNotEmpty),
-                  ),
-                )),
-                const SizedBox(height: 24),
-                Card(child: Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text('Categories this company deals with',
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
-                    const SizedBox(height: 8),
-                    const Text('Select all applicable product categories from Masters.'),
-                    const SizedBox(height: 20),
-                    SupplierCategoryPicker(
-                      scope: _scope!,
-                      selected: _selectedCategories,
-                      enabled: _canEdit && !_savingCategories,
-                      onChanged: (categories) => setState(() {
-                        _selectedCategories..clear()..addAll(categories);
-                        _categoriesChanged = true;
-                      }),
-                    ),
-                    const SizedBox(height: 16),
-                    if (_canEdit) SizedBox(width: double.infinity, child: FilledButton.icon(
-                      onPressed: !_savingCategories && _categoriesChanged && _selectedCategories.isNotEmpty ? _saveCategories : null,
-                      icon: _savingCategories
-                          ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                          : const Icon(Icons.save_outlined),
-                      label: Text(_savingCategories ? 'Saving...' : 'Save categories'),
-                    )),
-                  ]),
-                )),
-                CompanyProductsSection(scope: _scope!, company: data.company, canEdit: _canEdit, fairId: widget.fairId),
-                const SizedBox(height: 24),
-                Card(child: Padding(padding: const EdgeInsets.all(20), child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                  Text('Factory & office visits', style: Theme.of(context).textTheme.titleLarge),
-                  const SizedBox(height: 8),
-                  const Text('Schedule appointments and keep each visit\'s discussions, products, evidence and agreed actions together.'),
+    appBar: AppBar(title: const Text('Company workspace')),
+    body: FutureBuilder<_CompanyData?>(
+      future: _company,
+      builder: (context, snapshot) {
+        if (snapshot.hasError) return Center(child: Text('Could not load company: ${snapshot.error}'));
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        final data = snapshot.data;
+        if (data == null) return const Center(child: Text('This company could not be found.'));
+        return DefaultTabController(length: 4, child: SafeArea(child: Center(
+          child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 960),
+            child: Column(children: [
+              Padding(padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+                child: FieldWorkspaceHeader(eyebrow: 'Company workspace',
+                  title: data.company.name,
+                  subtitle: [if (data.company.country.isNotEmpty) data.company.country,
+                    '${data.contacts.length} saved contacts'].join(' | '))),
+              const TabBar(isScrollable: true, tabAlignment: TabAlignment.start, tabs: [
+                Tab(text: 'Overview'), Tab(text: 'Contacts'),
+                Tab(text: 'Products'), Tab(text: 'Visits'),
+              ]),
+              Expanded(child: TabBarView(children: [
+                ListView(padding: const EdgeInsets.all(20), children: [
+                  SupplierShortlistCard(scope: _scope!, company: data.company,
+                    canEdit: _canEdit, fairId: widget.fairId),
                   const SizedBox(height: 16),
-                  FilledButton.icon(icon: const Icon(Icons.event_outlined), label: const Text('Visits & appointments'),
-                    onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => CompanyVisitsScreen(company: data.company, fairId: widget.fairId)))),
-                ]))),
-              ],
-            );
-          },
-        ),
-      );
-}
+                  _categorySection(),
+                ]),
+                ListView(padding: const EdgeInsets.all(20), children: [
+                  FieldWorkspaceSection(title: 'People at this company',
+                    icon: Icons.people_outline,
+                    subtitle: 'All business-card contacts are linked to this company.',
+                    child: Column(children: [
+                      if (data.contacts.isEmpty) const Text('No contacts saved yet.'),
+                      for (final contact in data.contacts) Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: Card(color: Theme.of(context).colorScheme.surfaceContainerLow,
+                          child: Padding(padding: const EdgeInsets.all(16),
+                            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                              CircleAvatar(child: Text(contact.name.isEmpty ? '?' :
+                                contact.name[0].toUpperCase())),
+                              const SizedBox(width: 14),
+                              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                Text(contact.name.isEmpty ? 'Contact' : contact.name,
+                                  style: Theme.of(context).textTheme.titleMedium),
+                                if (contact.designation.isNotEmpty) Text(contact.designation),
+                                if (contact.phone.isNotEmpty) Padding(
+                                  padding: const EdgeInsets.only(top: 8), child: SelectableText(contact.phone)),
+                                if (contact.email.isNotEmpty) Padding(
+                                  padding: const EdgeInsets.only(top: 4), child: SelectableText(contact.email)),
+                              ])),
+                            ])))),
+                    ])),
+                ]),
+                ListView(padding: const EdgeInsets.fromLTRB(20, 0, 20, 24), children: [
+                  CompanyProductsSection(scope: _scope!, company: data.company,
+                    canEdit: _canEdit, fairId: widget.fairId),
+                ]),
+                ListView(padding: const EdgeInsets.all(20), children: [
+                  FieldWorkspaceSection(title: 'Factory & office visits', icon: Icons.event_outlined,
+                    subtitle: 'Turn an exhibition conversation into a focused follow-up visit.',
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                      const Text('Schedule appointments, continue workpads and keep discussions, products, evidence and agreed actions linked to this company.'),
+                      const SizedBox(height: 18),
+                      FilledButton.icon(icon: const Icon(Icons.event_available_outlined),
+                        label: const Text('Open visits & appointments'),
+                        onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+                          builder: (_) => CompanyVisitsScreen(company: data.company, fairId: widget.fairId)))),
+                    ])),
+                ]),
+              ])),
+            ]),
+          ),
+        )));
+      },
+    ),
+  );
 
+  Widget _categorySection() => FieldWorkspaceSection(
+    title: 'Product categories', icon: Icons.category_outlined,
+    subtitle: 'Select every category this company deals with. Categories are shared through Sync.',
+    child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      SupplierCategoryPicker(scope: _scope!, selected: _selectedCategories,
+        enabled: _canEdit && !_savingCategories,
+        onChanged: (categories) => setState(() {
+          _selectedCategories..clear()..addAll(categories);
+          _categoriesChanged = true;
+        })),
+      const SizedBox(height: 16),
+      if (_canEdit) FilledButton.icon(
+        onPressed: !_savingCategories && _categoriesChanged && _selectedCategories.isNotEmpty
+            ? _saveCategories : null,
+        icon: _savingCategories ? const SizedBox(width: 18, height: 18,
+          child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.save_outlined),
+        label: Text(_savingCategories ? 'Saving...' : 'Save categories')),
+    ]),
+  );
+}
 class _CompanyData {
   const _CompanyData(this.company, this.contacts);
   final Exhibitor company;

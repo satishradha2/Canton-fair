@@ -16,6 +16,8 @@ import '../data/team_workspace_service.dart';
 import '../models/models.dart';
 import 'supplier_contacts_screen.dart';
 import '../widgets/animated_card_preview.dart';
+import '../widgets/field_workspace.dart';
+import '../widgets/record_search.dart';
 
 class MinimalOcrContactScreen extends StatefulWidget {
   const MinimalOcrContactScreen({super.key, required this.fair});
@@ -47,6 +49,7 @@ class _MinimalOcrContactScreenState extends State<MinimalOcrContactScreen> {
   String _captureStatus = '';
   String? _readingSide;
   bool _aiProcessing = false;
+  int _step = 0;
 
   @override
   void initState() {
@@ -155,6 +158,25 @@ class _MinimalOcrContactScreenState extends State<MinimalOcrContactScreen> {
       if (!mounted) return;
       setState(() { _aiProcessing = false; _captureStatus = 'Reading complete. Review the AI suggestions.'; });
       final fields = Map<String, dynamic>.from(result['fields'] as Map);
+      final transcriptForReview = result['transcript'] as Map?;
+      final reviewSource = ['front', 'back'].map((side) =>
+        (transcriptForReview?[side] ?? _sideText[side] ?? '').toString()).join('\n\n');
+      final sourceCandidates = BusinessCardParser.candidates(reviewSource);
+      final addressSuggestion = (fields['address'] ?? '').toString().trim();
+      final fullAddresses = sourceCandidates['address'] ?? <String>[];
+      String normalized(String value) => value.toLowerCase()
+        .replaceAll(RegExp(r'\s+'), ' ').trim();
+      final matchingAddresses = fullAddresses.where((address) =>
+        addressSuggestion.isNotEmpty && normalized(address).contains(normalized(addressSuggestion))).toList();
+      if (addressSuggestion.isEmpty && fullAddresses.length == 1) {
+        fields['address'] = fullAddresses.single;
+      } else if (matchingAddresses.length == 1) {
+        fields['address'] = matchingAddresses.single;
+      }
+      if ((fields['country'] ?? '').toString().trim().isEmpty &&
+          (sourceCandidates['country'] ?? []).length == 1) {
+        fields['country'] = sourceCandidates['country']!.single;
+      }
       final controllers = {'name': _company, 'person': _contact, 'role': _role, 'phone': _phone,
         'email': _email, 'websites': _website, 'address': _address, 'country': _country};
       const labels = {'name': 'Supplier / company', 'person': 'Contact person', 'role': 'Role',
@@ -164,7 +186,7 @@ class _MinimalOcrContactScreenState extends State<MinimalOcrContactScreen> {
       final apply = await showDialog<bool>(context: context, barrierDismissible: false, builder: (context) => StatefulBuilder(builder: (context, update) => AlertDialog(
         title: const Text('Review AI suggestions'),
         content: SizedBox(width: double.maxFinite, child: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          const Text('Select the values to apply. Existing entries are kept unless you select their replacement.'),
+          const Text('Select the values to apply. Existing entries are kept unless you select their replacement. Address lines are kept together. Country may be suggested from the address city; confirm it before saving.'),
           for (final key in controllers.keys) if ((fields[key] ?? '').toString().trim().isNotEmpty) CheckboxListTile(
             contentPadding: EdgeInsets.zero, title: Text(labels[key]!), subtitle: Text('${fields[key]}${controllers[key]!.text.isEmpty ? '' : '\nCurrent: ${controllers[key]!.text}'}'), value: accepted.contains(key),
             onChanged: (value) => update(() { if (value == true) { accepted.add(key); } else { accepted.remove(key); } })),
@@ -251,36 +273,52 @@ class _MinimalOcrContactScreenState extends State<MinimalOcrContactScreen> {
       final key = _companyKey(company.name);
       return key != target && key.length > 4 && target.length > 4 && (key.contains(target) || target.contains(key));
     }).toList();
-    final candidates = [...exact, ...similar];
+    final ordered = [...exact, ...similar,
+      ...companies.where((company) => !exact.contains(company) && !similar.contains(company))];
     if (!mounted) return null;
-    if (candidates.isEmpty) return const _CompanyChoice(null);
+    if (companies.isEmpty) return const _CompanyChoice(null);
+    var query = '';
     return showDialog<_CompanyChoice>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(exact.isNotEmpty ? 'Existing company found' : 'Possible company match'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(exact.isNotEmpty ? 'Save this card under the existing company, or create a separate record.' : 'Check whether this card belongs to an existing company.'),
-            const SizedBox(height: 12),
-            ...candidates.take(4).map((company) => ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.business_outlined),
-              title: Text(company.name),
-              subtitle: Text(company.country.isEmpty ? 'Existing supplier record' : company.country),
-              onTap: () => Navigator.of(context).pop(_CompanyChoice(company)),
-            )),
+      builder: (context) => StatefulBuilder(builder: (context, update) {
+        final matches = ordered.where((company) =>
+          recordMatches(query, [company.name, company.country, company.category])).toList();
+        return AlertDialog(
+          title: Text(exact.isNotEmpty ? 'Existing company found' : 'Choose company or create new'),
+          content: SizedBox(width: double.maxFinite,
+            height: MediaQuery.of(context).size.height * 0.48,
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              const Text('Matching companies appear first. Search all saved companies before creating another.'),
+              const SizedBox(height: 12),
+              RecordSearchField(hint: 'Search company, country or category',
+                onChanged: (value) => update(() => query = value)),
+              Padding(padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Text('${matches.length} of ${companies.length} companies')),
+              Expanded(child: matches.isEmpty
+                ? const Center(child: Text('No matches. Change your search or create a new company.'))
+                : ListView.builder(itemCount: matches.length, itemBuilder: (_, index) {
+                    final company = matches[index];
+                    return ListTile(contentPadding: EdgeInsets.zero,
+                      leading: Icon(exact.contains(company) ? Icons.verified_outlined : Icons.business_outlined),
+                      title: Text(company.name),
+                      subtitle: Text([
+                        if (exact.contains(company)) 'Exact company match',
+                        if (company.country.isNotEmpty) company.country,
+                        if (company.category.isNotEmpty) company.category,
+                      ].join(' | ')),
+                      onTap: () => Navigator.of(context).pop(_CompanyChoice(company)));
+                  })),
+            ])),
+          actions: [
+            TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
+            if (exact.isEmpty) TextButton(
+              onPressed: () => Navigator.of(context).pop(const _CompanyChoice(null)),
+              child: const Text('Create new company')),
           ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
-          if (exact.isEmpty) TextButton(onPressed: () => Navigator.of(context).pop(const _CompanyChoice(null)), child: const Text('Create new company')),
-        ],
-      ),
+        );
+      }),
     );
   }
-
   String _companyKey(String value) => value.toLowerCase().replaceAll(RegExp(r'[\s.,&()\-]'), '');
 
   Future<(String, String)?> _chooseLocation(Trip fair) async {
@@ -298,10 +336,10 @@ class _MinimalOcrContactScreenState extends State<MinimalOcrContactScreen> {
         title: const Text('Company location at this fair'),
         content: SingleChildScrollView(child: Form(key: form, child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(fair.name), const SizedBox(height: 16),
-          DropdownButtonFormField<String>(
-            isExpanded: true,
+          SearchableSelectionField<String>(
+            value: hall,
             decoration: const InputDecoration(labelText: 'Hall number', border: OutlineInputBorder()),
-            items: halls.map((name) => DropdownMenuItem(value: name, child: Text(name))).toList(),
+            options: halls, labelFor: (name) => name,
             validator: (value) => value == null ? 'Select a hall.' : null,
             onChanged: (value) => setModalState(() => hall = value),
           ),
@@ -328,33 +366,158 @@ class _MinimalOcrContactScreenState extends State<MinimalOcrContactScreen> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Scan business card')),
-    body: SafeArea(child: Form(key: _formKey, child: ListView(padding: const EdgeInsets.all(20), children: [
-      Text('Capture and review', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
-      Text('Fair: ${widget.fair.name}'),
-      const SizedBox(height: 6), const Text('Use a clear card image, then confirm the details before saving.'), const SizedBox(height: 20),
-      _cardSide(false),
-      const SizedBox(height: 12),
-      _cardSide(true),
-      const SizedBox(height: 12),
-      FilledButton.icon(onPressed: _image == null || _extracting || _saving ? null : _extractAi,
-        icon: const Icon(Icons.auto_awesome_outlined), label: Text(_backImage == null ? 'Extract front with AI' : 'Extract front + back with AI')),
-      const SizedBox(height: 8), const Text('Camera / Gallery runs offline OCR. Use AI to read the image and suggest structured contact details.'),
-      if (_extracting) ...[const Padding(padding: EdgeInsets.only(top: 18), child: LinearProgressIndicator()),
-        if (_captureStatus.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 8), child: Text(_captureStatus))], const SizedBox(height: 24),
-      _field(_company, 'Supplier / company', required: true), _field(_contact, 'Contact person'), _field(_role, 'Role or designation'), _field(_phone, 'Phone', keyboard: TextInputType.phone), _field(_email, 'Email', keyboard: TextInputType.emailAddress), _field(_website, 'Website', keyboard: TextInputType.url), _field(_address, 'Address', lines: 2), _field(_country, 'Country / region'),
-      if (_rawText.text.isNotEmpty) ExpansionTile(title: const Text('OCR source text'), children: [Padding(padding: const EdgeInsets.all(16), child: SelectableText(_rawText.text))]),
-      if (_aiResult != null) ExpansionTile(title: const Text('Complete AI reading and additional card details'), children: [Padding(padding: const EdgeInsets.all(16), child: SelectableText(const JsonEncoder.withIndent('  ').convert(_aiResult)))]),
-      AnimatedSwitcher(duration: Duration(milliseconds: MediaQuery.of(context).disableAnimations ? 0 : 300),
-        child: _aiResult == null ? const SizedBox.shrink() : Container(key: const ValueKey('ai-ready'),
-          margin: const EdgeInsets.only(top: 12), padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(color: Theme.of(context).colorScheme.primaryContainer.withAlpha(100), borderRadius: BorderRadius.circular(14)),
-          child: const Row(children: [Icon(Icons.check_circle_outline), SizedBox(width: 12), Expanded(child: Text('AI reading ready. Confirm your contact details before saving.'))]))),
-      const SizedBox(height: 24), FilledButton.icon(onPressed: _saving || _extracting ? null : _save, icon: _saving ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.save_outlined), label: Text(_saving ? 'Saving...' : 'Save contact')),
-    ]))),
-  );
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final busy = _saving || _extracting;
+    final reduced = MediaQuery.of(context).disableAnimations ||
+        MediaQuery.of(context).accessibleNavigation;
+    return Scaffold(
+      appBar: AppBar(title: const Text('Scan business card')),
+      bottomNavigationBar: SafeArea(top: false, child: Container(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
+        decoration: BoxDecoration(color: theme.colorScheme.surface,
+          border: Border(top: BorderSide(color: theme.colorScheme.outlineVariant))),
+        child: Row(children: [
+          if (_step > 0) ...[
+            OutlinedButton(onPressed: busy ? null : () => _goStep(_step - 1),
+              child: const Text('Back')),
+            const SizedBox(width: 12),
+          ],
+          Expanded(child: FilledButton.icon(
+            onPressed: busy ? null : () {
+              if (_step < 2) {
+                _goStep(_step + 1);
+              } else if (_company.text.trim().isEmpty) {
+                _goStep(1);
+                _message('Enter the supplier or company name.');
+              } else {
+                _save();
+              }
+            },
+            icon: _saving ? const SizedBox(width: 18, height: 18,
+              child: CircularProgressIndicator(strokeWidth: 2))
+                : Icon(_step == 2 ? Icons.save_outlined : Icons.arrow_forward_rounded),
+            label: Text(_saving ? 'Saving...' : _step == 0
+                ? 'Review details' : _step == 1 ? 'Review & save' : 'Save contact'))),
+        ]),
+      )),
+      body: SafeArea(bottom: false, child: Center(child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 760),
+        child: Column(children: [
+          Padding(padding: const EdgeInsets.fromLTRB(20, 14, 20, 8),
+            child: Row(children: [
+              for (var index = 0; index < 3; index++) Expanded(
+                child: Padding(padding: EdgeInsets.only(right: index == 2 ? 0 : 8),
+                  child: ChoiceChip(
+                    label: Text(['1 Capture', '2 Details', '3 Review'][index]),
+                    selected: _step == index,
+                    onSelected: busy ? null : (_) => _goStep(index)))),
+            ])),
+          Expanded(child: Form(key: _formKey, child: AnimatedSwitcher(
+            duration: reduced ? Duration.zero : const Duration(milliseconds: 220),
+            switchInCurve: Curves.easeOutCubic,
+            child: ListView(key: ValueKey(_step),
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 24), children: [
+              FieldWorkspaceHeader(
+                eyebrow: widget.fair.name,
+                title: ['Capture the card', 'Confirm the details', 'Ready for your team'][_step],
+                subtitle: ['Add the front and optional back. You can also continue with manual entry.',
+                  'Check the extracted information. Nothing is saved until you confirm.',
+                  'Review this contact before saving it under its company.'][_step],
+                icon: [Icons.document_scanner_outlined, Icons.edit_note_outlined,
+                  Icons.fact_check_outlined][_step]),
+              const SizedBox(height: 18),
+              if (_step == 0) ...[
+                LayoutBuilder(builder: (context, constraints) => constraints.maxWidth >= 600
+                  ? Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Expanded(child: _cardSide(false)), const SizedBox(width: 12),
+                      Expanded(child: _cardSide(true))])
+                  : Column(children: [_cardSide(false), const SizedBox(height: 12), _cardSide(true)])),
+                const SizedBox(height: 16),
+                FilledButton.icon(
+                  onPressed: _image == null || busy ? null : _extractAi,
+                  icon: const Icon(Icons.auto_awesome_outlined),
+                  label: Text(_backImage == null ? 'Read front with AI' : 'Read both sides with AI')),
+                const SizedBox(height: 10),
+                Text('Offline OCR runs after capture. AI provides additional suggestions for your review.',
+                  style: theme.textTheme.bodySmall),
+                if (_extracting) ...[
+                  const SizedBox(height: 16), const LinearProgressIndicator(),
+                  const SizedBox(height: 8), Text(_captureStatus),
+                ],
+                if (_aiResult != null) const Padding(padding: EdgeInsets.only(top: 12),
+                  child: Text('AI reading ready. Continue to Details to confirm the fields.')),
+              ],
+              if (_step == 1) ...[
+                FieldWorkspaceSection(title: 'Company identity', icon: Icons.business_outlined,
+                  child: Column(children: [
+                    _field(_company, 'Supplier / company', required: true),
+                    _field(_website, 'Website', keyboard: TextInputType.url),
+                  ])),
+                const SizedBox(height: 14),
+                FieldWorkspaceSection(title: 'Contact person', icon: Icons.person_outline,
+                  child: Column(children: [
+                    _field(_contact, 'Contact person'), _field(_role, 'Role or designation'),
+                    _field(_phone, 'Phone', keyboard: TextInputType.phone),
+                    _field(_email, 'Email', keyboard: TextInputType.emailAddress),
+                  ])),
+                const SizedBox(height: 14),
+                FieldWorkspaceSection(title: 'Address & location', icon: Icons.location_on_outlined,
+                  subtitle: 'Keep every address line. Confirm any country suggested from the city.',
+                  child: Column(children: [
+                    _field(_address, 'Full address', lines: 4), _field(_country, 'Country / region'),
+                  ])),
+              ],
+              if (_step == 2) ...[
+                FieldWorkspaceSection(title: 'Company & contact summary', icon: Icons.fact_check_outlined,
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                    for (final entry in {
+                      'Company': _company.text, 'Contact': _contact.text,
+                      'Role': _role.text, 'Phone': _phone.text, 'Email': _email.text,
+                      'Website': _website.text, 'Address': _address.text, 'Country': _country.text,
+                    }.entries) Padding(padding: const EdgeInsets.only(bottom: 14),
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text(entry.key, style: theme.textTheme.labelSmall
+                          ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+                        const SizedBox(height: 4),
+                        SelectableText(entry.value.trim().isEmpty ? 'Not provided' : entry.value,
+                          style: theme.textTheme.bodyMedium),
+                      ])),
+                    OutlinedButton.icon(onPressed: busy ? null : () => _goStep(1),
+                      icon: const Icon(Icons.edit_outlined), label: const Text('Edit details')),
+                  ])),
+                const SizedBox(height: 14),
+                const FieldWorkspaceSection(title: 'What happens next', icon: Icons.account_tree_outlined,
+                  child: Text('You will select the company match and required categories. Hall and booth are requested when this company is first captured for the selected fair.')),
+              ],
+              if (_step > 0 && _rawText.text.isNotEmpty) Padding(
+                padding: const EdgeInsets.only(top: 14),
+                child: Card(child: ExpansionTile(title: const Text('Compare with OCR source'),
+                  leading: const Icon(Icons.text_snippet_outlined),
+                  children: [Padding(padding: const EdgeInsets.all(18),
+                    child: SelectableText(_rawText.text))]))),
+              if (_step > 0 && _aiResult != null) Padding(
+                padding: const EdgeInsets.only(top: 10),
+                child: Card(child: ExpansionTile(title: const Text('Additional AI reading'),
+                  children: [Padding(padding: const EdgeInsets.all(18),
+                    child: SelectableText(const JsonEncoder.withIndent('  ').convert(_aiResult)))]))),
+            ]),
+          ))),
+        ]),
+      ))),
+    );
+  }
 
+  void _goStep(int next) {
+    if (_saving || _extracting || next == _step) return;
+    if (next == 2 && _company.text.trim().isEmpty) {
+      if (_step == 1) _formKey.currentState?.validate();
+      _message('Enter the supplier or company name before review.');
+      return;
+    }
+    FocusScope.of(context).unfocus();
+    setState(() => _step = next);
+  }
   Widget _field(TextEditingController controller, String label, {bool required = false, int lines = 1, TextInputType? keyboard}) => Padding(
     padding: const EdgeInsets.only(bottom: 14),
     child: TextFormField(controller: controller, enabled: !_extracting && !_saving, maxLines: lines, keyboardType: keyboard, decoration: InputDecoration(labelText: label, border: const OutlineInputBorder()), validator: required ? (value) => value == null || value.trim().isEmpty ? 'Enter the supplier or company name.' : null : null),

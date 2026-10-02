@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import '../widgets/record_search.dart';
 import 'package:image_picker/image_picker.dart';
 import '../data/fair_capture_service.dart';
 import '../data/field_work_repository.dart';
@@ -11,6 +12,7 @@ import '../data/supplier_categories_service.dart';
 import '../models/models.dart';
 import 'supplier_voice_note_screen.dart';
 import '../widgets/product_audio_notes.dart';
+import '../widgets/focused_workspace.dart';
 
 class ProductCaptureWorkspaceScreen extends StatefulWidget {
   const ProductCaptureWorkspaceScreen({super.key, required this.scope, required this.company,
@@ -26,6 +28,8 @@ class ProductCaptureWorkspaceScreen extends StatefulWidget {
 }
 
 class _ProductCaptureWorkspaceScreenState extends State<ProductCaptureWorkspaceScreen> with WidgetsBindingObserver {
+  String _additionalCategoryQuery = '';
+  int _panel = 0;
   static const labels = {
     'name': 'Product name', 'model_code': 'Model / SKU', 'specs': 'Description',
     'moq': 'Minimum order quantity', 'quoted_price': 'Quoted unit price', 'price_currency': 'Currency code',
@@ -324,7 +328,13 @@ class _ProductCaptureWorkspaceScreenState extends State<ProductCaptureWorkspaceS
   }
 
   Future<void> _save(bool another, {bool voice = false}) async {
-    if (_busy || !_form.currentState!.validate()) return;
+    if (_busy) return;
+    if (!_form.currentState!.validate()) {
+      setState(() { _panel = _controller('name').text.trim().isEmpty ||
+        !_categories.contains(_controller('category').text) || _fairId == null ? 0 : 3;
+        _error = 'Check the highlighted required fields in Basics and Pricing.'; });
+      return;
+    }
     setState(() { _busy = true; _error = null; });
     final draftId = _productId;
     try {
@@ -343,7 +353,7 @@ class _ProductCaptureWorkspaceScreenState extends State<ProductCaptureWorkspaceS
           _photos.clear(); _specs.clear(); _aiCache = null; _aiPending = false; _productId = null;
           _additionalCategories.clear(); _quoteHistory = [];
           _shortlisted = false; _alsoShortlistSupplier = false; _shortlistReason.clear();
-          _draftStatus = 'Product saved. Ready for the next product.';
+          _draftStatus = 'Product saved. Ready for the next product.'; _panel = 0;
         });
       } else {
         setState(() => _allowExit = true);
@@ -373,27 +383,126 @@ class _ProductCaptureWorkspaceScreenState extends State<ProductCaptureWorkspaceS
     ]),
   ));
 
+  Future<void> _photoOptions(int index) async {
+    final photo = _photos[index];
+    await showModalBottomSheet<void>(context: context, isScrollControlled: true,
+      showDragHandle: true, builder: (sheetContext) => StatefulBuilder(
+        builder: (sheetContext, update) => SafeArea(child: SingleChildScrollView(
+          padding: const EdgeInsets.all(20), child: Column(mainAxisSize: MainAxisSize.min, children: [
+            InkWell(onTap: () => _showImage(photo['path'] as String), child: ClipRRect(
+              borderRadius: BorderRadius.circular(16), child: Image.file(File(photo['path'] as String),
+                height: 190, fit: BoxFit.contain, errorBuilder: (_, error, stack) => const Text('Photo unavailable. Sync to download.')))),
+            const SizedBox(height: 16),
+            DropdownButtonFormField<String>(initialValue: photoRoles.contains(photo['role']) ? photo['role'] as String : 'Product view',
+              decoration: const InputDecoration(labelText: 'Image role'),
+              items: photoRoles.map((role) => DropdownMenuItem(value: role, child: Text(role))).toList(),
+              onChanged: widget.readOnly || _busy ? null : (role) {
+                setState(() => photo['role'] = role); update(() {}); _changed(); }),
+            SwitchListTile(title: const Text('Cover image'), value: photo['cover'] == true,
+              onChanged: widget.readOnly || _busy ? null : (value) {
+                setState(() { if (value) { for (final item in _photos) { item['cover'] = false; } } photo['cover'] = value; });
+                update(() {}); _changed(); }),
+            if (!widget.readOnly) TextButton.icon(icon: const Icon(Icons.delete_outline),
+              label: const Text('Remove image'), onPressed: _busy ? null : () {
+                Navigator.pop(sheetContext); _removePhoto(index); }),
+            TextButton(onPressed: () => Navigator.pop(sheetContext), child: const Text('Done')),
+          ])))));
+  }
+
+  Widget _photoPanel() => _section('Photos and source documents', [
+    if (!widget.readOnly) Wrap(spacing: 8, runSpacing: 8, children: [
+      OutlinedButton.icon(onPressed: _busy ? null : () => _addPhotos(ImageSource.camera), icon: const Icon(Icons.camera_alt_outlined), label: const Text('Camera')),
+      OutlinedButton.icon(onPressed: _busy ? null : () => _addPhotos(ImageSource.gallery), icon: const Icon(Icons.photo_library_outlined), label: const Text('Add photos')),
+      OutlinedButton.icon(onPressed: _busy ? null : () => _addPhotos(ImageSource.camera, role: 'Specification sheet'), icon: const Icon(Icons.document_scanner_outlined), label: const Text('Spec sheet')),
+    ]),
+    const SizedBox(height: 12),
+    Text('${_photos.length} images. Tap a thumbnail to view its role, cover status or remove it.'),
+    const SizedBox(height: 12),
+    if (_photos.isEmpty) const Padding(padding: EdgeInsets.all(24), child: Icon(Icons.add_photo_alternate_outlined, size: 44)),
+    LayoutBuilder(builder: (context, constraints) => GridView.builder(
+      shrinkWrap: true, physics: const NeverScrollableScrollPhysics(), itemCount: _photos.length,
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: constraints.maxWidth > 600 ? 4 : 2, crossAxisSpacing: 10, mainAxisSpacing: 10, childAspectRatio: .95),
+      itemBuilder: (context, index) => Material(color: Theme.of(context).colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(14), clipBehavior: Clip.antiAlias,
+        child: InkWell(onTap: () => _photoOptions(index), child: Column(children: [
+          Expanded(child: SizedBox(width: double.infinity, child: Image.file(File(_photos[index]['path'] as String),
+            fit: BoxFit.cover, errorBuilder: (_, error, stack) => const Icon(Icons.broken_image_outlined)))),
+          Padding(padding: const EdgeInsets.all(8), child: Row(children: [
+            if (_photos[index]['cover'] == true) const Padding(padding: EdgeInsets.only(right: 4), child: Icon(Icons.star, size: 16)),
+            Expanded(child: Text(_photos[index]['role']?.toString() ?? 'Product view', maxLines: 1, overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.labelSmall)),
+          ])),
+        ]))))),
+  ]);
+
+  Widget _specActions(int index) => Wrap(spacing: 2, children: [
+    if (_sourcePath(_specs[index]) != null) IconButton(tooltip: 'Source image', onPressed: () => _showImage(_sourcePath(_specs[index])!), icon: const Icon(Icons.image_outlined)),
+    if (!widget.readOnly) IconButton(tooltip: 'Edit specification', onPressed: _busy ? null : () => _editSpecification(index), icon: const Icon(Icons.edit_outlined)),
+    if (!widget.readOnly) IconButton(tooltip: 'Remove specification', onPressed: _busy ? null : () { setState(() => _specs.removeAt(index)); _changed(); }, icon: const Icon(Icons.delete_outline)),
+  ]);
+
+  Widget _specPanel() => _section('Specifications', [
+    if (_aiPending) const Text('AI extraction pending. Sources and draft are saved on this phone.'),
+    if (!widget.readOnly) Wrap(spacing: 8, runSpacing: 8, children: [
+      FilledButton.icon(onPressed: _busy ? null : _extract, icon: const Icon(Icons.auto_awesome_outlined), label: const Text('Extract with AI')),
+      TextButton.icon(onPressed: _busy ? null : () => _editSpecification(), icon: const Icon(Icons.add), label: const Text('Add specification')),
+    ]),
+    const SizedBox(height: 12),
+    if (_specs.isEmpty) const Text('Add a specification sheet in Photos, or enter specifications manually.'),
+    LayoutBuilder(builder: (context, constraints) {
+      if (constraints.maxWidth < 700) {
+        return Column(children: [for (var i=0; i<_specs.length; i++)
+        Card(color: Theme.of(context).colorScheme.surfaceContainerLow, child: Padding(padding: const EdgeInsets.all(14),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            Text(_specs[i]['label']?.toString() ?? '', style: Theme.of(context).textTheme.labelLarge),
+            const SizedBox(height: 6),
+            Text([_specs[i]['value'], _specs[i]['unit']].where((value) => value != null && value.toString().isNotEmpty).join(' ')),
+            Align(alignment: Alignment.centerRight, child: _specActions(i)),
+          ])))]);
+      }
+      return SizedBox(width: double.infinity, child: DataTable(columnSpacing: 12,
+        columns: const [DataColumn(label: Text('Specification')), DataColumn(label: Text('Value')), DataColumn(label: Text('Unit')), DataColumn(label: Text('Actions'))],
+        rows: [for (var i=0; i<_specs.length; i++) DataRow(cells: [
+          DataCell(SizedBox(width: constraints.maxWidth * .18, child: Text(_specs[i]['label']?.toString() ?? ''))),
+          DataCell(SizedBox(width: constraints.maxWidth * .22, child: Text(_specs[i]['value']?.toString() ?? ''))),
+          DataCell(SizedBox(width: 60, child: Text(_specs[i]['unit']?.toString() ?? ''))), DataCell(_specActions(i)),
+        ])]));
+    }),
+    for (final row in _specs.where((row) => (row['review_note'] as String? ?? '').isNotEmpty))
+      Padding(padding: const EdgeInsets.only(top: 8), child: Text('${row['label']}: ${row['review_note']}', style: TextStyle(color: Theme.of(context).colorScheme.error))),
+  ]);
+
   @override
   Widget build(BuildContext context) => PopScope(canPop: _allowExit,
     onPopInvokedWithResult: (didPop, result) { if (!didPop) _leave(); },
-    child: Scaffold(
-      appBar: AppBar(title: Text(widget.readOnly ? 'Product details' : _productId == null ? 'Add product' : 'Update product'), leading: IconButton(onPressed: _busy ? null : _leave, icon: const Icon(Icons.arrow_back))),
-      body: _loading ? const Center(child: CircularProgressIndicator()) : Column(children: [
-        if (_busy) const LinearProgressIndicator(),
-        Expanded(child: Form(key: _form, child: ListView(padding: const EdgeInsets.all(20), children: [
-          Text(widget.company.name, style: Theme.of(context).textTheme.headlineSmall),
-          if (!widget.readOnly) Padding(padding: const EdgeInsets.symmetric(vertical: 10), child: Text(_draftStatus)),
-          if (_error != null) Padding(padding: const EdgeInsets.only(bottom: 12), child: Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error))),
-          _section('Product identity', [
+    child: Scaffold(appBar: AppBar(title: Text(widget.readOnly ? 'Product details' : _productId == null ? 'Add product' : 'Update product'),
+      leading: IconButton(onPressed: _busy ? null : _leave, icon: const Icon(Icons.arrow_back))),
+      body: _loading ? const Center(child: CircularProgressIndicator()) : Form(key: _form,
+        child: FocusedWorkspace(title: widget.company.name,
+          subtitle: widget.readOnly ? 'Saved product / read-only' : _draftStatus, busy: _busy,
+          index: _panel, onChanged: (index) => setState(() => _panel = index),
+          labels: const ['Basics', 'Photos', 'Specifications', 'Pricing', 'Voice notes'],
+          icons: const [Icons.inventory_2_outlined, Icons.photo_library_outlined, Icons.list_alt, Icons.payments_outlined, Icons.mic_none],
+          notice: _error == null ? null : Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+          sections: [
+            ListView(key: const PageStorageKey('product-basics'), padding: const EdgeInsets.all(16), children: [_section('Product identity', [
             _field('name', required: true),
-            DropdownButtonFormField<String>(key: ValueKey(_controller('category').text), initialValue: _categories.contains(_controller('category').text) ? _controller('category').text : null,
-              isExpanded: true, decoration: const InputDecoration(labelText: 'Category *', border: OutlineInputBorder()),
-              items: _categories.map((name) => DropdownMenuItem(value: name, child: Text(name))).toList(),
+            SearchableSelectionField<String>(key: ValueKey(_controller('category').text), value: _categories.contains(_controller('category').text) ? _controller('category').text : null,
+              decoration: const InputDecoration(labelText: 'Category *', border: OutlineInputBorder()),
+              options: _categories, labelFor: (name) => name,
               onChanged: _busy || widget.readOnly ? null : (name) { setState(() => _controller('category').text = name ?? ''); _changed(); },
               validator: (value) => value == null ? 'Select a category from Masters.' : null),
             if (!widget.readOnly) Align(alignment: Alignment.centerLeft, child: TextButton.icon(onPressed: _busy ? null : _createCategory, icon: const Icon(Icons.add), label: const Text('Create category'))),
             ExpansionTile(title: const Text('Additional categories (optional)'), children: [
-              Wrap(spacing: 6, runSpacing: 6, children: _categories.where((name) => name != _controller('category').text).map((name) => FilterChip(
+              RecordSearchField(hint: 'Find an additional category',
+                onChanged: (value) => setState(() => _additionalCategoryQuery = value)),
+              const SizedBox(height: 10),
+              if (!_categories.any((name) => name != _controller('category').text &&
+                  recordMatches(_additionalCategoryQuery, [name])))
+                const Text('No matching additional categories.'),
+              Wrap(spacing: 6, runSpacing: 6, children: _categories.where((name) =>
+                name != _controller('category').text && recordMatches(_additionalCategoryQuery, [name])).map((name) => FilterChip(
                 label: Text(name), selected: _additionalCategories.contains(name),
                 onSelected: _busy || widget.readOnly ? null : (selected) {
                   setState(() { if (selected) { _additionalCategories.add(name); } else { _additionalCategories.remove(name); } }); _changed();
@@ -401,51 +510,16 @@ class _ProductCaptureWorkspaceScreenState extends State<ProductCaptureWorkspaceS
               )).toList()),
             ]),
             const SizedBox(height: 14),
-            DropdownButtonFormField<int>(key: ValueKey('fair-$_fairId'), initialValue: _fairId, isExpanded: true,
+            SearchableSelectionField<int>(key: ValueKey('fair-$_fairId'), value: _fairId,
               decoration: const InputDecoration(labelText: 'Captured at fair *', border: OutlineInputBorder()),
-              items: _fairs.map((fair) => DropdownMenuItem(value: fair.id!, child: Text(fair.name))).toList(),
+              options: _fairs.map((fair) => fair.id!).toList(),
+              labelFor: (id) => _fairs.firstWhere((fair) => fair.id == id).name,
               onChanged: _busy || widget.readOnly ? null : (id) { setState(() => _fairId = id); _changed(); }, validator: (value) => value == null ? 'Select a fair.' : null),
             const SizedBox(height: 14), _field('model_code'), _field('specs'), _field('moq'),
-          ]),
-          _section('Photos and source documents', [
-            if (!widget.readOnly) Wrap(spacing: 8, runSpacing: 8, children: [
-              OutlinedButton.icon(onPressed: _busy ? null : () => _addPhotos(ImageSource.camera), icon: const Icon(Icons.camera_alt_outlined), label: const Text('Camera')),
-              OutlinedButton.icon(onPressed: _busy ? null : () => _addPhotos(ImageSource.gallery), icon: const Icon(Icons.photo_library_outlined), label: const Text('Multiple photos')),
-              OutlinedButton.icon(onPressed: _busy ? null : () => _addPhotos(ImageSource.camera, role: 'Specification sheet'), icon: const Icon(Icons.document_scanner_outlined), label: const Text('Capture spec sheet')),
-            ]),
-            const SizedBox(height: 12),
-            for (var i=0; i<_photos.length; i++) Card(child: Padding(padding: const EdgeInsets.all(12), child: Column(children: [
-              InkWell(onTap: () => _showImage(_photos[i]['path'] as String), child: Image.file(File(_photos[i]['path'] as String), height: 150, fit: BoxFit.contain, errorBuilder: (_,error,stack) => const Text('Photo unavailable. Sync to download.'))),
-              DropdownButtonFormField<String>(initialValue: photoRoles.contains(_photos[i]['role']) ? _photos[i]['role'] as String : 'Product view',
-                items: photoRoles.map((role) => DropdownMenuItem(value: role, child: Text(role))).toList(),
-                onChanged: _busy || widget.readOnly ? null : (role) { setState(() => _photos[i]['role'] = role); _changed(); }),
-              if (!widget.readOnly) Row(children: [TextButton.icon(onPressed: _busy ? null : () { setState(() { for (final photo in _photos) { photo['cover'] = false; } _photos[i]['cover'] = true; }); _changed(); }, icon: Icon(_photos[i]['cover'] == true ? Icons.star : Icons.star_border), label: Text(_photos[i]['cover'] == true ? 'Cover image' : 'Set as cover')),
-                const Spacer(), IconButton(tooltip: 'Remove image', onPressed: _busy ? null : () => _removePhoto(i), icon: const Icon(Icons.delete_outline))]),
-            ]))),
-          ]),
-          _section('Specification table', [
-            if (_aiPending) const Text('AI extraction pending. Your sources and draft are saved; retry when connected.'),
-            if (!widget.readOnly) Wrap(spacing: 8, children: [
-              FilledButton.icon(onPressed: _busy ? null : _extract, icon: const Icon(Icons.auto_awesome_outlined), label: const Text('Extract details with AI')),
-              TextButton.icon(onPressed: _busy ? null : () => _editSpecification(), icon: const Icon(Icons.add), label: const Text('Add row manually')),
-            ]),
-            const SizedBox(height: 12),
-            if (_specs.isEmpty) const Text('Capture a specification sheet or add specification rows manually.'),
-            if (_specs.isNotEmpty) SingleChildScrollView(scrollDirection: Axis.horizontal, child: DataTable(columns: [
-              const DataColumn(label: Text('Specification')), const DataColumn(label: Text('Value')), const DataColumn(label: Text('Unit')), const DataColumn(label: Text('Source / actions')),
-            ], rows: [for (var i=0; i<_specs.length; i++) DataRow(cells: [
-              DataCell(SizedBox(width: 130, child: Text(_specs[i]['label']?.toString() ?? ''))),
-              DataCell(SizedBox(width: 150, child: Text(_specs[i]['value']?.toString() ?? ''))),
-              DataCell(Text(_specs[i]['unit']?.toString() ?? '')),
-              DataCell(Row(children: [
-                if (_sourcePath(_specs[i]) != null) IconButton(tooltip: 'View source image', onPressed: () => _showImage(_sourcePath(_specs[i])!), icon: const Icon(Icons.image_outlined)),
-                if (!widget.readOnly) IconButton(tooltip: 'Edit row', onPressed: _busy ? null : () => _editSpecification(i), icon: const Icon(Icons.edit_outlined)),
-                if (!widget.readOnly) IconButton(tooltip: 'Remove row', onPressed: _busy ? null : () { setState(() => _specs.removeAt(i)); _changed(); }, icon: const Icon(Icons.delete_outline)),
-              ])),
-            ])])),
-            for (final row in _specs.where((row) => (row['review_note'] as String? ?? '').isNotEmpty)) Text('${row['label']}: ${row['review_note']}', style: TextStyle(color: Theme.of(context).colorScheme.error)),
-          ]),
-          Card(child: ExpansionTile(title: const Text('Price and supply details'), childrenPadding: const EdgeInsets.all(18), children: [
+          ])]),
+            ListView(key: const PageStorageKey('product-photos'), padding: const EdgeInsets.all(16), children: [_photoPanel()]),
+            ListView(key: const PageStorageKey('product-specs'), padding: const EdgeInsets.all(16), children: [_specPanel()]),
+            ListView(key: const PageStorageKey('product-pricing'), padding: const EdgeInsets.all(16), children: [Card(child: ExpansionTile(title: const Text('Price and supply details'), childrenPadding: const EdgeInsets.all(18), children: [
             for (final key in labels.keys.where((key) => !['name','model_code','specs','moq'].contains(key))) _field(key, required: key == 'price_currency'),
           ])),
           if (_quoteHistory.isNotEmpty) Card(child: ExpansionTile(title: const Text('Quotation history'), children: [
@@ -461,15 +535,17 @@ class _ProductCaptureWorkspaceScreenState extends State<ProductCaptureWorkspaceS
             decoration: const InputDecoration(labelText: 'Product shortlist reason (optional)', border: OutlineInputBorder()))),
           if (_shortlisted && !widget.readOnly) CheckboxListTile(title: const Text('Also shortlist this supplier'),
             subtitle: const Text('Optional. Removing this product later will not remove the supplier shortlist.'),
-            value: _alsoShortlistSupplier, onChanged: _busy ? null : (value) { setState(() => _alsoShortlistSupplier = value == true); _changed(); }),
-          if (_productId != null) ProductAudioNotes(scope: widget.scope, productId: _productId!, productName: _controller('name').text, canEdit: !widget.readOnly && !_busy),
-        ]))),
-        if (!widget.readOnly) SafeArea(top: false, child: Padding(padding: const EdgeInsets.all(16), child: Wrap(spacing: 8, runSpacing: 8, children: [
-          OutlinedButton(onPressed: _busy ? null : () => _save(true), child: const Text('Save & add another')),
-          OutlinedButton.icon(onPressed: _busy ? null : () => _save(false, voice: true), icon: const Icon(Icons.mic_none), label: const Text('Save + voice note')),
-          FilledButton(onPressed: _busy ? null : () => _save(false), child: const Text('Save product')),
-        ]))),
-      ]),
-    ),
-  );
+            value: _alsoShortlistSupplier, onChanged: _busy ? null : (value) { setState(() => _alsoShortlistSupplier = value == true); _changed(); }),]),
+            ListView(key: const PageStorageKey('product-audio'), padding: const EdgeInsets.all(16), children: [
+              if (_productId != null) ProductAudioNotes(scope: widget.scope, productId: _productId!, productName: _controller('name').text, canEdit: !widget.readOnly && !_busy)
+              else _section('Product voice notes', [const Text('Save this product first so every recording stays linked to this product and supplier.'),
+                const SizedBox(height: 16), if (!widget.readOnly) FilledButton.icon(onPressed: _busy ? null : () => _save(false, voice: true), icon: const Icon(Icons.mic_none), label: const Text('Save and record voice note'))]),
+            ]),
+          ],
+          footer: widget.readOnly ? null : Column(mainAxisSize: MainAxisSize.min, children: [
+            SizedBox(width: double.infinity, child: FilledButton.icon(onPressed: _busy ? null : () => _save(false), icon: const Icon(Icons.check), label: const Text('Save product'))),
+            Row(children: [Expanded(child: TextButton(onPressed: _busy ? null : () => _save(true), child: const Text('Save & add another'))),
+              Expanded(child: TextButton.icon(onPressed: _busy ? null : () => _save(false, voice: true), icon: const Icon(Icons.mic_none), label: const Text('Save + voice note')))]),
+          ]),
+        ))));
 }

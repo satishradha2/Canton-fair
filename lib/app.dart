@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import 'data/cloud_sync_service.dart';
+import 'screens/sync_status_screen.dart';
 import 'data/appearance_service.dart';
 import 'widgets/enterprise_dashboard.dart';
 import 'widgets/app_update_gate.dart';
+import 'widgets/record_search.dart';
 import 'data/team_workspace_service.dart';
 import 'data/fair_capture_service.dart';
 import 'models/models.dart';
@@ -31,7 +32,7 @@ class _FairExpertHome extends StatefulWidget {
 class _FairExpertHomeState extends State<_FairExpertHome> {
   final _workspaceService = TeamWorkspaceService();
   TeamWorkspace? _workspace;
-  bool _syncing = false;
+
   List<Trip> _fairs = [];
   Trip? _selectedFair;
   String? _fairError;
@@ -78,20 +79,12 @@ class _FairExpertHomeState extends State<_FairExpertHome> {
   }
 
   Future<void> _syncNow() async {
-    if (_workspace == null) return _openWorkspaceSetup();
-    setState(() => _syncing = true);
-    try {
-      await CloudSyncService().syncTeamWorkspace();
-      await _loadFairs();
-      if (mounted) _message('Sync completed successfully.');
-    } catch (error) {
-      if (mounted) _message('Sync could not complete: $error');
-    } finally {
-      if (mounted) setState(() => _syncing = false);
-    }
+    await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SyncStatusScreen()));
+    if (!mounted) return;
+    await _loadWorkspace();
+    await _loadFairs();
   }
 
-  void _message(String text) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
 
   @override
   Widget build(BuildContext context) {
@@ -101,6 +94,7 @@ class _FairExpertHomeState extends State<_FairExpertHome> {
       appBar: AppBar(
         title: const Text('Fair Expert'),
         actions: [
+          IconButton(tooltip: 'Team workspace', onPressed: _openWorkspaceSetup, icon: const Icon(Icons.groups_outlined)),
           IconButton(tooltip: 'Check for updates',
             onPressed: () => AppUpdateGate.check(context),
             icon: const Icon(Icons.system_update_outlined)),
@@ -152,15 +146,14 @@ class _FairExpertHomeState extends State<_FairExpertHome> {
                     if (_fairError != null)
                       Padding(padding: const EdgeInsets.only(bottom: 8),
                         child: Text(_fairError!, style: TextStyle(color: colors.error))),
-                    DropdownButtonFormField<int>(
+                    SearchableSelectionField<int>(
                       key: ValueKey(_selectedFair?.id),
-                      initialValue: _selectedFair?.id,
-                      isExpanded: true,
+                      value: _selectedFair?.id,
                       decoration: const InputDecoration(
                         labelText: 'Select fair to start scanning',
                         prefixIcon: Icon(Icons.event_outlined)),
-                      items: _fairs.map((fair) => DropdownMenuItem(
-                        value: fair.id!, child: Text(fair.name))).toList(),
+                      options: _fairs.map((fair) => fair.id!).toList(),
+                      labelFor: (id) => _fairs.firstWhere((fair) => fair.id == id).name,
                       onChanged: (id) {
                         if (id != null) {
                           setState(() => _selectedFair =
@@ -207,9 +200,7 @@ class _FairExpertHomeState extends State<_FairExpertHome> {
                       subtitle: 'Fairs, halls, categories', onTap: _openMasters)),
                     SizedBox(width: tileWidth, child: EnterpriseActionTile(
                       icon: Icons.sync_rounded, title: 'Sync',
-                      subtitle: _syncing ? 'Syncing your team...' :
-                        _workspace == null ? 'Connect workspace' : 'Send & receive updates',
-                      busy: _syncing, onTap: _syncNow)),
+                      subtitle: 'Status, pending & retry', onTap: _syncNow)),
                   ]),
                   const SizedBox(height: 14),
                   Row(children: [

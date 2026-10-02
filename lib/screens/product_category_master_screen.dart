@@ -3,21 +3,25 @@ import 'package:flutter/material.dart';
 import '../data/approval_policy.dart';
 import '../data/field_work_repository.dart';
 import '../data/team_workspace_service.dart';
+import '../widgets/database_paged_list.dart';
+import '../data/record_page_service.dart';
 
 class ProductCategoryMasterScreen extends StatefulWidget {
-  const ProductCategoryMasterScreen({super.key});
+  const ProductCategoryMasterScreen({super.key, this.embedded = false});
+  final bool embedded;
 
   @override
   State<ProductCategoryMasterScreen> createState() =>
-      _ProductCategoryMasterScreenState();
+      ProductCategoryMasterScreenState();
 }
 
-class _ProductCategoryMasterScreenState extends State<ProductCategoryMasterScreen> {
+class ProductCategoryMasterScreenState extends State<ProductCategoryMasterScreen> {
   final _repository = FieldWorkRepository();
   final _workspace = TeamWorkspaceService();
   late Future<_CategoryData> _categories;
   bool _busy = false;
   String? _error;
+  int _revision = 0;
 
   @override
   void initState() {
@@ -27,9 +31,10 @@ class _ProductCategoryMasterScreenState extends State<ProductCategoryMasterScree
 
   Future<_CategoryData> _load() async {
     final scope = await _workspace.scopeKey();
-    return _CategoryData(scope, await _repository.categories(scope));
+    return _CategoryData(scope, const []);
   }
 
+  Future<void> createCategory() => _createCategory();
   Future<void> _createCategory() async {
     try {
       await ApprovalPolicy.requireWriter();
@@ -74,7 +79,7 @@ class _ProductCategoryMasterScreenState extends State<ProductCategoryMasterScree
     try {
       final data = await _categories;
       await _repository.createCategory(data.scope, name);
-      if (mounted) setState(() => _categories = _load());
+      if (mounted) setState(() { _categories = _load(); _revision++; });
     } catch (error) {
       if (mounted) setState(() => _error = 'Could not create category: $error');
     } finally {
@@ -84,7 +89,7 @@ class _ProductCategoryMasterScreenState extends State<ProductCategoryMasterScree
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(
+        appBar: widget.embedded ? null : AppBar(
           title: const Text('Product categories'),
           actions: [
             TextButton.icon(
@@ -107,64 +112,21 @@ class _ProductCategoryMasterScreenState extends State<ProductCategoryMasterScree
                 child: Text('Could not load categories: ${snapshot.error}'),
               ));
             }
-            final categories = snapshot.data!.items;
-            return ListView(
-              padding: const EdgeInsets.all(20),
-              children: [
-                Text('Shared product master',
-                    style: Theme.of(context).textTheme.headlineSmall),
-                const SizedBox(height: 6),
-                const Text(
-                  'Categories created here are available in the product-category dropdown on mobile and web.',
-                ),
-                if (_error != null) ...[
-                  const SizedBox(height: 16),
-                  MaterialBanner(
-                    content: Text(_error!),
-                    actions: [
-                      TextButton(
-                        onPressed: () => setState(() => _error = null),
-                        child: const Text('Dismiss'),
-                      ),
-                    ],
-                  ),
-                ],
-                const SizedBox(height: 20),
-                if (categories.isEmpty)
-                  Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Column(children: [
-                        const Icon(Icons.category_outlined, size: 42),
-                        const SizedBox(height: 12),
-                        Text('No product categories yet',
-                            style: Theme.of(context).textTheme.titleMedium),
-                        const SizedBox(height: 6),
-                        const Text('Create the first category before capturing products.'),
-                        const SizedBox(height: 16),
-                        FilledButton.icon(
-                          onPressed: _busy ? null : _createCategory,
-                          icon: const Icon(Icons.add),
-                          label: const Text('Create category'),
-                        ),
-                      ]),
-                    ),
-                  )
-                else
-                  Card(
-                    child: Column(
-                      children: categories
-                          .map((item) => ListTile(
-                                leading: const Icon(Icons.category_outlined),
-                                title: Text(item['name']?.toString() ?? ''),
-                                subtitle: const Text('Available for product capture'),
-                              ))
-                          .toList(),
-                    ),
-                  ),
-              ],
-            );
-          },
+            return Padding(padding: const EdgeInsets.all(20), child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              Text('Shared product master', style: Theme.of(context).textTheme.headlineSmall),
+              const SizedBox(height: 6),
+              const Text('Create categories here; find and select them during product capture.'),
+              if (_error != null) Padding(padding: const EdgeInsets.all(12), child: Text(_error!)),
+              const SizedBox(height: 16),
+              Expanded(child: DatabasePagedList(refreshToken: _revision,
+                loader: RecordPageService.categories, searchHint: 'Search categories',
+                emptyMessage: 'No product categories yet. Use Create category above.',
+                itemBuilder: (_, item) => Card(child: ListTile(
+                  leading: const Icon(Icons.category_outlined),
+                  title: Text(item['name']?.toString() ?? ''),
+                  subtitle: const Text('Available for product capture'))))),
+            ]));          },
         ),
       );
 }

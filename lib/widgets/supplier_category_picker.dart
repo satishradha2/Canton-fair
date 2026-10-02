@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../data/field_work_repository.dart';
+import 'record_search.dart';
 
 /// A shared, master-data-backed multi-category selector for supplier capture.
 class SupplierCategoryPicker extends StatefulWidget {
@@ -37,12 +38,15 @@ class _SupplierCategoryPickerState extends State<SupplierCategoryPicker> {
     final categories = await _categories;
     if (!mounted) return;
     final selected = Set<String>.from(widget.selected);
+    var query = '';
     final result = await showModalBottomSheet<Set<String>>(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
       builder: (context) => StatefulBuilder(
         builder: (context, setSheetState) => SafeArea(
+          child: SizedBox(
+            height: (MediaQuery.of(context).size.height - MediaQuery.of(context).viewInsets.bottom) * 0.78,
           child: Padding(
             padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
             child: Column(
@@ -55,6 +59,12 @@ class _SupplierCategoryPickerState extends State<SupplierCategoryPicker> {
                 const SizedBox(height: 6),
                 const Text('Choose every category that applies to this supplier.'),
                 const SizedBox(height: 12),
+                RecordSearchField(hint: 'Find a category',
+                  onChanged: (value) => setSheetState(() => query = value)),
+                Padding(padding: const EdgeInsets.symmetric(vertical: 10),
+                  child: Text('${categories.where((row) => recordMatches(query, [row['name']])).length} matches | ${selected.length} selected')),
+                if (categories.isNotEmpty && !categories.any((row) => recordMatches(query, [row['name']])))
+                  const Padding(padding: EdgeInsets.all(12), child: Text('No matches. Clear or change your search.')),
                 Flexible(
                   child: categories.isEmpty
                       ? const Center(
@@ -65,7 +75,7 @@ class _SupplierCategoryPickerState extends State<SupplierCategoryPicker> {
                         ))
                       : ListView(
                           shrinkWrap: true,
-                          children: categories.map((row) {
+                          children: categories.where((row) => recordMatches(query, [row['name']])).map((row) {
                             final name = row['name'] as String;
                             return CheckboxListTile(
                               value: selected.contains(name),
@@ -94,7 +104,7 @@ class _SupplierCategoryPickerState extends State<SupplierCategoryPicker> {
                 ),
               ],
             ),
-          ),
+          )),
         ),
       ),
     );
