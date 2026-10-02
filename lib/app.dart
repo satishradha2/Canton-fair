@@ -102,7 +102,7 @@ class _FairExpertHomeState extends State<_FairExpertHome> {
         actions: [
           IconButton(
             tooltip: 'Switch light / dark theme',
-            onPressed: () => AppearanceService.save(
+            onPressed: () => AppearanceService().save(
               theme.brightness == Brightness.dark ? ThemeMode.light : ThemeMode.dark),
             icon: Icon(theme.brightness == Brightness.dark
                 ? Icons.light_mode_outlined : Icons.dark_mode_outlined)),
@@ -158,8 +158,10 @@ class _FairExpertHomeState extends State<_FairExpertHome> {
                       items: _fairs.map((fair) => DropdownMenuItem(
                         value: fair.id!, child: Text(fair.name))).toList(),
                       onChanged: (id) {
-                        if (id != null) setState(() => _selectedFair =
-                          _fairs.firstWhere((fair) => fair.id == id));
+                        if (id != null) {
+                          setState(() => _selectedFair =
+                            _fairs.firstWhere((fair) => fair.id == id));
+                        }
                       },
                     ),
                     if (_fairs.isEmpty)

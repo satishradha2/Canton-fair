@@ -91,7 +91,7 @@ ThemeData buildAppTheme() {
     useMaterial3: true,
     pageTransitionsTheme: const PageTransitionsTheme(builders: {
       TargetPlatform.android: EnterprisePageTransitions(),
-      TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+      TargetPlatform.iOS: EnterprisePageTransitions(),
       TargetPlatform.macOS: EnterprisePageTransitions(),
       TargetPlatform.windows: EnterprisePageTransitions(),
       TargetPlatform.linux: EnterprisePageTransitions(),
