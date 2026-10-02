@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../app.dart';
 import '../data/team_workspace_service.dart';
 import '../data/language_service.dart';
+import '../data/app_lock_service.dart';
 
 class AuthGate extends StatefulWidget {
   const AuthGate({super.key});
@@ -12,6 +13,19 @@ class AuthGate extends StatefulWidget {
 
 class _AuthGateState extends State<AuthGate> {
   bool _recovering = false;
+  bool _authorized = false;
+
+  Future<bool> _unlockBiometric() async {
+    final auth = Supabase.instance.client.auth;
+    final user = auth.currentUser?.id;
+    if (user == null || auth.currentSession == null) return false;
+    final service = AppLockService();
+    if (!await service.biometricLoginEnabled) return false;
+    final unlocked = await service.authenticateWithBiometrics();
+    if (!mounted || !unlocked || auth.currentUser?.id != user || auth.currentSession == null) return false;
+    setState(() => _authorized = true);
+    return true;
+  }
 
   @override
   Widget build(BuildContext context) => StreamBuilder<AuthState>(
@@ -26,12 +40,16 @@ class _AuthGateState extends State<AuthGate> {
           }
           if (snapshot.data?.event == AuthChangeEvent.signedOut) {
             _recovering = false;
+            _authorized = false;
+          }
+          if (snapshot.data?.event == AuthChangeEvent.signedIn) {
+            _authorized = true;
           }
           if (_recovering) {
             return const UpdatePasswordScreen();
           }
-          return Supabase.instance.client.auth.currentSession == null
-              ? const SignInScreen()
+          return Supabase.instance.client.auth.currentSession == null || !_authorized
+              ? SignInScreen(onBiometricUnlock: _unlockBiometric)
               : ValueListenableBuilder<int>(
                   valueListenable: TeamWorkspaceService.changes,
                   builder: (context, revision, _) => CantonFairApp(
@@ -44,7 +62,8 @@ class _AuthGateState extends State<AuthGate> {
 }
 
 class SignInScreen extends StatefulWidget {
-  const SignInScreen({super.key});
+  const SignInScreen({super.key, this.onBiometricUnlock});
+  final Future<bool> Function()? onBiometricUnlock;
 
   @override
   State<SignInScreen> createState() => _SignInScreenState();
@@ -56,6 +75,35 @@ class _SignInScreenState extends State<SignInScreen> {
   bool _creating = false;
   bool _busy = false;
   String? _error;
+  bool _biometricAvailable = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _email.text = Supabase.instance.client.auth.currentUser?.email ?? '';
+    _loadBiometric();
+  }
+
+  Future<void> _loadBiometric() async {
+    final service = AppLockService();
+    try {
+      final available = Supabase.instance.client.auth.currentSession != null &&
+          await service.biometricLoginEnabled && await service.canUseBiometrics;
+      if (mounted) setState(() => _biometricAvailable = available);
+    } catch (_) {
+      if (mounted) setState(() => _biometricAvailable = false);
+    }
+  }
+
+  Future<void> _biometricSignIn() async {
+    setState(() { _busy = true; _error = null; });
+    try {
+      final unlocked = await widget.onBiometricUnlock?.call() ?? false;
+      if (!unlocked && mounted) setState(() => _error = 'Biometric unlock was not completed. Try again or sign in with your password.');
+    } catch (_) {
+      if (mounted) setState(() => _error = 'Biometric unlock is unavailable. Sign in with your password.');
+    } finally { if (mounted) setState(() => _busy = false); }
+  }
 
   Future<void> _googleSignIn() async {
     setState(() {
@@ -195,6 +243,13 @@ class _SignInScreenState extends State<SignInScreen> {
                 style: TextStyle(
                     color: Theme.of(context).colorScheme.onSurfaceVariant)),
             const SizedBox(height: 28),
+            if (!_creating && _biometricAvailable) ...[
+              OutlinedButton.icon(onPressed: _busy ? null : _biometricSignIn,
+                icon: const Icon(Icons.fingerprint), label: const Text('Sign in with fingerprint / face')),
+              const SizedBox(height: 12),
+              const Text('Or sign in with your email and password.'),
+              const SizedBox(height: 16),
+            ],
             TextField(
               controller: _email,
               keyboardType: TextInputType.emailAddress,

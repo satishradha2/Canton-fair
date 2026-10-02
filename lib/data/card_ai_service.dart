@@ -22,6 +22,57 @@ class CardAiService {
   ];
   static const _images = MethodChannel('canton_fair_crm/card_image');
 
+  static Future<Map<String, dynamic>> readPhoto({required String scope,
+      required String path, required String text, String? backPath, String backText = ''}) async {
+    var expired = false;
+    var submitted = false;
+    void checkDeadline() {
+      if (expired) throw StateError('Card reading deadline exceeded.');
+    }
+    Future<Map<String, dynamic>> perform() async {
+      final workspace = TeamWorkspaceService();
+      if (scope != await workspace.scopeKey()) throw StateError('Workspace changed. Reopen the scanner.');
+      checkDeadline();
+      final team = await workspace.load();
+      checkDeadline();
+      final pages = <Map<String, Object?>>[];
+      for (final page in [
+        {'side': 'front', 'path': path, 'text': text},
+        if (backPath != null) {'side': 'back', 'path': backPath, 'text': backText},
+      ]) {
+        checkDeadline();
+        final image = await _images.invokeMethod<String>('upload', {'path': page['path']});
+        checkDeadline();
+        if (image == null || image.isEmpty) throw StateError('Could not prepare the ${page['side']} image.');
+        final sourceText = page['text']!;
+        pages.add({'side': page['side'], 'text': sourceText.length > 20000 ? sourceText.substring(0, 20000) : sourceText, 'image': image});
+      }
+      if (scope != await workspace.scopeKey()) throw StateError('Workspace changed. Nothing was uploaded.');
+      checkDeadline();
+      try {
+        submitted = true;
+        final response = await Supabase.instance.client.functions.invoke('card-ai', body: {
+          'request_id': _requestId(), 'team_id': team?.id,
+          'operation': 'extract', 'target_language': 'English', 'consent': true,
+          'pages': pages,
+        }).timeout(const Duration(seconds: 90));
+        checkDeadline();
+        if (scope != await workspace.scopeKey()) throw StateError('Workspace changed. Reopen the scanner.');
+        final result = Map<String, dynamic>.from(response.data as Map);
+        if (response.status != 200 || result['error'] != null || result['fields'] is! Map) {
+          throw StateError(result['error']?.toString() ?? 'AI reading did not complete.');
+        }
+        return result;
+      } on FunctionException catch (error) {
+        throw StateError(error.details is Map ? (error.details as Map)['error']?.toString() ?? 'AI reading unavailable.' : 'AI reading unavailable. Use offline OCR or manual entry.');
+      }
+    }
+    return perform().timeout(const Duration(seconds: 110), onTimeout: () {
+      expired = true;
+      throw StateError(submitted ? 'AI reading timed out. It may have incurred usage; no automatic retry was made.' : 'Image preparation timed out. Nothing was uploaded.');
+    });
+  }
+
   static String _requestId() {
     final random = Random.secure();
     final bytes = List<int>.generate(16, (_) => random.nextInt(256));

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'enterprise_motion.dart';
 import 'package:flutter/services.dart';
 
 /// Shared visual tokens for the field workspace and procurement screens.
@@ -88,6 +89,14 @@ ThemeData buildAppTheme() {
   );
   return ThemeData(
     useMaterial3: true,
+    pageTransitionsTheme: const PageTransitionsTheme(builders: {
+      TargetPlatform.android: EnterprisePageTransitions(),
+      TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+      TargetPlatform.macOS: EnterprisePageTransitions(),
+      TargetPlatform.windows: EnterprisePageTransitions(),
+      TargetPlatform.linux: EnterprisePageTransitions(),
+      TargetPlatform.fuchsia: EnterprisePageTransitions(),
+    }),
     colorScheme: scheme,
     fontFamily: 'PublicSans',
     textTheme: typography.apply(

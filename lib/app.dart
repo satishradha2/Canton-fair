@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'data/cloud_sync_service.dart';
+import 'data/appearance_service.dart';
+import 'widgets/enterprise_dashboard.dart';
 import 'data/team_workspace_service.dart';
 import 'data/fair_capture_service.dart';
 import 'models/models.dart';
@@ -11,23 +13,14 @@ import 'screens/supplier_contacts_screen.dart';
 import 'screens/team_setup_screen.dart';
 import 'screens/shortlists_screen.dart';
 import 'screens/company_visits_screen.dart';
+import 'screens/security_settings_screen.dart';
 
 class CantonFairApp extends StatelessWidget {
   const CantonFairApp({super.key});
 
   @override
-  Widget build(BuildContext context) => MaterialApp(
-        title: 'Fair Expert',
-        debugShowCheckedModeBanner: false,
-        theme: ThemeData(
-          useMaterial3: true,
-          colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF0B6E69)),
-          scaffoldBackgroundColor: const Color(0xFFF4F7F6),
-        ),
-        home: const _FairExpertHome(),
-      );
+  Widget build(BuildContext context) => const _FairExpertHome();
 }
-
 class _FairExpertHome extends StatefulWidget {
   const _FairExpertHome();
   @override
@@ -100,126 +93,133 @@ class _FairExpertHomeState extends State<_FairExpertHome> {
   void _message(String text) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(
-          title: const Text('Fair Expert'),
-          actions: [IconButton(tooltip: 'Sign out', onPressed: () => Supabase.instance.client.auth.signOut(), icon: const Icon(Icons.logout_rounded))],
-        ),
-        body: SafeArea(
-          child: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 560),
-              child: ListView(
-                padding: const EdgeInsets.all(24),
-                children: [
-                  Card(child: Padding(padding: const EdgeInsets.all(20), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text('Choose your fair', style: Theme.of(context).textTheme.titleLarge),
-                    const SizedBox(height: 12),
-                    if (_fairError != null) Text(_fairError!),
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Fair Expert'),
+        actions: [
+          IconButton(
+            tooltip: 'Switch light / dark theme',
+            onPressed: () => AppearanceService.save(
+              theme.brightness == Brightness.dark ? ThemeMode.light : ThemeMode.dark),
+            icon: Icon(theme.brightness == Brightness.dark
+                ? Icons.light_mode_outlined : Icons.dark_mode_outlined)),
+          IconButton(tooltip: 'Security & biometric sign-in',
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => const SecuritySettingsScreen())),
+            icon: const Icon(Icons.fingerprint)),
+          IconButton(tooltip: 'Sign out',
+            onPressed: () => Supabase.instance.client.auth.signOut(),
+            icon: const Icon(Icons.logout_rounded)),
+        ],
+      ),
+      body: DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft, end: Alignment.bottomRight,
+            colors: [colors.secondaryContainer.withValues(alpha: 0.55),
+              theme.scaffoldBackgroundColor, colors.primaryContainer.withValues(alpha: 0.45)])),
+        child: SafeArea(
+          child: LayoutBuilder(builder: (context, constraints) {
+            final width = constraints.maxWidth > 960 ? 960.0 : constraints.maxWidth;
+            final columns = width >= 650 ? 3 : 2;
+            final gap = width < 360 ? 10.0 : 12.0;
+            final padding = width < 360 ? 12.0 : 20.0;
+            final tileWidth = (width - padding * 2 - gap * (columns - 1)) / columns;
+            return Align(
+              alignment: Alignment.topCenter,
+              child: SizedBox(width: width, child: SingleChildScrollView(
+                padding: EdgeInsets.all(padding),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  EnterpriseGlassPanel(child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Row(children: [
+                      Icon(Icons.location_on_outlined, color: colors.secondary, size: 20),
+                      const SizedBox(width: 8),
+                      Expanded(child: Text('YOUR FAIR WORKSPACE',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          letterSpacing: 1.5, fontWeight: FontWeight.w800))),
+                      IconButton(tooltip: 'Create fair, hall or category',
+                        onPressed: _openMasters,
+                        icon: const Icon(Icons.add_circle_outline)),
+                    ]),
+                    if (_fairError != null)
+                      Padding(padding: const EdgeInsets.only(bottom: 8),
+                        child: Text(_fairError!, style: TextStyle(color: colors.error))),
                     DropdownButtonFormField<int>(
                       key: ValueKey(_selectedFair?.id),
                       initialValue: _selectedFair?.id,
                       isExpanded: true,
-                      decoration: const InputDecoration(labelText: 'Fair', border: OutlineInputBorder()),
-                      items: _fairs.map((fair) => DropdownMenuItem(value: fair.id!, child: Text(fair.name))).toList(),
-                      onChanged: (id) { if (id != null) setState(() => _selectedFair = _fairs.firstWhere((fair) => fair.id == id)); },
+                      decoration: const InputDecoration(
+                        labelText: 'Select fair to start scanning',
+                        prefixIcon: Icon(Icons.event_outlined)),
+                      items: _fairs.map((fair) => DropdownMenuItem(
+                        value: fair.id!, child: Text(fair.name))).toList(),
+                      onChanged: (id) {
+                        if (id != null) setState(() => _selectedFair =
+                          _fairs.firstWhere((fair) => fair.id == id));
+                      },
                     ),
-                    if (_fairs.isEmpty) const Padding(padding: EdgeInsets.only(top: 12), child: Text('Create a fair in Masters or sync your team fairs to get started.')),
-                    TextButton(onPressed: _openMasters, child: const Text('Open Masters')),
-                  ]))),
-                  const SizedBox(height: 20),
-                  Text('Capture contacts.\nKeep your team in sync.', style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w800, color: const Color(0xFF102B3A))),
-                  const SizedBox(height: 10),
-                  const Text('Capture contacts and products, shortlist promising suppliers, and keep your team in sync.', style: TextStyle(color: Color(0xFF536B76), height: 1.45)),
-                  const SizedBox(height: 28),
-                  _ActionCard(
-                    icon: Icons.document_scanner_outlined,
-                    title: 'Scan business card',
-                    description: _selectedFair == null ? 'Choose your fair above before scanning a business card.' : 'Scan and save contacts for ${_selectedFair!.name}.',
-                    actionLabel: 'Start scan',
-                    onTap: _selectedFair == null ? null : () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => MinimalOcrContactScreen(fair: _selectedFair!))),
-                  ),
-                  const SizedBox(height: 16),
-                  _ActionCard(
-                    icon: Icons.business_outlined,
-                    title: 'Companies and contacts',
-                    description: 'Open one supplier record to see every person saved from its business cards.',
-                    actionLabel: 'View companies',
-                    onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => SupplierContactsScreen(fairId: _selectedFair?.id))),
-                  ),
-                  const SizedBox(height: 16),
-                  _ActionCard(
-                    icon: Icons.event_available_outlined,
-                    title: 'Upcoming visits',
-                    description: 'Plan factory and office appointments, continue visit workpads, and review completed visits.',
-                    actionLabel: 'Visits & appointments',
-                    onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const CompanyVisitsScreen())),
-                  ),
-                  const SizedBox(height: 16),
-                  _ActionCard(
-                    icon: Icons.bookmarks_outlined,
-                    title: 'Shortlists',
-                    description: 'Review supplier and product interests separately. Shortlisting is not purchasing approval.',
-                    actionLabel: 'Open shortlists',
-                    onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ShortlistsScreen())),
-                  ),
-                  const SizedBox(height: 16),
-                  _ActionCard(
-                    icon: Icons.dataset_outlined,
-                    title: 'Masters',
-                    description: 'Create the shared fair, hall, and product-category lists used by your team.',
-                    actionLabel: 'Manage masters',
-                    onTap: _openMasters,
-                  ),
-                  const SizedBox(height: 16),
-                  _ActionCard(
-                    icon: Icons.sync_rounded,
-                    title: 'Sync',
-                    description: _workspace == null ? 'Connect a team workspace to synchronize saved contacts.' : 'Connected to ${_workspace!.name}. Upload and receive your latest contacts.',
-                    actionLabel: _workspace == null ? 'Connect workspace' : 'Sync now',
-                    busy: _syncing,
-                    onTap: _syncNow,
-                  ),
-                  const SizedBox(height: 24),
-                  const DecoratedBox(
-                    decoration: BoxDecoration(color: Color(0xFFE2F0EE), borderRadius: BorderRadius.all(Radius.circular(16))),
-                    child: Padding(
-                      padding: EdgeInsets.all(16),
-                      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [Icon(Icons.verified_user_outlined), SizedBox(width: 12), Expanded(child: Text('Every card is reviewed before it is saved. Sync only after the contact is ready for your team.'))]),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
+                    if (_fairs.isEmpty)
+                      Padding(padding: const EdgeInsets.only(top: 8),
+                        child: Text('Use + to create a fair, or Sync to receive team fairs.',
+                          style: theme.textTheme.bodySmall)),
+                  ])),
+                  const SizedBox(height: 18),
+                  Text('Your field desk', style: theme.textTheme.titleLarge),
+                  const SizedBox(height: 4),
+                  Text('Capture. Connect. Follow through.',
+                    style: theme.textTheme.bodySmall?.copyWith(color: colors.onSurfaceVariant)),
+                  const SizedBox(height: 14),
+                  Wrap(spacing: gap, runSpacing: gap, children: [
+                    SizedBox(width: tileWidth, child: EnterpriseActionTile(
+                      icon: Icons.document_scanner_outlined,
+                      title: 'Scan card',
+                      subtitle: _selectedFair == null ? 'Select a fair first' : 'Front + back, AI review',
+                      highlight: true,
+                      onTap: _selectedFair == null ? null : () => Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => MinimalOcrContactScreen(fair: _selectedFair!))))),
+                    SizedBox(width: tileWidth, child: EnterpriseActionTile(
+                      icon: Icons.business_outlined, title: 'Companies',
+                      subtitle: 'Contacts & products',
+                      onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                        builder: (_) => SupplierContactsScreen(fairId: _selectedFair?.id))))),
+                    SizedBox(width: tileWidth, child: EnterpriseActionTile(
+                      icon: Icons.event_available_outlined, title: 'Visits',
+                      subtitle: 'Factory & office',
+                      onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                        builder: (_) => const CompanyVisitsScreen())))),
+                    SizedBox(width: tileWidth, child: EnterpriseActionTile(
+                      icon: Icons.bookmarks_outlined, title: 'Shortlists',
+                      subtitle: 'Suppliers & products',
+                      onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                        builder: (_) => const ShortlistsScreen())))),
+                    SizedBox(width: tileWidth, child: EnterpriseActionTile(
+                      icon: Icons.dataset_outlined, title: 'Masters',
+                      subtitle: 'Fairs, halls, categories', onTap: _openMasters)),
+                    SizedBox(width: tileWidth, child: EnterpriseActionTile(
+                      icon: Icons.sync_rounded, title: 'Sync',
+                      subtitle: _syncing ? 'Syncing your team...' :
+                        _workspace == null ? 'Connect workspace' : 'Send & receive updates',
+                      busy: _syncing, onTap: _syncNow)),
+                  ]),
+                  const SizedBox(height: 14),
+                  Row(children: [
+                    Icon(Icons.verified_user_outlined, size: 16, color: colors.secondary),
+                    const SizedBox(width: 8),
+                    Expanded(child: Text(
+                      _workspace == null ? 'Review before saving. Connect a workspace to sync.'
+                        : 'Team: ${_workspace!.name} | Review before saving.',
+                      style: theme.textTheme.bodySmall?.copyWith(color: colors.onSurfaceVariant))),
+                  ]),
+                ]),
+              )),
+            );
+          }),
         ),
-      );
-}
-
-class _ActionCard extends StatelessWidget {
-  const _ActionCard({required this.icon, required this.title, required this.description, required this.actionLabel, required this.onTap, this.busy = false});
-  final IconData icon;
-  final String title;
-  final String description;
-  final String actionLabel;
-  final VoidCallback? onTap;
-  final bool busy;
-
-  @override
-  Widget build(BuildContext context) => Card(
-        elevation: 0,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: const BorderSide(color: Color(0xFFD6E1E0))),
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            CircleAvatar(radius: 24, child: Icon(icon, size: 26)),
-            const SizedBox(height: 18),
-            Text(title, style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
-            const SizedBox(height: 8),
-            Text(description, style: const TextStyle(color: Color(0xFF536B76), height: 1.4)),
-            const SizedBox(height: 20),
-            SizedBox(width: double.infinity, child: FilledButton(onPressed: busy ? null : onTap, child: busy ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2)) : Text(actionLabel))),
-          ]),
-        ),
-      );
+      ),
+    );
+  }
 }
