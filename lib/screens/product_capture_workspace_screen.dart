@@ -364,6 +364,7 @@ class _ProductCaptureWorkspaceScreenState extends State<ProductCaptureWorkspaceS
   }
 
   Widget _field(String key, {bool required = false}) => Padding(padding: const EdgeInsets.only(bottom: 14), child: TextFormField(
+    key: ValueKey('product-field-$key'),
     controller: _controller(key), enabled: !_busy && !widget.readOnly,
     minLines: 1, maxLines: ['specs','notes','price_breaks'].contains(key) ? 4 : 1,
     keyboardType: ['moq','quoted_price'].contains(key) ? const TextInputType.numberWithOptions(decimal: true) : TextInputType.text,
@@ -519,9 +520,21 @@ class _ProductCaptureWorkspaceScreenState extends State<ProductCaptureWorkspaceS
           ])]),
             ListView(key: const PageStorageKey('product-photos'), padding: const EdgeInsets.all(16), children: [_photoPanel()]),
             ListView(key: const PageStorageKey('product-specs'), padding: const EdgeInsets.all(16), children: [_specPanel()]),
-            ListView(key: const PageStorageKey('product-pricing'), padding: const EdgeInsets.all(16), children: [Card(child: ExpansionTile(title: const Text('Price and supply details'), childrenPadding: const EdgeInsets.all(18), children: [
-            for (final key in labels.keys.where((key) => !['name','model_code','specs','moq'].contains(key))) _field(key, required: key == 'price_currency'),
-          ])),
+            ListView(key: const PageStorageKey('product-pricing'), padding: const EdgeInsets.all(16), children: [
+          _section('Price and ordering', [
+            for (final key in ['quoted_price', 'price_currency', 'quantity_unit', 'price_basis', 'price_breaks'])
+              _field(key, required: key == 'price_currency'),
+          ]),
+          _section('Delivery and supply', [
+            for (final key in ['lead_time', 'payment_terms', 'packaging', 'carton_dimensions',
+              'carton_weight', 'units_per_carton', 'production_capacity', 'customisation', 'tooling_cost'])
+              _field(key),
+          ]),
+          _section('Samples and assurance', [
+            for (final key in ['sample_requirements', 'sample_cost', 'sample_lead_time',
+              'certifications', 'warranty']) _field(key),
+          ]),
+          _section('Product notes', [_field('notes')]),
           if (_quoteHistory.isNotEmpty) Card(child: ExpansionTile(title: const Text('Quotation history'), children: [
             for (final quote in _quoteHistory.reversed) ListTile(
               title: Text('${quote['currency']} ${quote['price']} / ${quote['quantity_unit'] ?? 'unit'}'),
