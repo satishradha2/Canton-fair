@@ -93,8 +93,20 @@ class SearchableSelectionField<T> extends StatelessWidget {
       child: InputDecorator(
         isEmpty: field.value == null,
         decoration: decoration.copyWith(enabled: onChanged != null,
+          floatingLabelBehavior: FloatingLabelBehavior.always,
+          hintText: '',
           errorText: field.errorText, suffixIcon: const Icon(Icons.expand_more)),
-        child: Text(field.value == null ? 'Choose an option' : labelFor(field.value as T)),
+        child: Text(
+          field.value == null
+            ? decoration.hintText ?? 'Choose an option'
+            : labelFor(field.value as T),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: field.value == null
+            ? Theme.of(context).textTheme.bodyLarge?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant)
+            : Theme.of(context).textTheme.bodyLarge,
+        ),
       ),
     ),
   );
