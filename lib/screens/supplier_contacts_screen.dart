@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../data/database.dart';
+import '../data/approval_policy.dart';
 import '../data/product_capture_service.dart';
 import '../data/supplier_categories_service.dart';
 import '../data/team_workspace_service.dart';
@@ -28,6 +29,7 @@ class _SupplierContactsScreenState extends State<SupplierContactsScreen> {
   String? _scope;
   final Set<String> _selectedCategories = {};
   bool _canEdit = false;
+  bool _canAdd = false;
   bool _savingCategories = false;
   bool _categoriesChanged = false;
 
@@ -44,7 +46,8 @@ class _SupplierContactsScreenState extends State<SupplierContactsScreen> {
     if (company == null) return null;
     _scope = await TeamWorkspaceService().scopeKey();
     try {
-      _canEdit = await ProductCaptureService.canWrite();
+      _canAdd = await ProductCaptureService.canWrite();
+      _canEdit = _canAdd && await ApprovalPolicy.canEditRecord('exhibitors', id);
     } catch (_) {
       _canEdit = false;
     }
@@ -183,7 +186,7 @@ class _SupplierContactsScreenState extends State<SupplierContactsScreen> {
                 ]),
                 ListView(padding: const EdgeInsets.fromLTRB(20, 0, 20, 24), children: [
                   CompanyProductsSection(scope: _scope!, company: data.company,
-                    canEdit: _canEdit, fairId: widget.fairId),
+                    canEdit: _canAdd, fairId: widget.fairId),
                 ]),
                 ListView(padding: const EdgeInsets.all(20), children: [
                   FieldWorkspaceSection(title: 'Factory & office visits', icon: Icons.event_outlined,

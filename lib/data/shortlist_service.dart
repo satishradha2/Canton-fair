@@ -24,6 +24,7 @@ class ShortlistService {
       TeamWorkspaceService.exclusive(() async {
         if (scope != await TeamWorkspaceService().scopeKey()) throw StateError('Workspace changed. Reopen this page.');
         await ApprovalPolicy.requireWriter();
+        await ApprovalPolicy.requireRecordEditor(product ? 'products' : 'exhibitors', id);
         if (scope != await TeamWorkspaceService().scopeKey()) throw StateError('Workspace changed. Reopen this page.');
         final db = await TradeDatabase.instance.database;
         await db.transaction((txn) async {

@@ -42,9 +42,11 @@ class _CompanyProductsSectionState extends State<CompanyProductsSection> {
     return RecordPage(rows, page.total);
   }
   Future<void> _open([int? product]) async {
+    final editable = widget.canEdit && (product == null || await ApprovalPolicy.canEditRecord('products', product));
+    if (!mounted) return;
     await Navigator.of(context).push(MaterialPageRoute(builder: (_) => ProductCaptureWorkspaceScreen(
       scope: widget.scope, company: widget.company, productId: product, fairId: widget.fairId,
-      readOnly: !widget.canEdit, visitKey: widget.visitKey)));
+      readOnly: !editable, visitKey: widget.visitKey)));
     if (mounted) setState(() => _revision++);
   }
   @override

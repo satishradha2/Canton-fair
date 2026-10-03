@@ -32,6 +32,7 @@ class CompanyVisitService {
       Map<String, dynamic> data, int expectedRevision) => TeamWorkspaceService.exclusive(() async {
     await ProductCaptureService.checkScope(scope);
     if (!await ProductCaptureService.canWrite()) throw StateError('Member or administrator access is required.');
+    if (id != null) await ApprovalPolicy.requireRecordEditor('meetings', id);
     if (!['Factory', 'Office'].contains(data['type']) || !statuses.contains(data['status'])) throw StateError('Select a visit type and status.');
     for (final key in ['address', 'purpose', 'wall_time', 'zone', 'contact_name']) {
       if ((data[key] ?? '').toString().trim().isEmpty) throw StateError('Complete the address, purpose, appointment time and contact.');
@@ -119,6 +120,7 @@ class CompanyVisitService {
   static Future<void> linkProduct(String scope, int company, int product, String visitKey) => TeamWorkspaceService.exclusive(() async {
     await ProductCaptureService.checkScope(scope);
     if (!await ProductCaptureService.canWrite()) throw StateError('Read-only account.');
+    await ApprovalPolicy.requireRecordEditor('products', product);
     final db = await TradeDatabase.instance.database;
     await db.transaction((txn) async {
       final rows = await txn.query('products', where: 'id=? AND exhibitor_id=?', whereArgs: [product, company]);

@@ -37,6 +37,7 @@ class FairCaptureService {
       throw StateError('Workspace changed. Reopen the scanner.');
     }
     final db = await TradeDatabase.instance.database;
+    final canUpdateCompany = company.id == null || await ApprovalPolicy.canEditRecord('exhibitors', company.id!);
     return db.transaction((txn) async {
       final fairRows = await txn.query('trips', where: 'id=?', whereArgs: [fair.id]);
       if (fairRows.isEmpty) throw StateError('Select an available fair.');
@@ -59,7 +60,7 @@ class FairCaptureService {
           throw StateError('Select a master hall and enter the booth number.');
         }
         await txn.insert('exhibitor_booths', {'participation_id': participationId, 'hall': hall, 'zone': '', 'booth': booth.trim()});
-        if (company.tripId == fair.id) {
+        if (company.tripId == fair.id && canUpdateCompany) {
           await txn.update('exhibitors', {'hall': hall, 'booth': booth.trim()}, where: 'id=?', whereArgs: [companyId]);
         }
       }

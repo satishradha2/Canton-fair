@@ -50,6 +50,14 @@ class CloudApiService {
     return CloudTeam.fromJson(Map<String, dynamic>.from(row as Map));
   }
 
+  Future<void> renameTeam(CloudTeam team, String name) async {
+    await _client.rpc('rename_team', params: {'target_team': team.id, 'team_name': name.trim()});
+  }
+
+  Future<void> deleteTeam(CloudTeam team) async {
+    await _client.rpc('delete_empty_team', params: {'target_team': team.id});
+  }
+
   Future<void> inviteMember(CloudTeam team, String email, String role) async {
     await _client.rpc('invite_team_member', params: {
       'target_team': team.id,

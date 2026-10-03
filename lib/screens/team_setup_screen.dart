@@ -45,8 +45,38 @@ class _TeamSetupScreenState extends State<TeamSetupScreen> {
                       child: const Text('Create'))
                 ]));
     if (!mounted || (name?.trim().isEmpty ?? true)) return;
-    final team = await _api.createTeam(name!.trim());
-    await _select(team);
+    try {
+      final team = await _api.createTeam(name!.trim());
+      await _select(team);
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Workspace not created: $error')));
+    }
+  }
+
+  Future<void> _manageWorkspace(CloudTeam team, bool deleting) async {
+    var value = deleting ? '' : team.name;
+    final result = await showDialog<String>(context: context, builder: (dialog) => AlertDialog(
+      title: Text(deleting ? 'Delete workspace?' : 'Rename workspace'),
+      content: Column(mainAxisSize: MainAxisSize.min, children: [
+        if (deleting) Text('Only an empty workspace can be deleted. Login accounts are kept. Type "${team.name}" to confirm.'),
+        TextFormField(initialValue: value, onChanged: (text) => value = text,
+          decoration: InputDecoration(labelText: deleting ? 'Workspace name to confirm' : 'Workspace name')),
+      ]), actions: [TextButton(onPressed: () => Navigator.pop(dialog), child: const Text('Cancel')),
+        FilledButton(onPressed: () => Navigator.pop(dialog, value.trim()), child: Text(deleting ? 'Delete' : 'Save'))]));
+    if (result == null || result.isEmpty || (deleting && result != team.name)) return;
+    try {
+      await TeamWorkspaceService.exclusive(() async {
+        if (deleting) { await _api.deleteTeam(team); }
+        else { await _api.renameTeam(team, result); }
+      });
+      if (_activeId == team.id) {
+        if (deleting) { await _workspace.usePersonal(); _activeId = null; }
+        else { await _workspace.save(TeamWorkspace(id: team.id, name: result)); }
+      }
+      if (mounted) setState(() => _teams = _api.teams());
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Workspace not changed: $error')));
+    }
   }
 
   Future<void> _select(CloudTeam team) async {
@@ -163,9 +193,13 @@ class _TeamSetupScreenState extends State<TeamSetupScreen> {
             ...teams.map((team) => Card(color: team.id == _activeId ? Theme.of(context).colorScheme.secondaryContainer : null,
               child: ListTile(leading: Icon(team.id == _activeId ? Icons.check_circle_outline : Icons.groups_outlined),
                 title: Text(team.name), subtitle: Text('${team.role}${team.id == _activeId ? ' / Active workspace' : ''}'),
-                trailing: const Icon(Icons.chevron_right), onTap: () => _select(team)))),
+                trailing: team.role != 'admin' ? const Icon(Icons.chevron_right) : PopupMenuButton<String>(
+                  onSelected: (value) => _manageWorkspace(team, value == 'delete'),
+                  itemBuilder: (_) => const [PopupMenuItem(value: 'rename', child: Text('Rename workspace')),
+                    PopupMenuItem(value: 'delete', child: Text('Delete empty workspace'))]), onTap: () => _select(team)))),
             const SizedBox(height: 16),
-            OutlinedButton.icon(onPressed: _create, icon: const Icon(Icons.add), label: const Text('Create team')),
+            if (teams.any((team) => team.role == 'admin'))
+              OutlinedButton.icon(onPressed: _create, icon: const Icon(Icons.add), label: const Text('Create workspace')),
             TextButton.icon(onPressed: _personal, icon: const Icon(Icons.person_outline), label: const Text('Switch to Personal workspace')),
           ]),
         ],

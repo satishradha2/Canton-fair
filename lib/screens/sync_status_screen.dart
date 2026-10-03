@@ -5,6 +5,8 @@ import '../data/team_workspace_service.dart';
 import '../widgets/field_workspace.dart';
 import 'team_setup_screen.dart';
 import 'phone_cleanup_screen.dart';
+import '../data/auto_sync_service.dart';
+import '../data/phone_cleanup_service.dart';
 
 class SyncStatusScreen extends StatefulWidget {
   const SyncStatusScreen({super.key});
@@ -18,6 +20,7 @@ class _SyncStatusScreenState extends State<SyncStatusScreen> {
   late Future<List<CloudConflict>> _conflicts;
   late Future<({int records, int files, int blocked, int deletions})> _pending;
   late Future<TeamWorkspace?> _team;
+  late Future<({bool enabled, bool paused})> _automatic;
   bool _syncing = false;
   @override
   void initState() { super.initState(); _load(); SyncStatusService.isSyncing.addListener(_syncChanged); }
@@ -26,7 +29,12 @@ class _SyncStatusScreenState extends State<SyncStatusScreen> {
   void _load() {
     _current = _status.load(); _conflicts = _sync.conflicts();
     _pending = _sync.pendingUploads(); _team = TeamWorkspaceService().load();
+    _automatic = _automaticState();
   }
+  Future<({bool enabled, bool paused})> _automaticState() async => (
+    enabled: await AutoSyncService.instance.enabled,
+    paused: await PhoneCleanupService.paused(await TeamWorkspaceService().scopeKey()),
+  );
   void _refresh() { if (mounted) setState(_load); }
   void _syncChanged() {
     if (!mounted) return;
@@ -68,6 +76,28 @@ class _SyncStatusScreenState extends State<SyncStatusScreen> {
           FieldWorkspaceHeader(eyebrow: 'DEVICE & CLOUD', title: team?.name ?? 'Personal workspace',
             subtitle: 'Saved records and attachments are shared through your selected team. Unsaved drafts stay on this phone.', icon: Icons.cloud_sync_outlined),
           const SizedBox(height: 16), if (_running) const LinearProgressIndicator(),
+          FutureBuilder<({bool enabled, bool paused})>(future: _automatic, builder: (context, snapshot) {
+            if (!snapshot.hasData) return const SizedBox.shrink();
+            final automatic = snapshot.data!;
+            return Card(child: Padding(padding: const EdgeInsets.all(16), child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(automatic.paused ? 'Automatic sync paused after phone cleanup'
+                  : automatic.enabled ? 'Automatic sync enabled' : 'Automatic sync disabled',
+                  style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: 8),
+                Text(automatic.paused
+                  ? 'Open Phone storage and choose Restore cloud copies to resume safely. New saved records remain on this phone until sync resumes.'
+                  : 'Saved records sync shortly after saving when internet is available. Offline saves stay queued and retry when the connection returns. Unsaved drafts are not uploaded.'),
+                if (!automatic.enabled) TextButton(onPressed: _running ? null : () async {
+                  await AutoSyncService.instance.setEnabled(true);
+                  _refresh();
+                }, child: const Text('Enable automatic sync')),
+                if (automatic.paused) TextButton(onPressed: _running ? null : () async {
+                  await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const PhoneCleanupScreen()));
+                  _refresh();
+                }, child: const Text('Resume sync in Phone storage')),
+              ])));
+          }),
           if (team != null) Card(child: ListTile(
             leading: const Icon(Icons.phonelink_erase_outlined),
             title: const Text('Phone storage & cleanup approvals'),

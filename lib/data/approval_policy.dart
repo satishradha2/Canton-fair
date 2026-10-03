@@ -1,8 +1,48 @@
 import 'dart:convert';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'team_workspace_service.dart';
+import 'database.dart';
+import 'field_work_sync_contract.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class ApprovalPolicy {
+  static Future<bool> canEditRecord(String table, int id) async {
+    final workspace = TeamWorkspaceService();
+    final team = await workspace.load();
+    final role = await currentRole();
+    if (role == 'admin') return true;
+    if (role != 'member') return false;
+    if (team == null) return true;
+    final types = {...TradeDatabase.syncTables, ...FieldWorkSyncContract.tables};
+    final matches = types.entries.where((entry) => entry.value == table);
+    if (matches.isEmpty) return false;
+    final type = matches.first.key;
+    final db = await TradeDatabase.instance.database;
+    final links = await db.query('cloud_links', where: 'record_type=? AND local_id=?', whereArgs: [type, id]);
+    // Local databases are isolated by user and team. Unuploaded rows belong to this user.
+    if (links.isEmpty || links.first['version'] == 0) return true;
+    final recordId = links.first['record_id'] as String;
+    final client = Supabase.instance.client;
+    final actor = client.auth.currentUser?.id;
+    if (actor == null) return false;
+    final scope = await workspace.scopeKey();
+    const storage = FlutterSecureStorage();
+    final key = 'record_owner_${scope}_${type}_$recordId';
+    // Never infer original ownership from the last editor.
+    final row = await client.from('team_records').select('created_by')
+        .eq('team_id', team.id).eq('record_type', type).eq('record_id', recordId).maybeSingle();
+    final owner = row?['created_by'] as String?;
+    await storage.write(key: key, value: owner ?? 'unknown');
+    if (scope != await workspace.scopeKey()) return false;
+    return owner == actor;
+  }
+
+  static Future<void> requireRecordEditor(String table, int id) async {
+    if (!await canEditRecord(table, id)) {
+      throw StateError('View only: only the creator or a workspace administrator can edit this record.');
+    }
+  }
+
   static Map<String, dynamic> jsonObject(Object? value) {
     if (value is Map) return Map<String, dynamic>.from(value);
     if (value is! String || value.isEmpty) return {};

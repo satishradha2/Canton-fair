@@ -132,6 +132,10 @@ class ProductCaptureService {
     int? product, required Map<String, dynamic> draft}) => TeamWorkspaceService.exclusive(() async {
     await checkScope(scope);
     if (!await canWrite()) throw StateError('A member or administrator role is required.');
+    if (product != null) await ApprovalPolicy.requireRecordEditor('products', product);
+    if (draft['also_shortlist_supplier'] == true) {
+      await ApprovalPolicy.requireRecordEditor('exhibitors', supplier);
+    }
     final fields = Map<String, dynamic>.from(draft['fields'] as Map);
     String value(String key) => (fields[key] ?? '').toString().trim();
     if (value('name').isEmpty || value('category').isEmpty) throw StateError('Product name and a master category are required.');

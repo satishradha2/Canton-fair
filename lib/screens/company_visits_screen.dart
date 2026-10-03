@@ -6,6 +6,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../data/company_visit_service.dart';
+import '../data/approval_policy.dart';
 import '../data/database.dart';
 import '../data/product_capture_service.dart';
 import '../data/reminder_service.dart';
@@ -49,9 +50,10 @@ class _CompanyVisitsScreenState extends State<CompanyVisitsScreen> {
     try {
       await ProductCaptureService.checkScope(_scope!);
       final company = widget.company ?? await TradeDatabase.instance.getExhibitorById(row!['exhibitor_id'] as int);
+      final editable = _canEdit && (row == null || await ApprovalPolicy.canEditRecord('meetings', row['id'] as int));
       if (!mounted || company == null) return;
       await Navigator.of(context).push(MaterialPageRoute(builder: (_) => CompanyVisitWorkpadScreen(scope: _scope!, company: company,
-        appointment: row, canEdit: _canEdit, fairId: widget.fairId, draftKey: draftKey)));
+        appointment: row, canEdit: editable, fairId: widget.fairId, draftKey: draftKey)));
       if (mounted) await _load();
     } catch (error) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$error'))); }
   }

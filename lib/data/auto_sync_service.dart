@@ -10,6 +10,7 @@ import 'reminder_service.dart';
 import 'team_workspace_service.dart';
 import 'background_sync_service.dart';
 import 'phone_cleanup_service.dart';
+import 'database.dart';
 
 class AutoSyncService with WidgetsBindingObserver {
   AutoSyncService._();
@@ -21,10 +22,16 @@ class AutoSyncService with WidgetsBindingObserver {
   final _storage = const FlutterSecureStorage();
   final _connectivity = Connectivity();
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
+  StreamSubscription<AuthState>? _authSubscription;
   RealtimeChannel? _teamChannel;
   Timer? _timer;
   bool _started = false;
   bool _syncing = false;
+  bool _checking = false;
+  String? _revisionScope;
+  int _syncedRevision = -1;
+  int _failures = 0;
+  DateTime? _retryAt;
   DateTime? lastAttemptAt;
   String? lastError;
 
@@ -35,7 +42,7 @@ class AutoSyncService with WidgetsBindingObserver {
     await _storage.write(key: _enabledKey, value: value.toString());
     await BackgroundSyncService.setEnabled(value);
     changes.value++;
-    if (value) unawaited(syncIfPossible());
+    if (value) unawaited(syncIfPossible(force: true));
   }
 
   Future<void> start() async {
@@ -43,14 +50,17 @@ class AutoSyncService with WidgetsBindingObserver {
     _started = true;
     WidgetsBinding.instance.addObserver(this);
     TeamWorkspaceService.changes.addListener(_workspaceChanged);
+    _authSubscription = Supabase.instance.client.auth.onAuthStateChange.listen((_) {
+      _workspaceChanged();
+    });
     _connectivitySubscription =
         _connectivity.onConnectivityChanged.listen((results) {
       if (!results.contains(ConnectivityResult.none)) {
-        unawaited(syncIfPossible());
+        unawaited(syncIfPossible(force: true));
       }
     });
     _timer = Timer.periodic(
-      const Duration(minutes: 5),
+      const Duration(seconds: 3),
       (_) => unawaited(syncIfPossible()),
     );
     unawaited(_subscribeToTeam());
@@ -61,6 +71,7 @@ class AutoSyncService with WidgetsBindingObserver {
     WidgetsBinding.instance.removeObserver(this);
     TeamWorkspaceService.changes.removeListener(_workspaceChanged);
     await _connectivitySubscription?.cancel();
+    await _authSubscription?.cancel();
     if (_teamChannel != null) {
       await Supabase.instance.client.removeChannel(_teamChannel!);
       _teamChannel = null;
@@ -69,15 +80,22 @@ class AutoSyncService with WidgetsBindingObserver {
     _started = false;
   }
 
-  void _workspaceChanged() => unawaited(_subscribeToTeam());
+  void _workspaceChanged() {
+    _revisionScope = null;
+    _syncedRevision = -1;
+    _retryAt = null;
+    unawaited(_subscribeToTeam());
+    unawaited(syncIfPossible(force: true));
+  }
 
   Future<void> _subscribeToTeam() async {
     final user = Supabase.instance.client.auth.currentUser;
     final team = user == null ? null : await TeamWorkspaceService().load();
-    if (user == null || team == null) return;
     if (_teamChannel != null) {
       await Supabase.instance.client.removeChannel(_teamChannel!);
+      _teamChannel = null;
     }
+    if (user == null || team == null) return;
     _teamChannel = Supabase.instance.client
         .channel('team-updates-${team.id}')
         .onPostgresChanges(
@@ -100,33 +118,47 @@ class AutoSyncService with WidgetsBindingObserver {
 
   Future<void> _handleTeamChange() async {
     await Future<void>.delayed(const Duration(seconds: 2));
-    await syncIfPossible();
+    await syncIfPossible(force: true);
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) unawaited(syncIfPossible());
+    if (state == AppLifecycleState.resumed) {
+      unawaited(syncIfPossible(force: true));
+    }
   }
 
-  Future<void> syncIfPossible() async {
-    if (_syncing ||
-        TeamWorkspaceService.isOperationInProgress ||
-        !await enabled) {
+  Future<void> syncIfPossible({bool force = false}) async {
+    if (_syncing || _checking || TeamWorkspaceService.isOperationInProgress) {
       return;
     }
-    if (Supabase.instance.client.auth.currentUser == null) return;
-    if (await TeamWorkspaceService().load() == null) return;
-    if (await PhoneCleanupService.paused(await TeamWorkspaceService().scopeKey())) return;
-    final connectivity = await _connectivity.checkConnectivity();
-    if (connectivity.contains(ConnectivityResult.none)) return;
-
-    _syncing = true;
-    lastAttemptAt = DateTime.now();
-    lastError = null;
-    changes.value++;
+    _checking = true;
     try {
+      if (!await enabled || Supabase.instance.client.auth.currentUser == null) return;
+      final workspace = TeamWorkspaceService();
+      if (await workspace.load() == null) return;
+      final scope = await workspace.scopeKey();
+      if (await PhoneCleanupService.paused(scope)) return;
+      if (!force && _retryAt != null && DateTime.now().isBefore(_retryAt!)) return;
+      final connectivity = await _connectivity.checkConnectivity();
+      if (connectivity.contains(ConnectivityResult.none)) return;
+      final revision = await TradeDatabase.instance.localChangeRevision();
+      if (_revisionScope != scope) {
+        _revisionScope = scope;
+        _syncedRevision = -1;
+      }
+      if (!force && revision == _syncedRevision) return;
+      if (TeamWorkspaceService.isOperationInProgress || scope != await workspace.scopeKey()) return;
+      _syncing = true;
+      lastAttemptAt = DateTime.now();
+      lastError = null;
+      changes.value++;
       final result =
           await CloudSyncService().syncTeamWorkspace(showBusy: false);
+      // Capture the revision BEFORE sync: a concurrent save must get another pass.
+      if (scope == await workspace.scopeKey()) _syncedRevision = revision;
+      _failures = 0;
+      _retryAt = null;
       if (result.downloaded > 0) {
         await ReminderService.showTeamUpdate(
           title: 'Team workspace updated',
@@ -135,9 +167,13 @@ class AutoSyncService with WidgetsBindingObserver {
       }
     } catch (error) {
       lastError = error.toString();
+      _failures = (_failures + 1).clamp(1, 5).toInt();
+      _retryAt = DateTime.now().add(Duration(seconds: 5 * (1 << _failures)));
     } finally {
+      _checking = false;
+      final attempted = _syncing;
       _syncing = false;
-      changes.value++;
+      if (attempted) changes.value++;
     }
   }
 }

@@ -46,6 +46,13 @@ class _CantonFairRootState extends State<CantonFairRoot> {
   void initState() {
     super.initState();
     AppearanceService().load();
+    AutoSyncService.instance.start();
+  }
+
+  @override
+  void dispose() {
+    AutoSyncService.instance.stop();
+    super.dispose();
   }
 
   @override

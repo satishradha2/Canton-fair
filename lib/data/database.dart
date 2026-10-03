@@ -7,6 +7,7 @@ import '../models/models.dart';
 import 'team_workspace_service.dart';
 import 'approval_policy.dart';
 import 'field_work_schema.dart';
+import 'field_work_sync_contract.dart';
 
 class TradeDatabase {
   static final TradeDatabase instance = TradeDatabase._();
@@ -32,6 +33,22 @@ class TradeDatabase {
     return openDatabase(
       path,
       version: 26,
+      onOpen: (db) async {
+        await db.execute('CREATE TABLE IF NOT EXISTS auto_sync_changes('
+          'id INTEGER PRIMARY KEY CHECK(id=1), revision INTEGER NOT NULL DEFAULT 0)');
+        await db.execute('INSERT OR IGNORE INTO auto_sync_changes(id, revision) VALUES(1, 0)');
+        final existing = (await db.query('sqlite_master', columns: ['name'],
+          where: 'type = ?', whereArgs: ['table']))
+          .map((row) => row['name']).toSet();
+        for (final table in {...syncTables.values, ...FieldWorkSyncContract.tables.values}) {
+          if (!existing.contains(table)) continue;
+          for (final operation in ['INSERT', 'UPDATE', 'DELETE']) {
+            await db.execute('CREATE TRIGGER IF NOT EXISTS auto_sync_${table}_${operation.toLowerCase()} '
+              'AFTER $operation ON $table BEGIN '
+              'UPDATE auto_sync_changes SET revision=revision+1 WHERE id=1; END');
+          }
+        }
+      },
       onCreate: (db, version) async {
         await db.execute('''
         CREATE TABLE trips(
@@ -671,7 +688,18 @@ class TradeDatabase {
     return db.insert(table, values);
   }
 
+  /// Updated by SQLite only when a business-data transaction commits.
+  /// Also covers services that write directly through Database.transaction.
+  Future<int> localChangeRevision() async {
+    final db = await database;
+    final rows = await db.query('auto_sync_changes', columns: ['revision'], where: 'id=1');
+    return rows.first['revision'] as int;
+  }
+
   Future<int> update(String table, int id, Map<String, Object?> values) async {
+    if ({...syncTables.values, ...FieldWorkSyncContract.tables.values}.contains(table)) {
+      await ApprovalPolicy.requireRecordEditor(table, id);
+    }
     final db = await database;
     await _saveVersion(db, table, id);
     final next = Map<String, Object?>.from(values);
@@ -696,6 +724,9 @@ class TradeDatabase {
   }
 
   Future<int> delete(String table, int id) async {
+    if ({...syncTables.values, ...FieldWorkSyncContract.tables.values}.contains(table)) {
+      await ApprovalPolicy.requireRecordEditor(table, id);
+    }
     final db = await database;
     final rows = await db.query(table, where: 'id = ?', whereArgs: [id]);
     if (rows.isNotEmpty && !_safetyTables.contains(table)) {
@@ -805,6 +836,11 @@ class TradeDatabase {
     List<Object?>? whereArgs,
   }) async {
     final db = await database;
+    if ({...syncTables.values, ...FieldWorkSyncContract.tables.values}.contains(table)) {
+      for (final row in await db.query(table, where: where, whereArgs: whereArgs)) {
+        await ApprovalPolicy.requireRecordEditor(table, (row['id'] ?? row['product_id']) as int);
+      }
+    }
     return db.update(table, values, where: where, whereArgs: whereArgs);
   }
 
@@ -814,6 +850,11 @@ class TradeDatabase {
     List<Object?>? whereArgs,
   }) async {
     final db = await database;
+    if ({...syncTables.values, ...FieldWorkSyncContract.tables.values}.contains(table)) {
+      for (final row in await db.query(table, where: where, whereArgs: whereArgs)) {
+        await ApprovalPolicy.requireRecordEditor(table, (row['id'] ?? row['product_id']) as int);
+      }
+    }
     return db.delete(table, where: where, whereArgs: whereArgs);
   }
 
